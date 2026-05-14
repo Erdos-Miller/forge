@@ -2,7 +2,7 @@
 id: F-0002
 title: Build task parser
 kind: task
-status: open
+status: done
 priority: high
 parent: F-0000
 depends_on:
@@ -12,7 +12,7 @@ scope:
   - packages/**
   - .forge/tasks/**
 created_at: 2026-05-14T00:00:00-05:00
-updated_at: 2026-05-14T00:00:00-05:00
+updated_at: 2026-05-14T17:38:59-05:00
 ---
 
 # Build task parser
@@ -32,3 +32,9 @@ The first code should read `.forge/tasks/*.md`, parse frontmatter, and expose ta
 ## Notes
 
 No database or cache is needed for this task.
+
+Claimed by codex for the parser implementation pass.
+
+Implemented `@forge/core` with a Bun/TypeScript parser package under `packages/core`.
+
+Verification: `bun test` passed with coverage for bootstrap task loading, frontmatter/body parsing, required field validation, malformed YAML, missing frontmatter, invalid dependency/scope shapes, invalid timestamps, and typed source-path errors.
