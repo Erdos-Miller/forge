@@ -17,10 +17,12 @@ function taskFile(options: {
   status?: string;
   claimed_by?: string;
   depends_on?: string[];
+  area?: string;
 }): string {
   const dependsOn = options.depends_on?.length
     ? options.depends_on.map((id) => `  - ${id}`).join("\n")
     : "[]";
+  const area = options.area ? [`area: ${options.area}`] : [];
 
   return [
     "---",
@@ -29,6 +31,7 @@ function taskFile(options: {
     "kind: task",
     `status: ${options.status ?? "open"}`,
     "priority: medium",
+    ...area,
     'parent: ""',
     `depends_on: ${dependsOn === "[]" ? "[]" : "\n" + dependsOn}`,
     `claimed_by: ${JSON.stringify(options.claimed_by ?? "")}`,
@@ -45,12 +48,18 @@ function taskFile(options: {
   ].join("\n");
 }
 
-async function makeRepo(): Promise<{ repoRoot: string; taskPath: string }> {
+async function makeRepo(): Promise<{
+  repoRoot: string;
+  nestedDir: string;
+  taskPath: string;
+}> {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-cli-test-"));
   tempDirs.push(repoRoot);
 
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  const nestedDir = path.join(repoRoot, "packages", "cli", "src");
   await fs.mkdir(tasksDir, { recursive: true });
+  await fs.mkdir(nestedDir, { recursive: true });
 
   const donePath = path.join(tasksDir, "F-0001-done.md");
   const openPath = path.join(tasksDir, "F-0002-open.md");
@@ -66,17 +75,17 @@ async function makeRepo(): Promise<{ repoRoot: string; taskPath: string }> {
     taskFile({ id: "F-0003", title: "Blocked", depends_on: ["F-0002"] }),
   );
 
-  return { repoRoot, taskPath: openPath };
+  return { repoRoot, nestedDir, taskPath: openPath };
 }
 
 async function run(
-  repoRoot: string,
+  cwd: string,
   args: string[],
 ): Promise<{ code: number; stdout: string[]; stderr: string[] }> {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await runCli(args, {
-    cwd: repoRoot,
+    cwd,
     env: { USER: "tester" },
     now: new Date("2026-05-14T12:00:00Z"),
     stdout: (message) => stdout.push(message),
@@ -105,9 +114,45 @@ describe("forge cli", () => {
     expect(result.stdout).toEqual(["F-0002\topen\t-\tOpen"]);
   });
 
+  test("list and ready work from nested directories", async () => {
+    const { nestedDir } = await makeRepo();
+
+    expect((await run(nestedDir, ["list"])).stdout).toContain("F-0002\topen\t-\tOpen");
+    expect((await run(nestedDir, ["ready"])).stdout).toEqual([
+      "F-0002\topen\t-\tOpen",
+    ]);
+  });
+
+  test("list and ready reject unexpected extra args", async () => {
+    const { repoRoot } = await makeRepo();
+
+    expect(await run(repoRoot, ["list", "--cwd", repoRoot])).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge list"],
+    });
+    expect(await run(repoRoot, ["ready", "--cwd", repoRoot])).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge ready"],
+    });
+  });
+
+  test("output includes area when present", async () => {
+    const { repoRoot } = await makeRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".forge", "tasks", "F-0004-area.md"),
+      taskFile({ id: "F-0004", title: "Area", area: "cli" }),
+    );
+
+    const result = await run(repoRoot, ["list"]);
+
+    expect(result.stdout).toContain("F-0004\topen\t-\tcli\tArea");
+  });
+
   test("claim updates a task file", async () => {
-    const { repoRoot, taskPath } = await makeRepo();
-    const result = await run(repoRoot, ["claim", "F-0002", "--by", "codex"]);
+    const { nestedDir, taskPath } = await makeRepo();
+    const result = await run(nestedDir, ["claim", "F-0002", "--by", "codex"]);
 
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(result.code).toBe(0);
@@ -119,8 +164,8 @@ describe("forge cli", () => {
   });
 
   test("claim defaults to USER", async () => {
-    const { repoRoot, taskPath } = await makeRepo();
-    const result = await run(repoRoot, ["claim", "F-0002"]);
+    const { nestedDir, taskPath } = await makeRepo();
+    const result = await run(nestedDir, ["claim", "F-0002"]);
 
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(result.code).toBe(0);
@@ -128,10 +173,10 @@ describe("forge cli", () => {
   });
 
   test("done updates a task file", async () => {
-    const { repoRoot, taskPath } = await makeRepo();
-    await run(repoRoot, ["claim", "F-0002", "--by", "codex"]);
+    const { nestedDir, taskPath } = await makeRepo();
+    await run(nestedDir, ["claim", "F-0002", "--by", "codex"]);
 
-    const result = await run(repoRoot, ["done", "F-0002"]);
+    const result = await run(nestedDir, ["done", "F-0002"]);
 
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(result.code).toBe(0);

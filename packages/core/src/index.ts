@@ -12,6 +12,7 @@ export interface Task {
   kind: TaskKind;
   status: TaskStatus;
   priority: TaskPriority;
+  area?: string;
   parent: string;
   depends_on: string[];
   claimed_by: string;
@@ -88,9 +89,36 @@ const TASK_PRIORITIES = new Set<TaskPriority>([
 
 const TASK_KINDS = new Set<TaskKind>(["task", "spec"]);
 
+export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    try {
+      const stat = await fs.stat(path.join(currentDir, ".forge"));
+      if (stat.isDirectory()) {
+        return currentDir;
+      }
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw error;
+      }
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      throw new TaskWriteError(`no .forge directory found from ${path.resolve(startDir)}`);
+    }
+    currentDir = parentDir;
+  }
+}
+
 export async function loadTasks(repoRoot = process.cwd()): Promise<Task[]> {
   const parsedTasks = await loadParsedTaskFiles(repoRoot);
   return parsedTasks.map((parsedTask) => parsedTask.task);
+}
+
+export async function loadTasksFrom(startDir = process.cwd()): Promise<Task[]> {
+  return loadTasks(await findForgeRoot(startDir));
 }
 
 export async function loadParsedTaskFiles(
@@ -132,6 +160,13 @@ export async function findParsedTaskById(
   }
 
   return matches[0];
+}
+
+export async function findParsedTaskByIdFrom(
+  startDir: string,
+  taskId: string,
+): Promise<ParsedTask> {
+  return findParsedTaskById(await findForgeRoot(startDir), taskId);
 }
 
 export async function updateTaskFile(
@@ -182,6 +217,15 @@ export async function claimTask(
   });
 }
 
+export async function claimTaskFrom(
+  startDir: string,
+  taskId: string,
+  claimedBy: string,
+  now = new Date(),
+): Promise<Task> {
+  return claimTask(await findForgeRoot(startDir), taskId, claimedBy, now);
+}
+
 export async function completeTask(
   repoRoot: string,
   taskId: string,
@@ -193,6 +237,14 @@ export async function completeTask(
     claimed_by: "",
     updated_at: now.toISOString(),
   });
+}
+
+export async function completeTaskFrom(
+  startDir: string,
+  taskId: string,
+  now = new Date(),
+): Promise<Task> {
+  return completeTask(await findForgeRoot(startDir), taskId, now);
 }
 
 export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
@@ -314,6 +366,14 @@ function serializeFrontmatterScalar(field: string, value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 function findMissingDependencies(
@@ -473,6 +533,7 @@ export function validateTask(
   const kind = requireEnum(raw, sourcePath, "kind", TASK_KINDS);
   const status = requireEnum(raw, sourcePath, "status", TASK_STATUSES);
   const priority = requireEnum(raw, sourcePath, "priority", TASK_PRIORITIES);
+  const area = optionalString(raw, sourcePath, "area");
   const parent = requireString(raw, sourcePath, "parent");
   const depends_on = requireStringArray(raw, sourcePath, "depends_on");
   const claimed_by = requireString(raw, sourcePath, "claimed_by");
@@ -486,6 +547,7 @@ export function validateTask(
     kind,
     status,
     priority,
+    area,
     parent,
     depends_on,
     claimed_by,
@@ -495,6 +557,21 @@ export function validateTask(
     body,
     sourcePath,
   };
+}
+
+function optionalString(
+  raw: Record<string, unknown>,
+  sourcePath: string,
+  field: string,
+): string | undefined {
+  const value = raw[field];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new TaskParseError(sourcePath, `field "${field}" must be a string`);
+  }
+  return value;
 }
 
 function requireString(

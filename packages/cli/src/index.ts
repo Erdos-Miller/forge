@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import {
-  claimTask,
-  completeTask,
+  claimTaskFrom,
+  completeTaskFrom,
   getReadyTasks,
-  loadTasks,
+  loadTasksFrom,
   type Task,
 } from "@forge/core";
 
@@ -40,9 +40,9 @@ export async function runCli(
 
     switch (command) {
       case "list":
-        return await listTasks(cliOptions);
+        return await listTasks(cliOptions, rest);
       case "ready":
-        return await listReadyTasks(cliOptions);
+        return await listReadyTasks(cliOptions, rest);
       case "claim":
         return await claim(cliOptions, rest);
       case "done":
@@ -62,21 +62,31 @@ export async function runCli(
   }
 }
 
-async function listTasks(options: CliOptions): Promise<number> {
-  const tasks = await loadTasks(options.cwd);
+async function listTasks(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length > 0) {
+    options.stderr("usage: forge list");
+    return 1;
+  }
+
+  const tasks = await loadTasksFrom(options.cwd);
   writeTaskLines(options, tasks);
   return 0;
 }
 
-async function listReadyTasks(options: CliOptions): Promise<number> {
-  const tasks = await loadTasks(options.cwd);
+async function listReadyTasks(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length > 0) {
+    options.stderr("usage: forge ready");
+    return 1;
+  }
+
+  const tasks = await loadTasksFrom(options.cwd);
   writeTaskLines(options, getReadyTasks(tasks));
   return 0;
 }
 
 async function claim(options: CliOptions, args: string[]): Promise<number> {
   const { taskId, claimedBy } = parseClaimArgs(args, options);
-  const task = await claimTask(options.cwd, taskId, claimedBy, options.now);
+  const task = await claimTaskFrom(options.cwd, taskId, claimedBy, options.now);
   options.stdout(`claimed ${task.id} by ${task.claimed_by}`);
   return 0;
 }
@@ -88,7 +98,7 @@ async function done(options: CliOptions, args: string[]): Promise<number> {
     return 1;
   }
 
-  const task = await completeTask(options.cwd, taskId, options.now);
+  const task = await completeTaskFrom(options.cwd, taskId, options.now);
   options.stdout(`done ${task.id}`);
   return 0;
 }
@@ -127,7 +137,12 @@ function writeTaskLines(options: CliOptions, tasks: Task[]): void {
 }
 
 function formatTaskLine(task: Task): string {
-  return [task.id, task.status, task.claimed_by || "-", task.title].join("\t");
+  const fields = [task.id, task.status, task.claimed_by || "-"];
+  if (task.area) {
+    fields.push(task.area);
+  }
+  fields.push(task.title);
+  return fields.join("\t");
 }
 
 if (import.meta.main) {

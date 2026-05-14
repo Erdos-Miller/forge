@@ -18,6 +18,7 @@ priority: high
 parent: F-0000
 depends_on: []
 claimed_by: ""
+area: core
 scope:
   - .forge/**
 created_at: 2026-05-14T00:00:00-05:00
@@ -49,9 +50,22 @@ updated_at: 2026-05-14T00:00:00-05:00
 - `parent`: optional parent spec/task id.
 - `depends_on`: task ids that must finish first.
 - `claimed_by`: optional human or agent identifier.
+- `area`: optional human grouping for project, package, app, or subsystem.
 - `scope`: optional file globs the task expects to touch.
 - `created_at`: ISO timestamp.
 - `updated_at`: ISO timestamp.
+
+## Storage Model
+
+Use one tracked `.forge/` directory at the git repository root.
+
+Do not create nested `.forge/` directories inside packages, apps, or modules in v0.
+Nested stores split the task graph and make dependencies harder to reason about.
+
+Relate work to projects or directories with:
+
+- `scope` for machine-readable file globs.
+- `area` for human grouping such as `core`, `cli`, `web`, or `docs`.
 
 ## Derived Relationships
 

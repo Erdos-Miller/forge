@@ -34,6 +34,20 @@ The core idea is simple: work is stored as plain Markdown files in git. The CLI 
 
 Each task is a Markdown document with YAML frontmatter. The Markdown body should remain useful even if Forge tooling does not exist.
 
+## Repo Hygiene
+
+Forge uses one tracked `.forge/` directory at the repository root, similar to how
+repos keep automation and collaboration metadata in directories such as
+`.github/` or `.vscode/`.
+
+Keep canonical tasks and specs in `.forge/` so they branch, diff, merge, and
+travel with the code they describe. Use task `scope` globs and optional `area`
+labels to relate work to packages, apps, modules, or docs without creating
+nested task stores.
+
+Generated indexes, caches, or local UI state should stay ignored by git. The
+Markdown files remain the source of truth.
+
 ## First Loop
 
 1. Pick a ready task from `.forge/tasks`.
