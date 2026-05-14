@@ -1,0 +1,16 @@
+{
+  "name": "@forge/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "forge": "./src/index.ts"
+  },
+  "scripts": {
+    "forge": "bun src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@forge/core": "file:../core"
+  }
+}

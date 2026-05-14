@@ -27,6 +27,10 @@ export interface ParsedTask {
   frontmatter: Record<string, unknown>;
 }
 
+export type TaskFrontmatterUpdates = Partial<
+  Pick<Task, "status" | "claimed_by" | "updated_at">
+>;
+
 export interface MissingDependencyDiagnostic {
   taskId: string;
   dependencyId: string;
@@ -60,6 +64,13 @@ export class TaskParseError extends Error {
   }
 }
 
+export class TaskWriteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TaskWriteError";
+  }
+}
+
 const TASK_STATUSES = new Set<TaskStatus>([
   "open",
   "doing",
@@ -78,6 +89,13 @@ const TASK_PRIORITIES = new Set<TaskPriority>([
 const TASK_KINDS = new Set<TaskKind>(["task", "spec"]);
 
 export async function loadTasks(repoRoot = process.cwd()): Promise<Task[]> {
+  const parsedTasks = await loadParsedTaskFiles(repoRoot);
+  return parsedTasks.map((parsedTask) => parsedTask.task);
+}
+
+export async function loadParsedTaskFiles(
+  repoRoot = process.cwd(),
+): Promise<ParsedTask[]> {
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
   const entries = await fs.readdir(tasksDir, { withFileTypes: true });
   const files = entries
@@ -87,12 +105,94 @@ export async function loadTasks(repoRoot = process.cwd()): Promise<Task[]> {
 
   const tasks = await Promise.all(
     files.map(async (filePath) => {
-      const contents = await fs.readFile(filePath, "utf8");
-      return parseTaskFile(filePath, contents).task;
+      return readTaskFile(filePath);
     }),
   );
 
   return tasks;
+}
+
+export async function readTaskFile(sourcePath: string): Promise<ParsedTask> {
+  const contents = await fs.readFile(sourcePath, "utf8");
+  return parseTaskFile(sourcePath, contents);
+}
+
+export async function findParsedTaskById(
+  repoRoot: string,
+  taskId: string,
+): Promise<ParsedTask> {
+  const parsedTasks = await loadParsedTaskFiles(repoRoot);
+  const matches = parsedTasks.filter((parsedTask) => parsedTask.task.id === taskId);
+
+  if (matches.length === 0) {
+    throw new TaskWriteError(`task ${taskId} not found`);
+  }
+  if (matches.length > 1) {
+    throw new TaskWriteError(`task ${taskId} has duplicate task files`);
+  }
+
+  return matches[0];
+}
+
+export async function updateTaskFile(
+  sourcePath: string,
+  updates: TaskFrontmatterUpdates,
+): Promise<Task> {
+  const contents = await fs.readFile(sourcePath, "utf8");
+  const updatedContents = updateTaskFileContents(contents, updates, sourcePath);
+  const parsed = parseTaskFile(sourcePath, updatedContents);
+  await fs.writeFile(sourcePath, updatedContents);
+  return parsed.task;
+}
+
+export function updateTaskFileContents(
+  contents: string,
+  updates: TaskFrontmatterUpdates,
+  sourcePath = "task.md",
+): string {
+  const { frontmatter, body } = splitFrontmatter(contents, sourcePath);
+  let updatedFrontmatter = frontmatter;
+
+  for (const [field, value] of Object.entries(updates)) {
+    if (value === undefined) {
+      continue;
+    }
+    updatedFrontmatter = replaceFrontmatterField(
+      updatedFrontmatter,
+      field,
+      serializeFrontmatterScalar(field, value),
+      sourcePath,
+    );
+  }
+
+  return `---\n${updatedFrontmatter}\n---${body}`;
+}
+
+export async function claimTask(
+  repoRoot: string,
+  taskId: string,
+  claimedBy: string,
+  now = new Date(),
+): Promise<Task> {
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  return updateTaskFile(parsed.task.sourcePath, {
+    status: "doing",
+    claimed_by: claimedBy,
+    updated_at: now.toISOString(),
+  });
+}
+
+export async function completeTask(
+  repoRoot: string,
+  taskId: string,
+  now = new Date(),
+): Promise<Task> {
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  return updateTaskFile(parsed.task.sourcePath, {
+    status: "done",
+    claimed_by: "",
+    updated_at: now.toISOString(),
+  });
 }
 
 export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
@@ -177,6 +277,43 @@ export function parseTaskFile(sourcePath: string, contents: string): ParsedTask 
   const frontmatter = parsed.data as Record<string, unknown>;
   const task = validateTask(frontmatter, sourcePath, parsed.content);
   return { task, frontmatter };
+}
+
+function splitFrontmatter(
+  contents: string,
+  sourcePath: string,
+): { frontmatter: string; body: string } {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---([\s\S]*)$/.exec(contents);
+  if (!match) {
+    throw new TaskParseError(sourcePath, "missing YAML frontmatter");
+  }
+
+  return { frontmatter: match[1], body: match[2] };
+}
+
+function replaceFrontmatterField(
+  frontmatter: string,
+  field: string,
+  value: string,
+  sourcePath: string,
+): string {
+  const fieldPattern = new RegExp(`^${escapeRegExp(field)}:.*$`, "m");
+  if (!fieldPattern.test(frontmatter)) {
+    throw new TaskWriteError(`${sourcePath}: field "${field}" not found`);
+  }
+
+  return frontmatter.replace(fieldPattern, `${field}: ${value}`);
+}
+
+function serializeFrontmatterScalar(field: string, value: string): string {
+  if (field === "claimed_by") {
+    return JSON.stringify(value);
+  }
+  return value;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function findMissingDependencies(

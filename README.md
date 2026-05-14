@@ -45,6 +45,18 @@ Each task is a Markdown document with YAML frontmatter. The Markdown body should
 
 Forge should build itself by following this loop from the beginning.
 
+## CLI
+
+The current CLI lives in `packages/cli` and reads the repo-local `.forge/tasks`
+directory from the current working directory.
+
+```sh
+bun packages/cli/src/index.ts list
+bun packages/cli/src/index.ts ready
+bun packages/cli/src/index.ts claim F-0005 --by codex
+bun packages/cli/src/index.ts done F-0005
+```
+
 ## Current Target
 
 Forge is currently designed to view and maintain the plan more than to replace a full issue tracker.
