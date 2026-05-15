@@ -154,6 +154,8 @@ function parseStderrJson(result: { stderr: string[] }): any {
 describe("forge cli", () => {
   test("command registry covers the runnable CLI surface", () => {
     expect(COMMANDS.map((command) => command.name)).toEqual([
+      "commands",
+      "help",
       "list",
       "ready",
       "queue",
@@ -191,6 +193,65 @@ describe("forge cli", () => {
     expect(result.stdout).toEqual([
       ["Usage:", ...COMMANDS.map((command) => `  ${command.usage}`)].join("\n"),
     ]);
+  });
+
+  test("commands --json emits stable registry metadata", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["commands", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload.version).toBe(1);
+    expect(payload.commands.map((command: any) => command.name)).toEqual(
+      COMMANDS.map((command) => command.name),
+    );
+    expect(payload.commands[0]).toEqual({
+      name: "commands",
+      usage: "forge commands --json",
+      description: "Emit command metadata.",
+      workflow: "inspect",
+      classification: "read",
+      supportsJson: true,
+      examples: ["forge commands --json"],
+      agentPurpose: "Discover the current CLI surface in robot-readable form.",
+    });
+    expect(payload.commands.find((command: any) => command.name === "done").classification).toBe(
+      "write",
+    );
+    expect(payload.commands.find((command: any) => command.name === "doctor").workflow).toBe(
+      "verify",
+    );
+  });
+
+  test("commands --json rejects invalid usage with a robot error", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["commands"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(2);
+    expect(payload.error.message).toBe("usage: forge commands --json");
+  });
+
+  test("help --agent groups commands by workflow with classification", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["help", "--agent"]);
+    const text = result.stdout[0];
+
+    expect(result.code).toBe(0);
+    expect(text).toContain("Inspect:\n- forge commands --json [read]");
+    expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
+    expect(text).toContain("Plan:\n- forge create <id> --title <title> [options] [write]");
+    expect(text).toContain("Mutate:\n- forge note <id> --stdin [write]");
+    expect(text).toContain("Verify:\n- forge doctor --json [read]");
+    expect(text).toContain("Close:\n- forge done <id> [--reason <text>] [--json] [write]");
+  });
+
+  test("help --agent rejects invalid usage", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["help"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toEqual(["usage: forge help --agent"]);
   });
 
   test("list prints all tasks", async () => {

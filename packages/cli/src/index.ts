@@ -38,6 +38,7 @@ export interface CliOptions {
 }
 
 export type CommandClassification = "read" | "write" | "serve";
+export type CommandWorkflow = "inspect" | "claim" | "plan" | "mutate" | "verify" | "close";
 
 export interface CommandMetadata {
   name: string;
@@ -59,6 +60,24 @@ interface DoctorDiagnostic {
 }
 
 export const COMMANDS = [
+  {
+    name: "commands",
+    usage: "forge commands --json",
+    description: "Emit command metadata.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge commands --json"],
+    agentPurpose: "Discover the current CLI surface in robot-readable form.",
+  },
+  {
+    name: "help",
+    usage: "forge help --agent",
+    description: "Print concise agent-oriented command help.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge help --agent"],
+    agentPurpose: "Get compact workflow guidance for an agent loop.",
+  },
   {
     name: "list",
     usage: "forge list",
@@ -234,6 +253,39 @@ export const COMMANDS = [
 
 export type CommandName = (typeof COMMANDS)[number]["name"];
 
+const COMMAND_WORKFLOWS = {
+  commands: "inspect",
+  help: "inspect",
+  list: "inspect",
+  ready: "inspect",
+  queue: "inspect",
+  next: "claim",
+  show: "inspect",
+  blockers: "inspect",
+  deps: "inspect",
+  guidance: "inspect",
+  doctor: "verify",
+  create: "plan",
+  prompt: "plan",
+  "loop-prompt": "plan",
+  claim: "claim",
+  note: "mutate",
+  block: "mutate",
+  unblock: "mutate",
+  review: "mutate",
+  done: "close",
+  web: "inspect",
+} satisfies Record<CommandName, CommandWorkflow>;
+
+const COMMAND_WORKFLOW_ORDER: CommandWorkflow[] = [
+  "inspect",
+  "claim",
+  "plan",
+  "mutate",
+  "verify",
+  "close",
+];
+
 const USAGE = ["Usage:", ...COMMANDS.map((command) => `  ${command.usage}`)].join(
   "\n",
 );
@@ -241,6 +293,8 @@ const USAGE = ["Usage:", ...COMMANDS.map((command) => `  ${command.usage}`)].joi
 type CommandHandler = (options: CliOptions, args: string[]) => Promise<number>;
 
 const COMMAND_HANDLERS = {
+  commands,
+  help,
   list: listTasks,
   ready: listReadyTasks,
   queue,
@@ -294,6 +348,31 @@ export async function runCli(
     cliOptions.stderr(error instanceof Error ? error.message : String(error));
     return 1;
   }
+}
+
+async function commands(options: CliOptions, args: string[]): Promise<number> {
+  if (!isJsonOnly(args)) {
+    return writeJsonUsageError(options, "usage: forge commands --json");
+  }
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      commands: COMMANDS.map(toRobotCommandMetadata),
+    }),
+  );
+  return 0;
+}
+
+async function help(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length !== 1 || args[0] !== "--agent") {
+    options.stderr("usage: forge help --agent");
+    return 1;
+  }
+
+  options.stdout(formatAgentHelp());
+  return 0;
 }
 
 async function listTasks(options: CliOptions, args: string[]): Promise<number> {
@@ -1200,6 +1279,44 @@ function toRobotDiagnostics(analysis: TaskGraphAnalysis): Record<string, unknown
     dependencyCycles: analysis.dependencyCycles,
     duplicateTaskIds: analysis.duplicateTaskIds,
   };
+}
+
+function toRobotCommandMetadata(command: CommandMetadata): Record<string, unknown> {
+  return {
+    name: command.name,
+    usage: command.usage,
+    description: command.description,
+    workflow: COMMAND_WORKFLOWS[command.name as CommandName],
+    classification: command.classification,
+    supportsJson: command.supportsJson,
+    examples: command.examples,
+    agentPurpose: command.agentPurpose,
+  };
+}
+
+function formatAgentHelp(): string {
+  const lines = ["Forge agent command reference", ""];
+
+  for (const workflow of COMMAND_WORKFLOW_ORDER) {
+    const commands = COMMANDS.filter((command) => COMMAND_WORKFLOWS[command.name] === workflow);
+    if (commands.length === 0) {
+      continue;
+    }
+
+    lines.push(`${capitalize(workflow)}:`);
+    for (const command of commands) {
+      lines.push(
+        `- ${command.usage} [${command.classification}] ${command.agentPurpose}`,
+      );
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function capitalize(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
 
 function toRobotGuidanceBundle(bundle: GuidanceBundle): Record<string, unknown> {
