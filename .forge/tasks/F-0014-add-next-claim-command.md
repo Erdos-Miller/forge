@@ -2,7 +2,7 @@
 id: F-0014
 title: Add next claim command
 kind: task
-status: open
+status: done
 priority: urgent
 parent: F-0000
 depends_on:
@@ -14,8 +14,8 @@ scope:
   - packages/core/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T04:14:57.141Z
+closed_at: 2026-05-15T04:14:57.141Z
 close_reason: ""
 ---
 
@@ -44,13 +44,16 @@ Depends on `F-0013` because `next` should reuse the robot task bundle and queue 
 
 ## Verification
 
-- Run `bun test` in `packages/core` and `packages/cli`.
-- Smoke-check `forge next --json` and `forge next --claim --by codex --json` in a temp repo fixture.
+- `bun test packages/cli/test/cli.test.ts` passed.
+- `bun run quality:check` passed from the repo root.
+- `forge next --json` returned the top ranked real repo task without mutating files.
+- Temp-repo CLI tests cover `forge next --claim --by codex --json` persistence.
 
 ## Notes
 
-This is the main dogfood unlock. Keep the normal path to one parse, one rank, one optional write, and one compact JSON response.
+Added JSON-only `next` with read-only selection, optional claim, empty queue response, and `--by` validation. Claim mode ranks first, writes the selected ready task, and returns the claimed bundle with the original rank and reasons.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Claimed and implemented 2026-05-15.

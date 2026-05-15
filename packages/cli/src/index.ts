@@ -12,6 +12,7 @@ import {
   rankReadyTaskQueue,
   rankReadyTasks,
   type CreateTaskInput,
+  type RankedQueueEntry,
   type Task,
   type TaskGraphAnalysis,
   type TaskPriority,
@@ -30,6 +31,7 @@ const USAGE = [
   "  forge list",
   "  forge ready",
   "  forge queue --json",
+  "  forge next [--claim] [--by <name>] --json",
   "  forge show <id> --json",
   "  forge blockers <id> --json",
   "  forge deps <id> --json",
@@ -63,6 +65,8 @@ export async function runCli(
         return await listReadyTasks(cliOptions, rest);
       case "queue":
         return await queue(cliOptions, rest);
+      case "next":
+        return await next(cliOptions, rest);
       case "show":
         return await show(cliOptions, rest);
       case "blockers":
@@ -133,14 +137,54 @@ async function queue(options: CliOptions, args: string[]): Promise<number> {
       ok: true,
       version: 1,
       repoRoot,
-      tasks: entries.map((entry) => ({
-        ...toRobotTaskSummary(entry.task),
-        ready: true,
-        rank: entry.rank,
-        blockers: entry.blockers,
-        reasons: entry.reasons,
-      })),
+      tasks: entries.map((entry) => toRobotQueueTask(entry.task, entry)),
       diagnostics: toRobotDiagnostics(analysis),
+    }),
+  );
+  return 0;
+}
+
+async function next(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseNextArgs(args, options);
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await loadTasksFrom(repoRoot);
+  const entry = rankReadyTaskQueue(tasks)[0];
+
+  if (!entry) {
+    options.stdout(
+      stringifyJson({
+        ok: true,
+        version: 1,
+        task: null,
+        reason: "empty",
+      }),
+    );
+    return 0;
+  }
+
+  if (!parsed.claim) {
+    options.stdout(
+      stringifyJson({
+        ok: true,
+        version: 1,
+        task: toRobotQueueTask(entry.task, entry),
+        reason: "ready",
+      }),
+    );
+    return 0;
+  }
+
+  const claimedTask = await claimTaskFrom(repoRoot, entry.task.id, parsed.claimedBy, options.now);
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      task: toRobotQueueTask(claimedTask, entry),
+      reason: "claimed",
     }),
   );
   return 0;
@@ -441,6 +485,51 @@ function parseIdJsonArgs(
   return { ok: true, taskId };
 }
 
+function parseNextArgs(
+  args: string[],
+  options: CliOptions,
+):
+  | { ok: true; claim: false }
+  | { ok: true; claim: true; claimedBy: string }
+  | { ok: false; message: string } {
+  let json = false;
+  let claim = false;
+  let claimedBy = options.env.USER || "unknown";
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--claim":
+        claim = true;
+        break;
+      case "--by": {
+        const value = args[index + 1];
+        if (!value) {
+          return { ok: false, message: "next option --by requires a value" };
+        }
+        claimedBy = value;
+        index += 1;
+        break;
+      }
+      default:
+        return { ok: false, message: `unknown next option: ${arg}` };
+    }
+  }
+
+  if (!json) {
+    return { ok: false, message: "usage: forge next [--claim] [--by <name>] --json" };
+  }
+
+  if (!claim && args.includes("--by")) {
+    return { ok: false, message: "next option --by requires --claim" };
+  }
+
+  return claim ? { ok: true, claim, claimedBy } : { ok: true, claim };
+}
+
 function writeJsonUsageError(options: CliOptions, message: string): number {
   options.stderr(
     stringifyJson({
@@ -481,6 +570,19 @@ function toRobotTaskSummary(task: Task): Record<string, unknown> {
     claimed_by: task.claimed_by || null,
     scope: task.scope,
     depends_on: task.depends_on,
+  };
+}
+
+function toRobotQueueTask(
+  task: Task,
+  entry: Pick<RankedQueueEntry, "rank" | "blockers" | "reasons">,
+): Record<string, unknown> {
+  return {
+    ...toRobotTaskSummary(task),
+    ready: task.status === "open" && !task.claimed_by && entry.blockers.length === 0,
+    rank: entry.rank,
+    blockers: entry.blockers,
+    reasons: entry.reasons,
   };
 }
 

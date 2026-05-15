@@ -187,6 +187,79 @@ describe("forge cli", () => {
     expect(payload.error.message).toBe("usage: forge queue --json");
   });
 
+  test("next --json returns the top ranked task without mutating it", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    const result = await run(repoRoot, ["next", "--json"]);
+    const payload = parseStdoutJson(result);
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(payload).toMatchObject({
+      ok: true,
+      version: 1,
+      reason: "ready",
+      task: {
+        id: "F-0002",
+        status: "open",
+        claimed_by: null,
+        ready: true,
+        rank: 1,
+      },
+    });
+    expect(parsed.task.status).toBe("open");
+    expect(parsed.task.claimed_by).toBe("");
+  });
+
+  test("next --claim --by --json claims and returns the top ranked task", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    const result = await run(repoRoot, ["next", "--claim", "--by", "codex", "--json"]);
+    const payload = parseStdoutJson(result);
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(payload).toMatchObject({
+      ok: true,
+      version: 1,
+      reason: "claimed",
+      task: {
+        id: "F-0002",
+        status: "doing",
+        claimed_by: "codex",
+        ready: false,
+        rank: 1,
+      },
+    });
+    expect(parsed.task.status).toBe("doing");
+    expect(parsed.task.claimed_by).toBe("codex");
+    expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
+  });
+
+  test("next --json returns an empty response when no task is ready", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({ id: "F-0002", title: "Open", status: "doing", claimed_by: "codex" }),
+    );
+
+    const result = await run(repoRoot, ["next", "--claim", "--by", "codex", "--json"]);
+    const payload = parseStdoutJson(result);
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(payload).toEqual({ ok: true, version: 1, task: null, reason: "empty" });
+    expect(parsed.task.claimed_by).toBe("codex");
+  });
+
+  test("next rejects --by without --claim", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["next", "--by", "codex", "--json"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(2);
+    expect(payload.error.code).toBe("usage_error");
+    expect(payload.error.message).toBe("next option --by requires --claim");
+  });
+
   test("show --json prints a task bundle with markdown sections", async () => {
     const { repoRoot, taskPath } = await makeRepo();
     await fs.writeFile(
