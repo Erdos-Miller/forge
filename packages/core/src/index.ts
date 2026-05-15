@@ -19,6 +19,8 @@ export interface Task {
   scope: string[];
   created_at: string;
   updated_at: string;
+  closed_at?: string;
+  close_reason?: string;
   body: string;
   sourcePath: string;
 }
@@ -29,8 +31,23 @@ export interface ParsedTask {
 }
 
 export type TaskFrontmatterUpdates = Partial<
-  Pick<Task, "status" | "claimed_by" | "updated_at">
+  Pick<Task, "status" | "claimed_by" | "updated_at" | "closed_at" | "close_reason">
 >;
+
+export interface CreateTaskInput {
+  id: string;
+  title: string;
+  priority?: TaskPriority;
+  area?: string;
+  parent?: string;
+  depends_on?: string[];
+  scope?: string[];
+  why?: string;
+  success?: string;
+  acceptance?: string[];
+  verification?: string[];
+  notes?: string;
+}
 
 export interface MissingDependencyDiagnostic {
   taskId: string;
@@ -121,6 +138,114 @@ export async function loadTasksFrom(startDir = process.cwd()): Promise<Task[]> {
   return loadTasks(await findForgeRoot(startDir));
 }
 
+export async function createTask(
+  repoRoot: string,
+  input: CreateTaskInput,
+  now = new Date(),
+): Promise<Task> {
+  if (!input.id.trim()) {
+    throw new TaskWriteError("create requires a task id");
+  }
+  if (!input.title.trim()) {
+    throw new TaskWriteError("create requires a title");
+  }
+
+  const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  await fs.mkdir(tasksDir, { recursive: true });
+
+  const existingTasks = await loadTasks(repoRoot);
+  if (existingTasks.some((task) => task.id === input.id)) {
+    throw new TaskWriteError(`task ${input.id} already exists`);
+  }
+
+  const filePath = path.join(tasksDir, `${input.id}-${slugify(input.title)}.md`);
+  try {
+    await fs.writeFile(filePath, createTaskFileContents(input, now), {
+      flag: "wx",
+    });
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      throw new TaskWriteError(`task file already exists: ${filePath}`);
+    }
+    throw error;
+  }
+
+  return readTaskFile(filePath).then((parsed) => parsed.task);
+}
+
+export async function createTaskFrom(
+  startDir: string,
+  input: CreateTaskInput,
+  now = new Date(),
+): Promise<Task> {
+  return createTask(await findForgeRoot(startDir), input, now);
+}
+
+export function createTaskFileContents(input: CreateTaskInput, now = new Date()): string {
+  const timestamp = now.toISOString();
+  const priority = input.priority ?? "medium";
+  const parent = input.parent ?? "";
+  const dependsOn = input.depends_on ?? [];
+  const scope = input.scope?.length ? input.scope : ["**"];
+
+  const frontmatterLines = [
+    "---",
+    `id: ${input.id}`,
+    `title: ${JSON.stringify(input.title)}`,
+    "kind: task",
+    "status: open",
+    `priority: ${priority}`,
+    ...(input.area ? [`area: ${JSON.stringify(input.area)}`] : []),
+    `parent: ${JSON.stringify(parent)}`,
+    ...formatYamlArray("depends_on", dependsOn),
+    `claimed_by: ""`,
+    ...formatYamlArray("scope", scope),
+    `created_at: ${timestamp}`,
+    `updated_at: ${timestamp}`,
+    "---",
+    "",
+  ];
+
+  return `${frontmatterLines.join("\n")}${createTaskBody(input, timestamp)}`;
+}
+
+export function createTaskBody(input: CreateTaskInput, timestamp: string): string {
+  return [
+    `# ${input.title}`,
+    "",
+    "## Why",
+    "",
+    input.why?.trim() || "TODO: Explain why this work matters.",
+    "",
+    "## What success looks like",
+    "",
+    input.success?.trim() || "TODO: Describe the end state that should be true.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    formatMarkdownList(input.acceptance, "TODO: Add observable acceptance criteria."),
+    "",
+    "## Dependencies",
+    "",
+    input.depends_on?.length
+      ? `Tracked in frontmatter: ${input.depends_on.join(", ")}.`
+      : "None.",
+    "",
+    "## Verification",
+    "",
+    formatMarkdownList(input.verification, "TODO: Add verification commands or evidence."),
+    "",
+    "## Notes",
+    "",
+    input.notes?.trim() || "TODO: Add implementation context.",
+    "",
+    "## History",
+    "",
+    `- Created ${timestamp}.`,
+    "",
+  ].join("\n");
+}
+
 export async function loadParsedTaskFiles(
   repoRoot = process.cwd(),
 ): Promise<ParsedTask[]> {
@@ -192,11 +317,10 @@ export function updateTaskFileContents(
     if (value === undefined) {
       continue;
     }
-    updatedFrontmatter = replaceFrontmatterField(
+    updatedFrontmatter = upsertFrontmatterField(
       updatedFrontmatter,
       field,
       serializeFrontmatterScalar(field, value),
-      sourcePath,
     );
   }
 
@@ -231,11 +355,13 @@ export async function completeTask(
   taskId: string,
   now = new Date(),
 ): Promise<Task> {
+  const timestamp = now.toISOString();
   const parsed = await findParsedTaskById(repoRoot, taskId);
   return updateTaskFile(parsed.task.sourcePath, {
     status: "done",
     claimed_by: "",
-    updated_at: now.toISOString(),
+    updated_at: timestamp,
+    closed_at: timestamp,
   });
 }
 
@@ -306,6 +432,30 @@ export function getReadyTasks(tasks: Task[]): Task[] {
   return tasks.filter((task) => analysis.readyTaskIds.includes(task.id));
 }
 
+export function rankReadyTasks(tasks: Task[]): Task[] {
+  const analysis = analyzeTasks(tasks);
+  const readyTaskIds = new Set(analysis.readyTaskIds);
+  const downstreamCounts = countDownstreamDependencies(tasks);
+
+  return tasks
+    .filter((task) => readyTaskIds.has(task.id))
+    .sort((left, right) => {
+      const priorityDelta =
+        priorityRank(left.priority) - priorityRank(right.priority);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      const downstreamDelta =
+        (downstreamCounts.get(right.id) ?? 0) - (downstreamCounts.get(left.id) ?? 0);
+      if (downstreamDelta !== 0) {
+        return downstreamDelta;
+      }
+
+      return left.id.localeCompare(right.id);
+    });
+}
+
 export function getTaskBlockers(
   task: Task,
   analysis: TaskGraphAnalysis,
@@ -343,15 +493,14 @@ function splitFrontmatter(
   return { frontmatter: match[1], body: match[2] };
 }
 
-function replaceFrontmatterField(
+function upsertFrontmatterField(
   frontmatter: string,
   field: string,
   value: string,
-  sourcePath: string,
 ): string {
   const fieldPattern = new RegExp(`^${escapeRegExp(field)}:.*$`, "m");
   if (!fieldPattern.test(frontmatter)) {
-    throw new TaskWriteError(`${sourcePath}: field "${field}" not found`);
+    return `${frontmatter}\n${field}: ${value}`;
   }
 
   return frontmatter.replace(fieldPattern, `${field}: ${value}`);
@@ -368,11 +517,44 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function formatYamlArray(field: string, values: string[]): string[] {
+  if (values.length === 0) {
+    return [`${field}: []`];
+  }
+  return [`${field}:`, ...values.map((value) => `  - ${value}`)];
+}
+
+function formatMarkdownList(values: string[] | undefined, fallback: string): string {
+  const items = values?.map((value) => value.trim()).filter(Boolean) ?? [];
+  if (items.length === 0) {
+    return `- ${fallback}`;
+  }
+  return items.map((value) => `- ${value}`).join("\n");
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+  return slug || "task";
+}
+
 function isNotFoundError(error: unknown): boolean {
   return (
     error instanceof Error &&
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "EEXIST"
   );
 }
 
@@ -523,6 +705,31 @@ function getTaskBlockersFromDiagnostics(
   return blockers;
 }
 
+function countDownstreamDependencies(tasks: Task[]): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const task of tasks) {
+    for (const dependencyId of task.depends_on) {
+      counts.set(dependencyId, (counts.get(dependencyId) ?? 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+function priorityRank(priority: TaskPriority): number {
+  switch (priority) {
+    case "urgent":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    case "low":
+      return 3;
+  }
+}
+
 export function validateTask(
   raw: Record<string, unknown>,
   sourcePath: string,
@@ -540,6 +747,8 @@ export function validateTask(
   const scope = requireStringArray(raw, sourcePath, "scope");
   const created_at = requireTimestamp(raw, sourcePath, "created_at");
   const updated_at = requireTimestamp(raw, sourcePath, "updated_at");
+  const closed_at = optionalTimestamp(raw, sourcePath, "closed_at");
+  const close_reason = optionalString(raw, sourcePath, "close_reason");
 
   return {
     id,
@@ -554,6 +763,8 @@ export function validateTask(
     scope,
     created_at,
     updated_at,
+    closed_at,
+    close_reason,
     body,
     sourcePath,
   };
@@ -604,6 +815,30 @@ function requireTimestamp(
   field: string,
 ): string {
   const value = raw[field];
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value !== "string") {
+    throw new TaskParseError(sourcePath, `field "${field}" must be a string timestamp`);
+  }
+
+  if (Number.isNaN(Date.parse(value))) {
+    throw new TaskParseError(sourcePath, `field "${field}" must be a parseable timestamp`);
+  }
+  return value;
+}
+
+function optionalTimestamp(
+  raw: Record<string, unknown>,
+  sourcePath: string,
+  field: string,
+): string | undefined {
+  const value = raw[field];
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
   if (value instanceof Date) {
     return value.toISOString();
   }

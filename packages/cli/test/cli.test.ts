@@ -184,7 +184,65 @@ describe("forge cli", () => {
     expect(parsed.task.status).toBe("done");
     expect(parsed.task.claimed_by).toBe("");
     expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.closed_at).toBe("2026-05-14T12:00:00.000Z");
     expect(parsed.task.body).toBe("\n# Open\n\nBody stays readable.\n");
+  });
+
+  test("create writes a canonical task file", async () => {
+    const { nestedDir, repoRoot } = await makeRepo();
+    const result = await run(nestedDir, [
+      "create",
+      "F-0004",
+      "--title",
+      "Add task creation",
+      "--why",
+      "New tasks should start with the fields humans and tools expect.",
+      "--success",
+      "The CLI creates a ready-to-edit task document.",
+      "--area",
+      "cli",
+      "--priority",
+      "high",
+      "--scope",
+      "packages/cli/**",
+      "--depends-on",
+      "F-0002",
+      "--acceptance",
+      "The generated file has canonical Markdown sections.",
+      "--verification",
+      "bun test packages/cli",
+    ]);
+
+    const taskPath = path.join(
+      repoRoot,
+      ".forge",
+      "tasks",
+      "F-0004-add-task-creation.md",
+    );
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(result.stdout[0]).toContain("created F-0004");
+    expect(parsed.task.title).toBe("Add task creation");
+    expect(parsed.task.priority).toBe("high");
+    expect(parsed.task.area).toBe("cli");
+    expect(parsed.task.scope).toEqual(["packages/cli/**"]);
+    expect(parsed.task.depends_on).toEqual(["F-0002"]);
+    expect(parsed.task.created_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.body).toContain("## Why");
+    expect(parsed.task.body).toContain("## What success looks like");
+    expect(parsed.task.body).toContain("## Acceptance Criteria");
+    expect(parsed.task.body).toContain("## Dependencies");
+    expect(parsed.task.body).toContain("## Verification");
+    expect(parsed.task.body).toContain("## History");
+  });
+
+  test("create requires a title", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["create", "F-0004"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toEqual(["create requires --title <title>"]);
   });
 
   test("unknown task id exits nonzero with a useful message", async () => {

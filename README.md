@@ -67,9 +67,24 @@ directory from the current working directory.
 ```sh
 bun packages/cli/src/index.ts list
 bun packages/cli/src/index.ts ready
+bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --area cli --scope "packages/cli/**"
 bun packages/cli/src/index.ts claim F-0005 --by codex
 bun packages/cli/src/index.ts done F-0005
 ```
+
+## Web Board
+
+The local web board lives in `packages/web`. It is a read-only view over the
+same `.forge/tasks` files used by the CLI. The first screen is a recommended
+queue from Forge's ranking engine with a task detail pane beside it.
+
+```sh
+cd packages/web
+bun install
+bun run dev
+```
+
+Open the printed local URL, usually `http://localhost:5173/`.
 
 ## Current Target
 

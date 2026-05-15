@@ -23,11 +23,17 @@ scope:
   - .forge/**
 created_at: 2026-05-14T00:00:00-05:00
 updated_at: 2026-05-14T00:00:00-05:00
+closed_at:
+close_reason:
 ---
 
 # Define task format
 
-## Context
+## Why
+
+...
+
+## What success looks like
 
 ...
 
@@ -35,9 +41,21 @@ updated_at: 2026-05-14T00:00:00-05:00
 
 - ...
 
+## Dependencies
+
+None.
+
+## Verification
+
+- ...
+
 ## Notes
 
 ...
+
+## History
+
+- Created 2026-05-14T00:00:00-05:00.
 ```
 
 ## Canonical Fields
@@ -54,6 +72,22 @@ updated_at: 2026-05-14T00:00:00-05:00
 - `scope`: optional file globs the task expects to touch.
 - `created_at`: ISO timestamp.
 - `updated_at`: ISO timestamp.
+- `closed_at`: optional ISO timestamp for completed or canceled work.
+- `close_reason`: optional human-readable completion or cancellation reason.
+
+## Canonical Markdown Sections
+
+Keep the body readable Markdown, but create tasks with the known sections in this order:
+
+1. `Why`
+2. `What success looks like`
+3. `Acceptance Criteria`
+4. `Dependencies`
+5. `Verification`
+6. `Notes`
+7. `History`
+
+The CLI should generate these sections for new tasks. Users may add extra `##` sections after the canonical sections when a task needs more context. Tools should render known sections first and preserve unknown sections rather than rejecting them.
 
 ## Storage Model
 

@@ -2,9 +2,12 @@
 import {
   claimTaskFrom,
   completeTaskFrom,
+  createTaskFrom,
   getReadyTasks,
   loadTasksFrom,
+  type CreateTaskInput,
   type Task,
+  type TaskPriority,
 } from "@forge/core";
 
 export interface CliOptions {
@@ -19,6 +22,7 @@ const USAGE = [
   "Usage:",
   "  forge list",
   "  forge ready",
+  "  forge create <id> --title <title> [options]",
   "  forge claim <id> [--by <name>]",
   "  forge done <id>",
 ].join("\n");
@@ -43,6 +47,8 @@ export async function runCli(
         return await listTasks(cliOptions, rest);
       case "ready":
         return await listReadyTasks(cliOptions, rest);
+      case "create":
+        return await create(cliOptions, rest);
       case "claim":
         return await claim(cliOptions, rest);
       case "done":
@@ -91,6 +97,13 @@ async function claim(options: CliOptions, args: string[]): Promise<number> {
   return 0;
 }
 
+async function create(options: CliOptions, args: string[]): Promise<number> {
+  const input = parseCreateArgs(args);
+  const task = await createTaskFrom(options.cwd, input, options.now);
+  options.stdout(`created ${task.id} ${task.sourcePath}`);
+  return 0;
+}
+
 async function done(options: CliOptions, args: string[]): Promise<number> {
   const [taskId, ...extra] = args;
   if (!taskId || extra.length > 0) {
@@ -128,6 +141,76 @@ function parseClaimArgs(
   }
 
   return { taskId, claimedBy };
+}
+
+function parseCreateArgs(args: string[]): CreateTaskInput {
+  const [id, ...rest] = args;
+  if (!id) {
+    throw new Error("usage: forge create <id> --title <title> [options]");
+  }
+
+  const input: CreateTaskInput = { id, title: "" };
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+    const value = rest[index + 1];
+    if (!value) {
+      throw new Error(`${arg} requires a value`);
+    }
+
+    switch (arg) {
+      case "--title":
+        input.title = value;
+        break;
+      case "--why":
+        input.why = value;
+        break;
+      case "--success":
+        input.success = value;
+        break;
+      case "--area":
+        input.area = value;
+        break;
+      case "--priority":
+        input.priority = parsePriority(value);
+        break;
+      case "--parent":
+        input.parent = value;
+        break;
+      case "--scope":
+        input.scope = [...(input.scope ?? []), value];
+        break;
+      case "--depends-on":
+        input.depends_on = [...(input.depends_on ?? []), value];
+        break;
+      case "--acceptance":
+        input.acceptance = [...(input.acceptance ?? []), value];
+        break;
+      case "--verification":
+        input.verification = [...(input.verification ?? []), value];
+        break;
+      case "--notes":
+        input.notes = value;
+        break;
+      default:
+        throw new Error(`unknown create option: ${arg}`);
+    }
+
+    index += 1;
+  }
+
+  if (!input.title.trim()) {
+    throw new Error("create requires --title <title>");
+  }
+
+  return input;
+}
+
+function parsePriority(value: string): TaskPriority {
+  if (value === "urgent" || value === "high" || value === "medium" || value === "low") {
+    return value;
+  }
+  throw new Error("priority must be one of: urgent, high, medium, low");
 }
 
 function writeTaskLines(options: CliOptions, tasks: Task[]): void {

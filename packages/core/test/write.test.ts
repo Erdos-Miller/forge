@@ -91,6 +91,7 @@ describe("task write helpers", () => {
     expect(parsed.task.status).toBe("done");
     expect(parsed.task.claimed_by).toBe("");
     expect(parsed.task.updated_at).toBe("2026-05-14T13:00:00.000Z");
+    expect(parsed.task.closed_at).toBe("2026-05-14T13:00:00.000Z");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
   });
 });

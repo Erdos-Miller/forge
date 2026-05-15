@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
   TaskParseError,
+  createTaskFileContents,
   loadTasks,
   parseTaskFile,
   validateTask,
@@ -20,6 +21,35 @@ describe("loadTasks", () => {
 });
 
 describe("parseTaskFile", () => {
+  test("creates task files with canonical markdown sections", () => {
+    const contents = createTaskFileContents(
+      {
+        id: "F-9998",
+        title: "Create task",
+        priority: "high",
+        area: "cli",
+        scope: ["packages/cli/**"],
+        why: "Task creation should be consistent.",
+        success: "A generated task is ready to edit.",
+        acceptance: ["It has canonical sections."],
+        verification: ["bun test"],
+      },
+      new Date("2026-05-14T12:00:00Z"),
+    );
+
+    const parsed = parseTaskFile("created.md", contents);
+
+    expect(parsed.task.id).toBe("F-9998");
+    expect(parsed.task.title).toBe("Create task");
+    expect(parsed.task.priority).toBe("high");
+    expect(parsed.task.area).toBe("cli");
+    expect(parsed.task.scope).toEqual(["packages/cli/**"]);
+    expect(parsed.task.body).toContain("## Why");
+    expect(parsed.task.body).toContain("## What success looks like");
+    expect(parsed.task.body).toContain("## Acceptance Criteria");
+    expect(parsed.task.body).toContain("## Verification");
+  });
+
   test("parses frontmatter and preserves the markdown body", () => {
     const source = [
       "---",
@@ -35,6 +65,8 @@ describe("parseTaskFile", () => {
       "  - packages/**",
       "created_at: 2026-05-14T00:00:00-05:00",
       "updated_at: 2026-05-14T00:00:00-05:00",
+      "closed_at: 2026-05-14T01:00:00-05:00",
+      "close_reason: Completed",
       "---",
       "",
       "# Example",
@@ -47,6 +79,8 @@ describe("parseTaskFile", () => {
 
     expect(parsed.task.id).toBe("F-9999");
     expect(parsed.task.depends_on).toEqual([]);
+    expect(parsed.task.closed_at).toBe("2026-05-14T06:00:00.000Z");
+    expect(parsed.task.close_reason).toBe("Completed");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
   });
 
@@ -106,6 +140,12 @@ describe("validateTask", () => {
     expect(() =>
       validateTask({ ...validTask, updated_at: "not-a-date" }, "bad-date.md"),
     ).toThrow(/bad-date\.md: field "updated_at" must be a parseable timestamp/);
+  });
+
+  test("rejects invalid optional close timestamp", () => {
+    expect(() =>
+      validateTask({ ...validTask, closed_at: "not-a-date" }, "bad-close-date.md"),
+    ).toThrow(/bad-close-date\.md: field "closed_at" must be a parseable timestamp/);
   });
 
   test("uses a typed parse error", () => {

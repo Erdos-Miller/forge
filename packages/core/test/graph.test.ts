@@ -5,6 +5,7 @@ import {
   getReadyTasks,
   getTaskBlockers,
   loadTasks,
+  rankReadyTasks,
   type Task,
 } from "../src";
 
@@ -142,5 +143,27 @@ describe("analyzeTasks", () => {
     expect(getTaskBlockers(tasks.find((loadedTask) => loadedTask.id === "F-0003")!, analysis)).toEqual(
       [],
     );
+  });
+});
+
+describe("rankReadyTasks", () => {
+  test("orders ready tasks by priority, downstream unblock count, then id", () => {
+    const tasks = [
+      task({ id: "F-0004", priority: "medium" }),
+      task({ id: "F-0002", priority: "high" }),
+      task({ id: "F-0003", priority: "high" }),
+      task({ id: "F-0001", priority: "urgent" }),
+      task({ id: "F-0005", status: "blocked", priority: "urgent" }),
+      task({ id: "F-0006", status: "blocked", depends_on: ["F-0003"] }),
+      task({ id: "F-0007", status: "blocked", depends_on: ["F-0003"] }),
+      task({ id: "F-0008", status: "blocked", depends_on: ["F-0002"] }),
+    ];
+
+    expect(rankReadyTasks(tasks).map((readyTask) => readyTask.id)).toEqual([
+      "F-0001",
+      "F-0003",
+      "F-0002",
+      "F-0004",
+    ]);
   });
 });
