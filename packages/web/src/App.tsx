@@ -138,8 +138,8 @@ export function App({ initialData }: AppProps) {
   }, [recommendedRank, scopedTasks, showDone]);
 
   const groupedQueueTasks = useMemo(() => {
-    return groupQueueTasks(queueTasks, groupBy);
-  }, [groupBy, queueTasks]);
+    return groupQueueTasks(queueTasks, groupBy, data?.availabilityByTaskId ?? {});
+  }, [data, groupBy, queueTasks]);
 
   const diagnosticMessages = useMemo(() => {
     return data ? getDiagnosticMessages(data.diagnostics) : [];
@@ -250,28 +250,42 @@ export function App({ initialData }: AppProps) {
 
             <div className="queueGroups">
               {groupedQueueTasks.length > 0 ? (
-                groupedQueueTasks.map(([area, tasks]) => (
-                  <section className="areaGroup" key={area}>
+                groupedQueueTasks.map(([group, sections]) => (
+                  <section className="areaGroup" key={group}>
                     <header className="areaHeader">
-                      <h3>{area}</h3>
-                      <span>{tasks.length} tasks</span>
+                      <h3>{group}</h3>
+                      <span>
+                        {sections.reduce((count, section) => count + section.tasks.length, 0)} tasks
+                      </span>
                     </header>
-                    <div className="taskRows">
-                      {tasks.map((task, index) => (
-                        <QueueRow
-                          availability={data.availabilityByTaskId[task.id] ?? "blocked"}
-                          blockers={data.blockersByTaskId[task.id] ?? []}
-                          groupBy={groupBy}
-                          isSelected={selectedTask?.id === task.id}
-                          key={task.id}
-                          onSelect={() => setSelectedTaskId(task.id)}
-                          rank={queueTasks.indexOf(task) + 1 || index + 1}
-                          recommendedRank={recommendedRank.get(task.id)}
-                          blockerCount={data.blockersByTaskId[task.id]?.length ?? 0}
-                          task={task}
-                        />
-                      ))}
-                    </div>
+                    {sections.map((section) => (
+                      <section className="availabilitySection" key={section.availability}>
+                        <header>
+                          <h4>{section.label}</h4>
+                          <span>{section.tasks.length}</span>
+                        </header>
+                        <div className="taskRows">
+                          {section.tasks.map((task) => (
+                            <QueueRow
+                              availability={data.availabilityByTaskId[task.id] ?? "blocked"}
+                              blockers={data.blockersByTaskId[task.id] ?? []}
+                              groupBy={groupBy}
+                              isSelected={selectedTask?.id === task.id}
+                              key={task.id}
+                              onSelect={() => setSelectedTaskId(task.id)}
+                              rank={
+                                section.availability === "ready"
+                                  ? queueTasks.indexOf(task) + 1
+                                  : undefined
+                              }
+                              recommendedRank={recommendedRank.get(task.id)}
+                              blockerCount={data.blockersByTaskId[task.id]?.length ?? 0}
+                              task={task}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ))}
                   </section>
                 ))
               ) : (
@@ -433,7 +447,7 @@ function QueueRow({
   availability: TaskAvailability;
   groupBy: "area" | "priority";
   isSelected: boolean;
-  rank: number;
+  rank?: number;
   recommendedRank?: number;
   blockerCount: number;
   onSelect: () => void;
@@ -447,7 +461,7 @@ function QueueRow({
       type="button"
       onClick={onSelect}
     >
-      <span className="rank">{rank}</span>
+      <span className={`rank ${rank === undefined ? "mutedRank" : ""}`}>{rank ?? "-"}</span>
       <span className="queueText">
         <span className="titleLine">
           <PriorityDot priority={task.priority} />
@@ -719,14 +733,18 @@ export function sortQueueTasks(
 export function groupQueueTasks(
   tasks: Task[],
   groupBy: "area" | "priority",
-): Array<[string, Task[]]> {
+  availabilityByTaskId: Record<string, TaskAvailability> = {},
+): Array<[string, QueueAvailabilitySection[]]> {
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
     const group = groupBy === "priority" ? task.priority : (task.area ?? "unassigned");
     groups.set(group, [...(groups.get(group) ?? []), task]);
   }
 
-  const entries = Array.from(groups.entries());
+  const entries = Array.from(groups.entries()).map(([group, groupTasks]) => [
+    group,
+    sectionQueueTasks(groupTasks, availabilityByTaskId),
+  ] as [string, QueueAvailabilitySection[]]);
   if (groupBy === "priority") {
     return entries.sort(
       ([left], [right]) =>
@@ -734,6 +752,52 @@ export function groupQueueTasks(
     );
   }
   return entries;
+}
+
+interface QueueAvailabilitySection {
+  availability: TaskAvailability;
+  label: string;
+  tasks: Task[];
+}
+
+const availabilitySectionOrder: Array<{ availability: TaskAvailability; label: string }> = [
+  { availability: "ready", label: "Ready" },
+  { availability: "active", label: "In progress" },
+  { availability: "claimed", label: "Claimed" },
+  { availability: "blocked", label: "Blocked" },
+  { availability: "closed", label: "Done" },
+];
+
+function sectionQueueTasks(
+  tasks: Task[],
+  availabilityByTaskId: Record<string, TaskAvailability>,
+): QueueAvailabilitySection[] {
+  return availabilitySectionOrder
+    .map(({ availability, label }) => ({
+      availability,
+      label,
+      tasks: tasks.filter((task) => getTaskAvailability(task, availabilityByTaskId) === availability),
+    }))
+    .filter((section) => section.tasks.length > 0);
+}
+
+function getTaskAvailability(
+  task: Task,
+  availabilityByTaskId: Record<string, TaskAvailability>,
+): TaskAvailability {
+  if (task.status === "done" || task.status === "canceled") {
+    return "closed";
+  }
+  if (task.status === "doing") {
+    return "active";
+  }
+  if (task.claimed_by.trim() !== "") {
+    return "claimed";
+  }
+  if (task.status === "blocked") {
+    return "blocked";
+  }
+  return availabilityByTaskId[task.id] ?? "blocked";
 }
 
 function priorityRank(priority: Task["priority"]) {

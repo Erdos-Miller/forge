@@ -424,6 +424,28 @@ button {
   gap: 4px;
 }
 
+.availabilitySection {
+  display: grid;
+  gap: 5px;
+}
+
+.availabilitySection + .availabilitySection {
+  margin-top: 9px;
+}
+
+.availabilitySection > header {
+  align-items: center;
+  color: #777d86;
+  display: flex;
+  font-size: 11px;
+  justify-content: space-between;
+  text-transform: uppercase;
+}
+
+.availabilitySection h4 {
+  font-size: inherit;
+}
+
 .queueRow {
   align-items: center;
   background: #111214;
@@ -479,6 +501,10 @@ button {
 .rank {
   color: #8f949b;
   font-variant-numeric: tabular-nums;
+}
+
+.mutedRank {
+  color: #5e646d;
 }
 
 .queueText {

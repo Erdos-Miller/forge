@@ -226,7 +226,13 @@ describe("App", () => {
     expect(groups.map(([priority]) => priority)).toEqual(["urgent", "high"]);
   });
 
-  test("priority grouping keeps active, claimed, and blocked work visible", () => {
+  test("priority grouping separates mixed availability within an urgent group", () => {
+    const readyTask = {
+      ...payload.tasks[1],
+      id: "F-ready",
+      title: "Ready",
+      priority: "urgent" as const,
+    };
     const activeTask = {
       ...payload.tasks[1],
       id: "F-active",
@@ -240,7 +246,7 @@ describe("App", () => {
       id: "F-claimed",
       title: "Claimed",
       status: "open" as const,
-      priority: "high" as const,
+      priority: "urgent" as const,
       claimed_by: "codex",
     };
     const blockedTask = {
@@ -248,17 +254,80 @@ describe("App", () => {
       id: "F-blocked",
       title: "Blocked",
       status: "open" as const,
-      priority: "high" as const,
+      priority: "urgent" as const,
+    };
+    const doneTask = {
+      ...payload.tasks[0],
+      id: "F-done",
+      title: "Done",
+      priority: "urgent" as const,
     };
     const groups = groupQueueTasks(
-      sortQueueTasks([claimedTask, blockedTask, activeTask], new Map(), true),
+      sortQueueTasks(
+        [claimedTask, blockedTask, activeTask, doneTask, readyTask],
+        new Map([["F-ready", 0]]),
+        true,
+      ),
       "priority",
+      {
+        "F-ready": "ready",
+        "F-active": "active",
+        "F-claimed": "claimed",
+        "F-blocked": "blocked",
+        "F-done": "closed",
+      },
     );
 
-    expect(groups).toEqual([
-      ["urgent", [activeTask]],
-      ["high", [blockedTask, claimedTask]],
+    expect(groups).toHaveLength(1);
+    expect(groups[0][0]).toBe("urgent");
+    expect(groups[0][1].map((section) => section.label)).toEqual([
+      "Ready",
+      "In progress",
+      "Claimed",
+      "Blocked",
+      "Done",
     ]);
+    expect(groups[0][1].map((section) => section.tasks.map((task) => task.id))).toEqual([
+      ["F-ready"],
+      ["F-active"],
+      ["F-claimed"],
+      ["F-blocked"],
+      ["F-done"],
+    ]);
+  });
+
+  test("non-ready rows render without actionable queue rank", () => {
+    const activeTask = {
+      ...payload.tasks[1],
+      id: "F-active",
+      title: "Active",
+      status: "doing" as const,
+      priority: "urgent" as const,
+      claimed_by: "codex",
+    };
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [payload.tasks[1], activeTask],
+          readyTaskIds: ["F-0002"],
+          recommendedTaskIds: ["F-0002"],
+          availabilityByTaskId: {
+            "F-0002": "ready",
+            "F-active": "active",
+          },
+          blockersByTaskId: {
+            "F-0002": [],
+            "F-active": [],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain(">Ready<");
+    expect(html).toContain(">In progress<");
+    expect(html).toContain('class="rank ">1</span>');
+    expect(html).toContain('class="rank mutedRank">-</span>');
   });
 
   test("non-recommended tasks use explicit priority order", () => {
