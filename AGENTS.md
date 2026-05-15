@@ -2,6 +2,10 @@
 
 Forge is built from its own task files. Treat `.forge/tasks/*.md` as the coordination surface.
 
+When guidance routing is available, use `.forge/guidance.yml` and matching
+`.forge/guidance/*.md` files for repo or project context. Personal
+`.forge/guidance.local.md` guidance is local-only and should be applied last.
+
 ## Roles
 
 Forge currently targets a two-agent workflow.

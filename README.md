@@ -48,6 +48,12 @@ nested task stores.
 Generated indexes, caches, or local UI state should stay ignored by git. The
 Markdown files remain the source of truth.
 
+Repo and project guidance can also live under `.forge/`. The committed
+`.forge/guidance.yml` file routes shared `.forge/guidance/*.md` files by task
+area, task scope, explicit paths, and current working directory. Personal
+machine-local guidance belongs in ignored `.forge/guidance.local.md` and is
+included last by tools that support guidance routing.
+
 ## First Loop
 
 1. Pick a ready task from `.forge/tasks`.

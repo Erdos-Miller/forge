@@ -1,0 +1,11 @@
+version: 1
+routes:
+  - include: guidance/forge.md
+    when:
+      path:
+        - .forge/**
+        - AGENTS.md
+        - README.md
+      cwd:
+        - .
+        - .forge/**
