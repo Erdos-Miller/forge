@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App, groupQueueTasks, selectTaskAfterRefresh, sortQueueTasks } from "../src/App";
+import {
+  App,
+  getKeyboardQueueSelection,
+  groupQueueTasks,
+  selectTaskAfterRefresh,
+  shouldIgnoreQueueShortcutTarget,
+  sortQueueTasks,
+} from "../src/App";
 import type { TaskGraphPayload } from "../src/api";
 
 const payload: TaskGraphPayload = {
@@ -351,5 +358,84 @@ describe("App", () => {
     );
 
     expect(queue.map((task) => task.id)).toEqual(["F-medium", "F-urgent", "F-high"]);
+  });
+
+  test("keyboard queue selection handles ArrowDown, ArrowUp, Home, and End", () => {
+    const tasks = [{ id: "F-0001" }, { id: "F-0002" }, { id: "F-0003" }];
+
+    expect(getKeyboardQueueSelection(tasks, "F-0001", "ArrowDown")).toEqual({
+      handled: true,
+      taskId: "F-0002",
+    });
+    expect(getKeyboardQueueSelection(tasks, "F-0002", "ArrowUp")).toEqual({
+      handled: true,
+      taskId: "F-0001",
+    });
+    expect(getKeyboardQueueSelection(tasks, "F-0002", "Home")).toEqual({
+      handled: true,
+      taskId: "F-0001",
+    });
+    expect(getKeyboardQueueSelection(tasks, "F-0002", "End")).toEqual({
+      handled: true,
+      taskId: "F-0003",
+    });
+    expect(getKeyboardQueueSelection(tasks, "F-0002", "Enter")).toEqual({
+      handled: false,
+      taskId: "F-0002",
+    });
+  });
+
+  test("keyboard queue selection follows filtered visible order", () => {
+    const webDone = {
+      ...payload.tasks[0],
+      id: "F-web-done",
+      title: "Web done",
+      priority: "urgent" as const,
+      scope: ["packages/web/**"],
+    };
+    const webHigh = {
+      ...payload.tasks[1],
+      id: "F-web-high",
+      title: "Web high",
+      priority: "high" as const,
+    };
+    const webUrgent = {
+      ...payload.tasks[1],
+      id: "F-web-urgent",
+      title: "Web urgent",
+      priority: "urgent" as const,
+    };
+    const coreUrgent = {
+      ...payload.tasks[1],
+      id: "F-core-urgent",
+      title: "Core urgent",
+      priority: "urgent" as const,
+      scope: ["packages/core/**"],
+    };
+    const sorted = sortQueueTasks(
+      [webHigh, webUrgent, coreUrgent, webDone].filter((task) =>
+        task.scope.some((scope) => scope.startsWith("packages/web")),
+      ),
+      new Map([["F-web-high", 0]]),
+      false,
+    );
+    const visible = groupQueueTasks(sorted, "priority", {
+      "F-web-high": "ready",
+      "F-web-urgent": "ready",
+    }).flatMap(([, sections]) => sections.flatMap((section) => section.tasks));
+
+    expect(visible.map((task) => task.id)).toEqual(["F-web-urgent", "F-web-high"]);
+    expect(getKeyboardQueueSelection(visible, "F-web-urgent", "ArrowDown")).toEqual({
+      handled: true,
+      taskId: "F-web-high",
+    });
+  });
+
+  test("keyboard queue shortcuts are ignored from form and control focus", () => {
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "INPUT" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "SELECT" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "TEXTAREA" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "BUTTON" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "DIV" } as any)).toBe(false);
   });
 });

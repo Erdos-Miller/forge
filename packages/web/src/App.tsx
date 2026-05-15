@@ -1,6 +1,6 @@
 import type { Task, TaskAvailability } from "@forge/core";
 import { marked } from "marked";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskGraphPayload } from "./api";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
@@ -141,6 +141,12 @@ export function App({ initialData }: AppProps) {
     return groupQueueTasks(queueTasks, groupBy, data?.availabilityByTaskId ?? {});
   }, [data, groupBy, queueTasks]);
 
+  const visibleQueueTasks = useMemo(() => {
+    return groupedQueueTasks.flatMap(([, sections]) =>
+      sections.flatMap((section) => section.tasks),
+    );
+  }, [groupedQueueTasks]);
+
   const diagnosticMessages = useMemo(() => {
     return data ? getDiagnosticMessages(data.diagnostics) : [];
   }, [data]);
@@ -149,7 +155,51 @@ export function App({ initialData }: AppProps) {
   const selectedTask =
     selectedCandidate && taskMatchesScope(selectedCandidate, scopeFilter)
       ? selectedCandidate
-      : (queueTasks[0] ?? scopedTasks[0] ?? null);
+      : (visibleQueueTasks[0] ?? scopedTasks[0] ?? null);
+  const selectedVisibleTaskId = selectedTask?.id ?? null;
+  const queueRowRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  const setQueueRowRef = useCallback((taskId: string, element: HTMLButtonElement | null) => {
+    if (element) {
+      queueRowRefs.current.set(taskId, element);
+    } else {
+      queueRowRefs.current.delete(taskId);
+    }
+  }, []);
+
+  useEffect(() => {
+    const selectedRow = selectedVisibleTaskId
+      ? queueRowRefs.current.get(selectedVisibleTaskId)
+      : null;
+    selectedRow?.scrollIntoView({ block: "nearest" });
+  }, [selectedVisibleTaskId, visibleQueueTasks]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (shouldIgnoreQueueShortcutTarget(event.target)) {
+        return;
+      }
+
+      const nextSelection = getKeyboardQueueSelection(
+        visibleQueueTasks,
+        selectedVisibleTaskId,
+        event.key,
+      );
+      if (!nextSelection.handled) {
+        return;
+      }
+
+      event.preventDefault();
+      if (nextSelection.taskId) {
+        setSelectedTaskId(nextSelection.taskId);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedVisibleTaskId, visibleQueueTasks]);
 
   if (!data) {
     return (
@@ -279,6 +329,7 @@ export function App({ initialData }: AppProps) {
                                   : undefined
                               }
                               recommendedRank={recommendedRank.get(task.id)}
+                              rowRef={(element) => setQueueRowRef(task.id, element)}
                               blockerCount={data.blockersByTaskId[task.id]?.length ?? 0}
                               task={task}
                             />
@@ -440,6 +491,7 @@ function QueueRow({
   rank,
   recommendedRank,
   blockerCount,
+  rowRef,
   onSelect,
 }: {
   task: Task;
@@ -450,6 +502,7 @@ function QueueRow({
   rank?: number;
   recommendedRank?: number;
   blockerCount: number;
+  rowRef: (element: HTMLButtonElement | null) => void;
   onSelect: () => void;
 }) {
   const state = getQueueRowState(task, blockers, availability, recommendedRank);
@@ -459,7 +512,9 @@ function QueueRow({
     <button
       className={`queueRow ${state} ${isSelected ? "selected" : ""}`}
       type="button"
+      aria-current={isSelected ? "true" : undefined}
       onClick={onSelect}
+      ref={rowRef}
     >
       <span className={`rank ${rank === undefined ? "mutedRank" : ""}`}>{rank ?? "-"}</span>
       <span className="queueText">
@@ -708,6 +763,56 @@ export function selectTaskAfterRefresh(
   }
 
   return scopedTasks[0]?.id ?? null;
+}
+
+export function getKeyboardQueueSelection(
+  tasks: Array<Pick<Task, "id">>,
+  currentTaskId: string | null,
+  key: string,
+): { handled: boolean; taskId: string | null } {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(key)) {
+    return { handled: false, taskId: currentTaskId };
+  }
+  if (tasks.length === 0) {
+    return { handled: true, taskId: null };
+  }
+
+  const currentIndex = tasks.findIndex((task) => task.id === currentTaskId);
+  const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+  const nextIndex = getKeyboardQueueIndex(safeIndex, tasks.length, key);
+  return { handled: true, taskId: tasks[nextIndex].id };
+}
+
+function getKeyboardQueueIndex(currentIndex: number, taskCount: number, key: string) {
+  if (key === "Home") {
+    return 0;
+  }
+  if (key === "End") {
+    return taskCount - 1;
+  }
+  if (key === "ArrowUp") {
+    return Math.max(0, currentIndex - 1);
+  }
+  return Math.min(taskCount - 1, currentIndex + 1);
+}
+
+export function shouldIgnoreQueueShortcutTarget(target: EventTarget | null) {
+  if (!target || !("tagName" in target)) {
+    return false;
+  }
+
+  const tagName = String((target as { tagName?: unknown }).tagName).toLowerCase();
+  if (["input", "select", "textarea", "button"].includes(tagName)) {
+    return true;
+  }
+
+  if (typeof Element !== "undefined" && target instanceof Element) {
+    return Boolean(
+      target.closest("button, a, [role='button'], [contenteditable='true']"),
+    );
+  }
+
+  return false;
 }
 
 export function sortQueueTasks(

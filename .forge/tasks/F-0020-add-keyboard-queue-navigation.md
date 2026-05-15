@@ -2,20 +2,21 @@
 id: F-0020
 title: Add keyboard queue navigation
 kind: task
-status: open
+status: doing
 priority: high
 parent: F-0000
 depends_on:
   - F-0005
-claimed_by: ""
+claimed_by: "codex"
 area: web
 scope:
   - packages/web/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
+updated_at: 2026-05-15T15:26:58.193Z
 closed_at: ""
 close_reason: ""
+review_reason: "Automated checks pass, but manual browser keyboard smoke-check is still required before closure"
 ---
 
 # Add keyboard queue navigation
@@ -53,6 +54,15 @@ Depends on `F-0005` because the queue-first web board must exist before adding k
 ## Notes
 
 This is a web usability task only. It should not add task mutation behavior or depend on robot-mode CLI work.
+
+Implemented queue keyboard navigation for ArrowDown, ArrowUp, Home, and End against the currently visible rendered row order. Selected rows now scroll into view, shortcuts ignore form/control focus, and existing click selection still works.
+
+Verification passed:
+- bun test packages/web
+- bun run --cwd packages/web build
+- bun run quality:check
+
+Manual browser keyboard smoke-check is still required before closing this task; browser automation is not exposed in this session.
 
 ## History
 
