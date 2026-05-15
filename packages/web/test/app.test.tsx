@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "../src/App";
+import { App, groupQueueTasks, sortQueueTasks } from "../src/App";
 import type { TaskGraphPayload } from "../src/api";
 
 const payload: TaskGraphPayload = {
@@ -108,5 +108,47 @@ describe("App", () => {
     expect(html).toContain("We need local visibility");
     expect(html).toContain("Build the board.");
     expect(html).toContain("<summary>Dependencies (1)</summary>");
+  });
+
+  test("priority grouping renders urgent before high", () => {
+    const highTask = { ...payload.tasks[1], id: "F-high", title: "High", priority: "high" as const };
+    const urgentTask = {
+      ...payload.tasks[1],
+      id: "F-urgent",
+      title: "Urgent",
+      priority: "urgent" as const,
+    };
+    const queue = sortQueueTasks(
+      [highTask, urgentTask],
+      new Map([["F-high", 0]]),
+      true,
+    );
+    const groups = groupQueueTasks(queue, "priority");
+
+    expect(queue.map((task) => task.id)).toEqual(["F-high", "F-urgent"]);
+    expect(groups.map(([priority]) => priority)).toEqual(["urgent", "high"]);
+  });
+
+  test("non-recommended tasks use explicit priority order", () => {
+    const mediumTask = {
+      ...payload.tasks[1],
+      id: "F-medium",
+      title: "Medium",
+      priority: "medium" as const,
+    };
+    const highTask = { ...payload.tasks[1], id: "F-high", title: "High", priority: "high" as const };
+    const urgentTask = {
+      ...payload.tasks[1],
+      id: "F-urgent",
+      title: "Urgent",
+      priority: "urgent" as const,
+    };
+    const queue = sortQueueTasks(
+      [highTask, mediumTask, urgentTask],
+      new Map([["F-medium", 0]]),
+      true,
+    );
+
+    expect(queue.map((task) => task.id)).toEqual(["F-medium", "F-urgent", "F-high"]);
   });
 });

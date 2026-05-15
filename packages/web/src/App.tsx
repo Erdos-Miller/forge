@@ -110,28 +110,11 @@ export function App({ initialData }: AppProps) {
   }, [data]);
 
   const queueTasks = useMemo(() => {
-    const taskPool = showDone
-      ? scopedTasks
-      : scopedTasks.filter((task) => task.status !== "done" && task.status !== "canceled");
-
-    return [...taskPool].sort((left, right) => {
-      const leftRank = recommendedRank.get(left.id) ?? Number.POSITIVE_INFINITY;
-      const rightRank = recommendedRank.get(right.id) ?? Number.POSITIVE_INFINITY;
-      if (leftRank !== rightRank) {
-        return leftRank - rightRank;
-      }
-      const priority = priorityRank(left.priority) - priorityRank(right.priority);
-      return priority || left.title.localeCompare(right.title);
-    });
+    return sortQueueTasks(scopedTasks, recommendedRank, showDone);
   }, [recommendedRank, scopedTasks, showDone]);
 
   const groupedQueueTasks = useMemo(() => {
-    const groups = new Map<string, Task[]>();
-    for (const task of queueTasks) {
-      const group = groupBy === "priority" ? task.priority : (task.area ?? "unassigned");
-      groups.set(group, [...(groups.get(group) ?? []), task]);
-    }
-    return Array.from(groups.entries());
+    return groupQueueTasks(queueTasks, groupBy);
   }, [groupBy, queueTasks]);
 
   const selectedCandidate = selectedTaskId ? (tasksById.get(selectedTaskId) ?? null) : null;
@@ -644,6 +627,46 @@ function getScopeRoot(scope: string) {
 
 function taskMatchesScope(task: Task, scopeFilter: string) {
   return scopeFilter === "all" || task.scope.some((scope) => getScopeRoot(scope) === scopeFilter);
+}
+
+export function sortQueueTasks(
+  tasks: Task[],
+  recommendedRank: Map<string, number>,
+  showDone: boolean,
+): Task[] {
+  const taskPool = showDone
+    ? tasks
+    : tasks.filter((task) => task.status !== "done" && task.status !== "canceled");
+
+  return [...taskPool].sort((left, right) => {
+    const leftRank = recommendedRank.get(left.id) ?? Number.POSITIVE_INFINITY;
+    const rightRank = recommendedRank.get(right.id) ?? Number.POSITIVE_INFINITY;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+    const priority = priorityRank(left.priority) - priorityRank(right.priority);
+    return priority || left.title.localeCompare(right.title);
+  });
+}
+
+export function groupQueueTasks(
+  tasks: Task[],
+  groupBy: "area" | "priority",
+): Array<[string, Task[]]> {
+  const groups = new Map<string, Task[]>();
+  for (const task of tasks) {
+    const group = groupBy === "priority" ? task.priority : (task.area ?? "unassigned");
+    groups.set(group, [...(groups.get(group) ?? []), task]);
+  }
+
+  const entries = Array.from(groups.entries());
+  if (groupBy === "priority") {
+    return entries.sort(
+      ([left], [right]) =>
+        priorityRank(left as Task["priority"]) - priorityRank(right as Task["priority"]),
+    );
+  }
+  return entries;
 }
 
 function priorityRank(priority: Task["priority"]) {
