@@ -95,7 +95,7 @@ describe("parseTaskFile", () => {
   });
 
   test("reports malformed YAML with source path context", () => {
-    expect(() => parseTaskFile("bad-yaml.md", "---\nid: [\n---\n")).toThrow(
+    expect(() => parseTaskFile("bad-yaml.md", "---\n:\n---\n")).toThrow(
       /bad-yaml\.md: malformed YAML frontmatter/,
     );
   });

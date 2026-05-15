@@ -400,7 +400,7 @@ export async function updateTaskFile(
   const contents = await fs.readFile(sourcePath, "utf8");
   const updatedContents = updateTaskFileContents(contents, updates, sourcePath);
   const parsed = parseTaskFile(sourcePath, updatedContents);
-  await fs.writeFile(sourcePath, updatedContents);
+  await writeFileAtomic(sourcePath, updatedContents);
   return parsed.task;
 }
 
@@ -409,6 +409,7 @@ export function updateTaskFileContents(
   updates: TaskFrontmatterUpdates,
   sourcePath = "task.md",
 ): string {
+  assertSafeTaskFileContents(contents, sourcePath);
   const { frontmatter, body } = splitFrontmatter(contents, sourcePath);
   let updatedFrontmatter = frontmatter;
 
@@ -563,12 +564,21 @@ export async function appendTaskNote(
 
   const parsed = await findParsedTaskById(repoRoot, taskId);
   const contents = await fs.readFile(parsed.task.sourcePath, "utf8");
-  const notedContents = appendToMarkdownSection(contents, "Notes", note.trim(), parsed.task.sourcePath);
-  const updatedContents = updateTaskFileContents(notedContents, {
-    updated_at: now.toISOString(),
-  }, parsed.task.sourcePath);
+  const notedContents = appendToMarkdownSection(
+    contents,
+    "Notes",
+    note.trim(),
+    parsed.task.sourcePath,
+  );
+  const updatedContents = updateTaskFileContents(
+    notedContents,
+    {
+      updated_at: now.toISOString(),
+    },
+    parsed.task.sourcePath,
+  );
   const updated = parseTaskFile(parsed.task.sourcePath, updatedContents);
-  await fs.writeFile(parsed.task.sourcePath, updatedContents);
+  await writeFileAtomic(parsed.task.sourcePath, updatedContents);
   return updated.task;
 }
 
@@ -706,6 +716,12 @@ function splitFrontmatter(
   return { frontmatter: match[1], body: match[2] };
 }
 
+function assertSafeTaskFileContents(contents: string, sourcePath: string): void {
+  if (contents.includes("<<<<<<<") || contents.includes("=======") || contents.includes(">>>>>>>")) {
+    throw new TaskWriteError(`${sourcePath}: task file contains merge conflict markers`);
+  }
+}
+
 function appendToMarkdownSection(
   contents: string,
   sectionTitle: string,
@@ -763,7 +779,7 @@ function formatYamlArray(field: string, values: string[]): string[] {
   if (values.length === 0) {
     return [`${field}: []`];
   }
-  return [`${field}:`, ...values.map((value) => `  - ${value}`)];
+  return [`${field}:`, ...values.map((value) => `  - ${JSON.stringify(value)}`)];
 }
 
 function formatMarkdownList(values: string[] | undefined, fallback: string): string {
@@ -798,6 +814,21 @@ function isAlreadyExistsError(error: unknown): boolean {
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "EEXIST"
   );
+}
+
+async function writeFileAtomic(filePath: string, contents: string): Promise<void> {
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+
+  try {
+    await fs.writeFile(tempPath, contents, { flag: "wx" });
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 interface GuidanceConfig {

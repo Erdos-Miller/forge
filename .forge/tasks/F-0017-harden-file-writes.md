@@ -2,7 +2,7 @@
 id: F-0017
 title: Harden task file writes
 kind: task
-status: open
+status: done
 priority: high
 parent: F-0000
 depends_on:
@@ -15,9 +15,11 @@ scope:
   - packages/cli/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
-close_reason: ""
+updated_at: 2026-05-15T05:08:52.301Z
+closed_at: 2026-05-15T05:08:52.301Z
+close_reason: "Write hardening verified"
+blocked_reason: ""
+review_reason: ""
 ---
 
 # Harden task file writes
@@ -52,6 +54,21 @@ Depends on `F-0015` and `F-0016` because write hardening should cover the full l
 
 This task should not add new product commands. It makes existing and planned writes safe enough for dogfooding.
 
+Implemented in the shared core write path so create, claim, lifecycle, note, and done commands benefit without adding product commands.
+
+Decisions:
+- Quote generated YAML array scalars with JSON string escaping so glob values like `**` and values with `:` or `#` reparse safely.
+- Preserve unknown frontmatter fields by updating the original frontmatter text instead of rebuilding it.
+- Preserve unknown Markdown sections by only touching frontmatter or appending inside `## Notes`.
+- Reject writes when task files contain merge conflict markers.
+- Use same-directory temp-file writes followed by rename for local atomic replacement.
+
+Verification:
+- `bun test packages/core packages/cli`
+- `bun run quality:check`
+- Added regression coverage for default `forge create` scope reparsing as `["**"]`.
+
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Hardened task file writes and generated YAML array scalars.

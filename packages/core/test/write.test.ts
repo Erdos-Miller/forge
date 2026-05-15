@@ -7,6 +7,8 @@ import {
   blockTask,
   claimTask,
   completeTask,
+  createTask,
+  createTaskFileContents,
   parseTaskFile,
   requestTaskReview,
   unblockTask,
@@ -71,9 +73,76 @@ describe("updateTaskFileContents", () => {
     expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
   });
+
+  test("preserves unknown frontmatter fields and markdown sections", () => {
+    const original = [
+      "---",
+      "id: F-9999",
+      "title: Example",
+      "kind: task",
+      "status: open",
+      "priority: medium",
+      'parent: ""',
+      "depends_on: []",
+      'claimed_by: ""',
+      "custom_field: keep me",
+      "scope:",
+      "  - packages/**",
+      "created_at: 2026-05-14T00:00:00-05:00",
+      "updated_at: 2026-05-14T00:00:00-05:00",
+      "---",
+      "",
+      "# Example",
+      "",
+      "## Custom",
+      "",
+      "Do not lose this.",
+      "",
+    ].join("\n");
+
+    const updated = updateTaskFileContents(original, {
+      status: "doing",
+      updated_at: "2026-05-14T12:00:00.000Z",
+    });
+
+    expect(updated).toContain("custom_field: keep me");
+    expect(updated).toContain("## Custom\n\nDo not lose this.");
+  });
 });
 
 describe("task write helpers", () => {
+  test("createTask quotes glob scopes so generated tasks reparse", async () => {
+    const { repoRoot } = await makeRepo();
+
+    const task = await createTask(
+      repoRoot,
+      {
+        id: "F-9998",
+        title: "Default scope",
+      },
+      new Date("2026-05-14T12:00:00Z"),
+    );
+
+    expect(task.scope).toEqual(["**"]);
+    expect(await fs.readFile(task.sourcePath, "utf8")).toContain('  - "**"');
+  });
+
+  test("createTask quotes special YAML array scalars", () => {
+    const contents = createTaskFileContents(
+      {
+        id: "F-9998",
+        title: "Special arrays",
+        scope: ["packages/**", "value:with-colon", "#hash"],
+        depends_on: ["F-0001"],
+      },
+      new Date("2026-05-14T12:00:00Z"),
+    );
+
+    const parsed = parseTaskFile("special.md", contents);
+    expect(parsed.task.scope).toEqual(["packages/**", "value:with-colon", "#hash"]);
+    expect(parsed.task.depends_on).toEqual(["F-0001"]);
+  });
+
   test("claimTask updates status, claimed_by, and updated_at", async () => {
     const { repoRoot, taskPath } = await makeRepo();
 
@@ -183,5 +252,30 @@ describe("task write helpers", () => {
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(parsed.task.updated_at).toBe("2026-05-14T17:00:00.000Z");
     expect(parsed.task.body).toContain("Existing note.\n\nNew note.\n\n## History");
+  });
+
+  test("writes fail clearly on malformed frontmatter", async () => {
+    const { repoRoot } = await makeRepo("---\nid: [\n---\n");
+
+    await expect(claimTask(repoRoot, "F-9999", "codex")).rejects.toThrow(
+      /malformed YAML frontmatter/,
+    );
+  });
+
+  test("writes fail clearly on merge conflict markers", async () => {
+    const { repoRoot } = await makeRepo(`${taskFile()}\n<<<<<<< ours\n=======\n>>>>>>> theirs\n`);
+
+    await expect(claimTask(repoRoot, "F-9999", "codex")).rejects.toThrow(
+      /merge conflict markers/,
+    );
+  });
+
+  test("updates use a same-directory temp file and leave no temp file behind", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+
+    await claimTask(repoRoot, "F-9999", "codex", new Date("2026-05-14T18:00:00Z"));
+
+    const taskDirEntries = await fs.readdir(path.dirname(taskPath));
+    expect(taskDirEntries.filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
   });
 });

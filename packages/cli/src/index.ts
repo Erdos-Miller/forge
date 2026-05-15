@@ -1089,7 +1089,8 @@ function getParseDiagnosticCode(error: unknown, message: string): string {
     message.includes("malformed YAML frontmatter") ||
     message.includes("end of the stream") ||
     message.includes("bad indentation") ||
-    message.includes("can not read")
+    message.includes("can not read") ||
+    message.includes("incomplete explicit mapping pair")
   ) {
     return "malformed_yaml";
   }
@@ -1108,6 +1109,7 @@ function getParseDiagnosticCode(error: unknown, message: string): string {
     if (message.includes("must be one of")) {
       return "invalid_enum";
     }
+    return "malformed_yaml";
   }
   return "parse_failed";
 }
