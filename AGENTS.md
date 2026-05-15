@@ -4,7 +4,7 @@ Forge is built from its own task files. Treat `.forge/tasks/*.md` as the coordin
 
 When guidance routing is available, use `.forge/guidance.yml` and matching
 `.forge/guidance/*.md` files for repo or project context. Personal
-`.forge/guidance.local.md` guidance is local-only and should be applied last.
+`.forge/local/user.md` guidance is local-only and should be applied last.
 
 ## Roles
 
@@ -22,9 +22,13 @@ One agent may do both roles in a small session, but keep the distinction clear i
 3. Claim the task before editing code or docs.
 4. Keep edits inside the task scope.
 5. Update the task body with decisions, blockers, and verification notes.
-6. Mark the task `done` only when its acceptance criteria are satisfied.
-7. Commit task-file updates with the work they describe.
-8. Repeat from step 2 until no task is ready, the next task is ambiguous, the work exceeds scope, verification cannot run, or user judgment is needed.
+6. Follow the check-in convention in `.forge/README.md`: write verification
+   evidence in `Notes`, record review needs in `review_reason`, and block work
+   instead of closing when a stop condition prevents completion.
+7. Mark the task `done` only when its acceptance criteria are satisfied and the
+   verification evidence is recorded.
+8. Commit task-file updates with the work they describe.
+9. Repeat from step 2 until no task is ready, the next task is ambiguous, the work exceeds scope, verification cannot run, or user judgment is needed.
 
 ## Planning Loop
 
@@ -43,6 +47,8 @@ One agent may do both roles in a small session, but keep the distinction clear i
 - If a task needs shared files or broad architecture decisions, pause and document the decision in the task before implementing.
 - Keep task files readable as Markdown documents, not just machine records.
 - Flag tasks for review in the notes when judgment is needed before continuing.
+- Put app-specific review rules in routed repo guidance. Keep Forge's generic
+  task schema focused on common lifecycle state.
 
 ## File Ownership
 

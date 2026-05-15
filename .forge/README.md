@@ -124,6 +124,70 @@ sections after the canonical sections when a task needs more context. Tools
 should render known sections first, preserve existing execution plans, and
 preserve unknown sections rather than rejecting them.
 
+## Check-In Convention
+
+Task files are the check-in surface. Record evidence in Markdown first; do not
+add frontmatter fields for review policy or closeout notes unless Forge later
+needs a general machine-readable rule.
+
+Use these sections for check-ins:
+
+- `Execution Plan`: record the current approach before implementation starts.
+  Update `Stop conditions` when a task should pause, and `Human review
+  triggers` when a judgment call needs a person.
+- `Verification`: keep the planned checks for the task.
+- `Notes`: append actual decisions, blockers, review requests, and verification
+  results as work happens.
+- `History`: keep durable lifecycle events such as task creation. Tools may
+  append concise lifecycle entries, but routine work evidence belongs in
+  `Notes`.
+
+When work is done and verified:
+
+```markdown
+## Notes
+
+Implemented the queue keyboard navigation and kept the change inside
+`packages/web/**`.
+
+Verification:
+- `bun test packages/web`
+- `bun run quality:check`
+```
+
+Then set `status: done`, clear `claimed_by`, set `closed_at`, and write a short
+`close_reason`.
+
+When work is blocked:
+
+```markdown
+## Notes
+
+Blocked: the API contract for persisted claims is not decided. Stop until the
+planning agent records whether claims are local-only or shared.
+```
+
+Then set `status: blocked` and write the same short reason in `blocked_reason`.
+
+When work needs human review but can keep its current status:
+
+```markdown
+## Notes
+
+Review needed: the implementation works, but the visual hierarchy in the task
+detail card is a product judgment. Do not close until the user reviews the
+browser screenshot.
+```
+
+Then keep the task claimed or open as appropriate and write the short reason in
+`review_reason`. If the task cannot continue without that answer, block it
+instead.
+
+App-specific review policy belongs in repo guidance routed through
+`.forge/guidance.yml`, not in Forge's generic task schema. For example, a web
+app may require a browser screenshot before closeout, while a library task may
+require API compatibility notes.
+
 ## Storage Model
 
 Use one tracked `.forge/` directory at the git repository root.
