@@ -67,6 +67,7 @@ import {
   removeWebSession,
   writeWebSession,
 } from "./web-session";
+import { findAvailablePort } from "./web-port";
 
 export { COMMANDS } from "./command-metadata";
 export type {
@@ -703,7 +704,8 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
   }
 
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
-  const url = `http://${webOptions.host}:${webOptions.port}/`;
+  const actualPort = await findAvailablePort(webOptions.host, webOptions.port);
+  const url = `http://${webOptions.host}:${actualPort}/`;
 
   options.stdout(`serving ${repoRoot}`);
   options.stdout(url);
@@ -717,7 +719,8 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
       "--host",
       webOptions.host,
       "--port",
-      String(webOptions.port),
+      String(actualPort),
+      "--strictPort",
     ],
     {
       cwd: webPackageDir,
@@ -732,7 +735,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
   );
   await writeWebSession(repoRoot, {
     host: webOptions.host,
-    port: webOptions.port,
+    port: actualPort,
     pid: child.pid,
     startedAt: options.now.toISOString(),
   });
