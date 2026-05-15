@@ -19,12 +19,22 @@ function taskFile(options: {
   depends_on?: string[];
   area?: string;
   priority?: string;
+  closed_at?: string | null;
   body?: string;
 }): string {
   const dependsOn = options.depends_on?.length
     ? options.depends_on.map((id) => `  - ${id}`).join("\n")
     : "[]";
   const area = options.area ? [`area: ${options.area}`] : [];
+  const isClosed = options.status === "done" || options.status === "canceled";
+  const closedAt =
+    options.closed_at === null
+      ? []
+      : options.closed_at
+        ? [`closed_at: ${options.closed_at}`]
+        : isClosed
+          ? ["closed_at: 2026-05-14T01:00:00-05:00"]
+          : [];
 
   return [
     "---",
@@ -41,6 +51,7 @@ function taskFile(options: {
     "  - packages/**",
     "created_at: 2026-05-14T00:00:00-05:00",
     "updated_at: 2026-05-14T00:00:00-05:00",
+    ...closedAt,
     "---",
     "",
     options.body ?? [`# ${options.title}`, "", "Body stays readable.", ""].join("\n"),
@@ -524,6 +535,73 @@ describe("forge cli", () => {
       summary: { errors: 0, warnings: 0 },
       diagnostics: [],
     });
+  });
+
+  test("doctor --json reports completion timestamp diagnostics", async () => {
+    const { repoRoot } = await makeRepo();
+    const tasksDir = path.join(repoRoot, ".forge", "tasks");
+    await fs.writeFile(
+      path.join(tasksDir, "valid-closed.md"),
+      taskFile({
+        id: "F-0200",
+        title: "Valid closed",
+        status: "done",
+        closed_at: "2026-05-14T02:00:00-05:00",
+      }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "missing-done-close.md"),
+      taskFile({ id: "F-0201", title: "Missing done close", status: "done", closed_at: null }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "missing-canceled-close.md"),
+      taskFile({
+        id: "F-0202",
+        title: "Missing canceled close",
+        status: "canceled",
+        closed_at: null,
+      }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "open-with-close.md"),
+      taskFile({
+        id: "F-0203",
+        title: "Open with close",
+        status: "open",
+        closed_at: "2026-05-14T02:00:00-05:00",
+      }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "closed-before-create.md"),
+      taskFile({
+        id: "F-0204",
+        title: "Closed before create",
+        status: "done",
+        closed_at: "2026-05-13T23:00:00-05:00",
+      }),
+    );
+
+    const result = await run(repoRoot, ["doctor", "--json"]);
+    const payload = parseStdoutJson(result);
+    const diagnostics = payload.diagnostics.filter((diagnostic: any) =>
+      ["missing_closed_at", "unexpected_closed_at", "closed_at_before_created_at"].includes(
+        diagnostic.code,
+      ),
+    );
+
+    expect(result.code).toBe(4);
+    expect(diagnostics.map((diagnostic: any) => diagnostic.code).sort()).toEqual([
+      "closed_at_before_created_at",
+      "missing_closed_at",
+      "missing_closed_at",
+      "unexpected_closed_at",
+    ]);
+    expect(diagnostics.map((diagnostic: any) => diagnostic.taskId)).not.toContain("F-0200");
+    for (const diagnostic of diagnostics) {
+      expect(diagnostic.severity).toBe("error");
+      expect(diagnostic.sourcePath).toContain(tasksDir);
+      expect(diagnostic.repairHint).toEqual(expect.any(String));
+    }
   });
 
   test("doctor --json reports parse, graph, conflict, block, and review diagnostics", async () => {

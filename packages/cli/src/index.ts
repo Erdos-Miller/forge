@@ -50,6 +50,7 @@ interface DoctorDiagnostic {
   message: string;
   taskId?: string;
   sourcePath?: string;
+  repairHint?: string;
 }
 
 export const COMMANDS = [
@@ -871,7 +872,55 @@ function getFrontmatterDoctorDiagnostics(
     }
   }
 
+  diagnostics.push(...getCompletionTimestampDoctorDiagnostics(parsed.task));
+
   return diagnostics;
+}
+
+function getCompletionTimestampDoctorDiagnostics(task: Task): DoctorDiagnostic[] {
+  const isClosed = task.status === "done" || task.status === "canceled";
+
+  if (isClosed && !task.closed_at) {
+    return [
+      {
+        code: "missing_closed_at",
+        severity: "error",
+        message: `closed task ${task.id} is missing closed_at`,
+        taskId: task.id,
+        sourcePath: task.sourcePath,
+        repairHint:
+          "Set closed_at to the ISO timestamp when the task was completed or canceled.",
+      },
+    ];
+  }
+
+  if (!isClosed && task.closed_at) {
+    return [
+      {
+        code: "unexpected_closed_at",
+        severity: "error",
+        message: `non-closed task ${task.id} has closed_at`,
+        taskId: task.id,
+        sourcePath: task.sourcePath,
+        repairHint: "Remove closed_at, or set status to done/canceled if the task is closed.",
+      },
+    ];
+  }
+
+  if (task.closed_at && Date.parse(task.closed_at) < Date.parse(task.created_at)) {
+    return [
+      {
+        code: "closed_at_before_created_at",
+        severity: "error",
+        message: `task ${task.id} has closed_at earlier than created_at`,
+        taskId: task.id,
+        sourcePath: task.sourcePath,
+        repairHint: "Set closed_at to a timestamp at or after created_at.",
+      },
+    ];
+  }
+
+  return [];
 }
 
 function toParseDoctorDiagnostic(error: unknown, sourcePath: string): DoctorDiagnostic {
