@@ -62,8 +62,9 @@ async function makeRepo(): Promise<{ repoRoot: string; nestedDir: string }> {
     path.join(guidanceDir, "cwd.md"),
     ["# Cwd", "", "## Prompt Summary", "", "Nested cwd guidance.", ""].join("\n"),
   );
+  await fs.mkdir(path.join(forgeDir, "local"), { recursive: true });
   await fs.writeFile(
-    path.join(forgeDir, "guidance.local.md"),
+    path.join(forgeDir, "local", "user.md"),
     ["# Local", "", "## Prompt Summary", "", "Local user guidance.", ""].join("\n"),
   );
   await fs.writeFile(
@@ -231,7 +232,7 @@ describe("resolveGuidance", () => {
     expect(bundle.matches.map((match) => match.path)).toEqual([
       "guidance/core.md",
       "guidance/shared.md",
-      "guidance.local.md",
+      "local/user.md",
     ]);
     expect(bundle.matches.map((match) => match.promptSummary)).toEqual([
       "Keep core independent.",
@@ -253,7 +254,7 @@ describe("resolveGuidance", () => {
     expect(bundle.matches.map((match) => match.path)).toEqual([
       "guidance/shared.md",
       "guidance/cwd.md",
-      "guidance.local.md",
+      "local/user.md",
     ]);
     expect(bundle.matches[0].reasons).toEqual(["path:packages/core/src/index.ts"]);
     expect(bundle.matches[1].reasons).toEqual(["cwd:packages/core/src"]);

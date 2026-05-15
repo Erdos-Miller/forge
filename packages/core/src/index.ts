@@ -87,7 +87,13 @@ export interface GuidanceMatch {
 }
 
 export interface GuidanceDiagnostic {
-  kind: "missing_config" | "missing_include" | "invalid_config";
+  kind:
+    | "missing_config"
+    | "missing_include"
+    | "invalid_config"
+    | "unreadable_include"
+    | "duplicate_include"
+    | "local_file_not_ignored";
   message: string;
   path?: string;
 }
@@ -290,6 +296,18 @@ export async function resolveGuidance(
   );
 
   return { repoRoot, matches, diagnostics };
+}
+
+export async function inspectGuidanceConfig(
+  repoRoot: string,
+): Promise<GuidanceDiagnostic[]> {
+  const diagnostics: GuidanceDiagnostic[] = [];
+  const config = await readGuidanceConfig(repoRoot, diagnostics, false);
+  if (config) {
+    diagnostics.push(...(await inspectGuidanceIncludes(repoRoot, config)));
+  }
+  diagnostics.push(...(await inspectLocalGuidanceFiles(repoRoot)));
+  return diagnostics;
 }
 
 export function createTaskFileContents(input: CreateTaskInput, now = new Date()): string {
@@ -1053,6 +1071,7 @@ async function buildGuidanceContext(
 async function readGuidanceConfig(
   repoRoot: string,
   diagnostics: GuidanceDiagnostic[],
+  reportMissing = true,
 ): Promise<GuidanceConfig | null> {
   const configPath = path.join(repoRoot, ".forge", "guidance.yml");
   let contents: string;
@@ -1060,11 +1079,13 @@ async function readGuidanceConfig(
     contents = await fs.readFile(configPath, "utf8");
   } catch (error) {
     if (isNotFoundError(error)) {
-      diagnostics.push({
-        kind: "missing_config",
-        message: "no .forge/guidance.yml found",
-        path: ".forge/guidance.yml",
-      });
+      if (reportMissing) {
+        diagnostics.push({
+          kind: "missing_config",
+          message: "no .forge/guidance.yml found",
+          path: ".forge/guidance.yml",
+        });
+      }
       return null;
     }
     throw error;
@@ -1253,7 +1274,7 @@ async function addLocalGuidanceMatch(
   matches: GuidanceMatch[],
   seenPaths: Set<string>,
 ): Promise<void> {
-  const localPath = "guidance.local.md";
+  const localPath = "local/user.md";
   if (seenPaths.has(localPath)) {
     return;
   }
@@ -1277,6 +1298,122 @@ async function addLocalGuidanceMatch(
     promptSummary: extractPromptSummary(content),
     ...(includeContent ? { content } : {}),
   });
+}
+
+async function inspectGuidanceIncludes(
+  repoRoot: string,
+  config: GuidanceConfig,
+): Promise<GuidanceDiagnostic[]> {
+  const diagnostics: GuidanceDiagnostic[] = [];
+  const seenRouteKeys = new Set<string>();
+  const seenIncludePaths = new Set<string>();
+
+  for (const route of config.routes) {
+    const routeKey = `${route.include}\n${JSON.stringify(route.when)}`;
+    if (seenRouteKeys.has(routeKey)) {
+      diagnostics.push({
+        kind: "duplicate_include",
+        message: `duplicate guidance include route: ${route.include}`,
+        path: route.include,
+      });
+    }
+    seenRouteKeys.add(routeKey);
+
+    if (seenIncludePaths.has(route.include)) {
+      continue;
+    }
+    seenIncludePaths.add(route.include);
+    diagnostics.push(...(await inspectGuidanceInclude(repoRoot, route.include)));
+  }
+
+  return diagnostics;
+}
+
+async function inspectGuidanceInclude(
+  repoRoot: string,
+  includePath: string,
+): Promise<GuidanceDiagnostic[]> {
+  const sourcePath = path.join(repoRoot, ".forge", includePath);
+  try {
+    await fs.readFile(sourcePath, "utf8");
+    return [];
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return [
+        {
+          kind: "missing_include",
+          message: `guidance include not found: ${includePath}`,
+          path: includePath,
+        },
+      ];
+    }
+
+    return [
+      {
+        kind: "unreadable_include",
+        message: `guidance include is unreadable: ${includePath}`,
+        path: includePath,
+      },
+    ];
+  }
+}
+
+async function inspectLocalGuidanceFiles(repoRoot: string): Promise<GuidanceDiagnostic[]> {
+  const localDir = path.join(repoRoot, ".forge", "local");
+  const localFiles = await listFilesIfExists(localDir);
+  if (localFiles.length === 0 || (await gitignoreMentionsForgeLocal(repoRoot))) {
+    return [];
+  }
+
+  return localFiles.map((sourcePath) => {
+    const localPath = normalizeRepoPath(path.relative(path.join(repoRoot, ".forge"), sourcePath));
+    return {
+      kind: "local_file_not_ignored" as const,
+      message: `.forge/${localPath} is local-only; add .forge/local/** to .gitignore before committing`,
+      path: localPath,
+    };
+  });
+}
+
+async function listFilesIfExists(dir: string): Promise<string[]> {
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  return (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          return listFilesIfExists(entryPath);
+        }
+        return entry.isFile() ? [entryPath] : [];
+      }),
+    )
+  )
+    .flat()
+    .sort();
+}
+
+async function gitignoreMentionsForgeLocal(repoRoot: string): Promise<boolean> {
+  try {
+    const contents = await fs.readFile(path.join(repoRoot, ".gitignore"), "utf8");
+    return contents
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .some((line) => line === ".forge/local/**" || line === ".forge/local/");
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function extractPromptSummary(content: string): string | null {
