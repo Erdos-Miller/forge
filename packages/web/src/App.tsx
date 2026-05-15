@@ -1,4 +1,4 @@
-import type { Task } from "@forge/core";
+import type { Task, TaskAvailability } from "@forge/core";
 import { marked } from "marked";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TaskGraphPayload } from "./api";
@@ -259,6 +259,7 @@ export function App({ initialData }: AppProps) {
                     <div className="taskRows">
                       {tasks.map((task, index) => (
                         <QueueRow
+                          availability={data.availabilityByTaskId[task.id] ?? "blocked"}
                           blockers={data.blockersByTaskId[task.id] ?? []}
                           groupBy={groupBy}
                           isSelected={selectedTask?.id === task.id}
@@ -419,6 +420,7 @@ function BurndownChart({ burndown }: { burndown: BurndownData }) {
 function QueueRow({
   task,
   blockers,
+  availability,
   groupBy,
   isSelected,
   rank,
@@ -428,6 +430,7 @@ function QueueRow({
 }: {
   task: Task;
   blockers: string[];
+  availability: TaskAvailability;
   groupBy: "area" | "priority";
   isSelected: boolean;
   rank: number;
@@ -435,7 +438,8 @@ function QueueRow({
   blockerCount: number;
   onSelect: () => void;
 }) {
-  const state = getQueueRowState(task, blockers, recommendedRank);
+  const state = getQueueRowState(task, blockers, availability, recommendedRank);
+  const badge = getQueueRowBadge(task, availability, blockerCount);
 
   return (
     <button
@@ -451,9 +455,7 @@ function QueueRow({
         </span>
         <span className="rowBadges">
           {groupBy === "priority" && task.area ? <span className="badge">{task.area}</span> : null}
-          {state === "blocked" && blockerCount > 0 ? (
-            <span className="badge">blocked by {blockerCount}</span>
-          ) : null}
+          {badge ? <span className="badge">{badge}</span> : null}
         </span>
       </span>
     </button>
@@ -738,14 +740,42 @@ function priorityRank(priority: Task["priority"]) {
   return { urgent: 0, high: 1, medium: 2, low: 3 }[priority];
 }
 
-function getQueueRowState(task: Task, blockers: string[], recommendedRank?: number) {
+function getQueueRowState(
+  task: Task,
+  blockers: string[],
+  availability: TaskAvailability,
+  recommendedRank?: number,
+) {
   if (task.status === "done" || task.status === "canceled") {
     return "done";
   }
-  if (blockers.length > 0 || task.status === "blocked") {
+  if (task.status === "doing") {
+    return "active";
+  }
+  if (task.claimed_by.trim() !== "") {
+    return "claimed";
+  }
+  if (availability === "blocked" || blockers.length > 0 || task.status === "blocked") {
     return "blocked";
   }
   return recommendedRank === undefined ? "open" : "ready";
+}
+
+function getQueueRowBadge(
+  task: Task,
+  availability: TaskAvailability,
+  blockerCount: number,
+) {
+  if (task.status === "doing") {
+    return "in progress";
+  }
+  if (task.claimed_by.trim() !== "") {
+    return `claimed by ${task.claimed_by}`;
+  }
+  if (availability === "blocked" && blockerCount > 0) {
+    return `blocked by ${blockerCount}`;
+  }
+  return null;
 }
 
 function PriorityDot({ priority }: { priority: Task["priority"] }) {

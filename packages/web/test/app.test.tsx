@@ -133,6 +133,73 @@ describe("App", () => {
     expect(html).toContain("Ready task");
   });
 
+  test("renders doing claimed rows as in progress instead of blocked by blocker count", () => {
+    const activeTask = {
+      ...payload.tasks[1],
+      id: "F-active",
+      title: "Urgent active task",
+      status: "doing" as const,
+      priority: "urgent" as const,
+      claimed_by: "codex",
+    };
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [activeTask],
+          readyTaskIds: [],
+          recommendedTaskIds: [],
+          availabilityByTaskId: { "F-active": "active" },
+          blockersByTaskId: {
+            "F-active": ["dependency F-0001 is open", "missing dependency F-9999"],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Urgent active task");
+    expect(html).toContain("in progress");
+    expect(html).not.toContain("blocked by 2");
+  });
+
+  test("renders claimed open rows and real dependency-blocked rows distinctly", () => {
+    const claimedTask = {
+      ...payload.tasks[1],
+      id: "F-claimed",
+      title: "Claimed open task",
+      status: "open" as const,
+      claimed_by: "codex",
+    };
+    const blockedTask = {
+      ...payload.tasks[1],
+      id: "F-blocked",
+      title: "Dependency blocked task",
+      status: "open" as const,
+      claimed_by: "",
+    };
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [claimedTask, blockedTask],
+          readyTaskIds: [],
+          recommendedTaskIds: [],
+          availabilityByTaskId: {
+            "F-claimed": "claimed",
+            "F-blocked": "blocked",
+          },
+          blockersByTaskId: {
+            "F-claimed": [],
+            "F-blocked": ["dependency F-0001 is open", "missing dependency F-9999"],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("claimed by codex");
+    expect(html).toContain("blocked by 2");
+  });
+
   test("selectTaskAfterRefresh preserves selection and falls back when needed", () => {
     expect(selectTaskAfterRefresh("F-0003", payload, "all")).toBe("F-0003");
     expect(selectTaskAfterRefresh("F-9999", payload, "all")).toBe("F-0002");
@@ -157,6 +224,41 @@ describe("App", () => {
 
     expect(queue.map((task) => task.id)).toEqual(["F-high", "F-urgent"]);
     expect(groups.map(([priority]) => priority)).toEqual(["urgent", "high"]);
+  });
+
+  test("priority grouping keeps active, claimed, and blocked work visible", () => {
+    const activeTask = {
+      ...payload.tasks[1],
+      id: "F-active",
+      title: "Active",
+      status: "doing" as const,
+      priority: "urgent" as const,
+      claimed_by: "codex",
+    };
+    const claimedTask = {
+      ...payload.tasks[1],
+      id: "F-claimed",
+      title: "Claimed",
+      status: "open" as const,
+      priority: "high" as const,
+      claimed_by: "codex",
+    };
+    const blockedTask = {
+      ...payload.tasks[1],
+      id: "F-blocked",
+      title: "Blocked",
+      status: "open" as const,
+      priority: "high" as const,
+    };
+    const groups = groupQueueTasks(
+      sortQueueTasks([claimedTask, blockedTask, activeTask], new Map(), true),
+      "priority",
+    );
+
+    expect(groups).toEqual([
+      ["urgent", [activeTask]],
+      ["high", [blockedTask, claimedTask]],
+    ]);
   });
 
   test("non-recommended tasks use explicit priority order", () => {

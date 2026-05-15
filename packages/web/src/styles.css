@@ -451,6 +451,12 @@ button {
   color: #a9adb4;
 }
 
+.queueRow.active,
+.queueRow.claimed {
+  background: #14161a;
+  border-color: #3a404a;
+}
+
 .queueRow.blocked .title,
 .queueRow.blocked .rank,
 .queueRow.blocked .priorityDot,
