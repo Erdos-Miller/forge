@@ -18,6 +18,7 @@ import {
   resolveGuidance,
   parseTaskFile,
   unblockTaskFrom,
+  upsertTaskExecutionPlanFrom,
   type CreateTaskInput,
   type GuidanceBundle,
   type GuidanceMatch,
@@ -180,6 +181,15 @@ export const COMMANDS = [
     agentPurpose: "Start an agent on a concrete task.",
   },
   {
+    name: "plan",
+    usage: "forge plan <id|next> --stdin",
+    description: "Insert or replace a task Execution Plan section.",
+    classification: "write",
+    supportsJson: false,
+    examples: ["forge plan F-0001 --stdin", "forge plan next --stdin"],
+    agentPurpose: "Record the current implementation plan in the task body.",
+  },
+  {
     name: "loop-prompt",
     usage: "forge loop-prompt",
     description: "Emit the generic Forge execution loop prompt.",
@@ -278,6 +288,7 @@ const COMMAND_WORKFLOWS = {
   doctor: "verify",
   create: "plan",
   prompt: "plan",
+  plan: "plan",
   "loop-prompt": "plan",
   claim: "claim",
   note: "mutate",
@@ -318,6 +329,7 @@ const COMMAND_HANDLERS = {
   doctor,
   create,
   prompt,
+  plan,
   "loop-prompt": loopPrompt,
   claim,
   note,
@@ -778,6 +790,33 @@ async function prompt(options: CliOptions, args: string[]): Promise<number> {
   });
 
   options.stdout(formatAgentPrompt(task, guidance, parsed.full));
+  return 0;
+}
+
+async function plan(options: CliOptions, args: string[]): Promise<number> {
+  const [target, stdinFlag, ...extra] = args;
+  if (!target || stdinFlag !== "--stdin" || extra.length > 0) {
+    options.stderr("usage: forge plan <id|next> --stdin");
+    return 1;
+  }
+
+  const task =
+    target === "next"
+      ? await findNextPromptTask(options.cwd)
+      : (await findParsedTaskByIdFrom(options.cwd, target)).task;
+
+  if (!task) {
+    options.stderr("no ready tasks");
+    return 1;
+  }
+
+  const updated = await upsertTaskExecutionPlanFrom(
+    options.cwd,
+    task.id,
+    await options.stdin(),
+    options.now,
+  );
+  options.stdout(`planned ${updated.id}`);
   return 0;
 }
 

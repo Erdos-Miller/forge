@@ -167,6 +167,7 @@ describe("forge cli", () => {
       "doctor",
       "create",
       "prompt",
+      "plan",
       "loop-prompt",
       "claim",
       "note",
@@ -1179,6 +1180,123 @@ describe("forge cli", () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toEqual(["no ready tasks"]);
+  });
+
+  test("plan inserts an Execution Plan for a specific task", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: [
+          "# Open",
+          "",
+          "## Acceptance Criteria",
+          "",
+          "- The CLI creates a ready-to-edit task document.",
+          "",
+          "## Dependencies",
+          "",
+          "Depends on F-0001.",
+          "",
+        ].join("\n"),
+      }),
+    );
+    const result = await run(
+      repoRoot,
+      ["plan", "F-0002", "--stdin"],
+      "Summary: use the CLI helper.",
+    );
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(result).toMatchObject({ code: 0, stdout: ["planned F-0002"], stderr: [] });
+    expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.body).toContain(
+      [
+        "## Acceptance Criteria",
+        "",
+        "- The CLI creates a ready-to-edit task document.",
+        "",
+        "## Execution Plan",
+        "",
+        "Summary: use the CLI helper.",
+        "",
+        "## Dependencies",
+      ].join("\n"),
+    );
+  });
+
+  test("plan next updates the top ready task", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+    const result = await run(nestedDir, ["plan", "next", "--stdin"], "Summary: next task.");
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(result).toMatchObject({ code: 0, stdout: ["planned F-0002"], stderr: [] });
+    expect(parsed.task.body).toContain("## Execution Plan\n\nSummary: next task.");
+  });
+
+  test("plan replaces an existing Execution Plan section", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: [
+          "# Open",
+          "",
+          "## Execution Plan",
+          "",
+          "Old plan.",
+          "",
+          "## Extra",
+          "",
+          "Keep this.",
+          "",
+        ].join("\n"),
+      }),
+    );
+
+    const result = await run(repoRoot, ["plan", "F-0002", "--stdin"], "New plan.");
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(parsed.task.body).not.toContain("Old plan.");
+    expect(parsed.task.body).toContain("## Execution Plan\n\nNew plan.\n\n## Extra");
+    expect(parsed.task.body).toContain("Keep this.");
+  });
+
+  test("plan rejects invalid usage and missing task states", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+
+    expect(await run(repoRoot, ["plan", "F-0002"], "Plan.")).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge plan <id|next> --stdin"],
+    });
+    expect(await run(repoRoot, ["plan", "F-0002", "--stdin"], "   ")).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["plan requires non-empty stdin"],
+    });
+    expect(await run(repoRoot, ["plan", "F-9999", "--stdin"], "Plan.")).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["task F-9999 not found"],
+    });
+
+    await fs.writeFile(
+      taskPath,
+      taskFile({ id: "F-0002", title: "Open", status: "doing", claimed_by: "codex" }),
+    );
+    expect(await run(repoRoot, ["plan", "next", "--stdin"], "Plan.")).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["no ready tasks"],
+    });
   });
 
   test("loop-prompt prints the generic execution loop goal prompt", async () => {

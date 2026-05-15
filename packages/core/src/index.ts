@@ -596,6 +596,46 @@ export async function appendTaskNoteFrom(
   return appendTaskNote(await findForgeRoot(startDir), taskId, note, now);
 }
 
+export async function upsertTaskExecutionPlan(
+  repoRoot: string,
+  taskId: string,
+  plan: string,
+  now = new Date(),
+): Promise<Task> {
+  if (!plan.trim()) {
+    throw new TaskWriteError("plan requires non-empty stdin");
+  }
+
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  const contents = await fs.readFile(parsed.task.sourcePath, "utf8");
+  const plannedContents = upsertMarkdownSection(
+    contents,
+    "Execution Plan",
+    plan.trim(),
+    ["Dependencies", "Verification", "Notes", "History"],
+    parsed.task.sourcePath,
+  );
+  const updatedContents = updateTaskFileContents(
+    plannedContents,
+    {
+      updated_at: now.toISOString(),
+    },
+    parsed.task.sourcePath,
+  );
+  const updated = parseTaskFile(parsed.task.sourcePath, updatedContents);
+  await writeFileAtomic(parsed.task.sourcePath, updatedContents);
+  return updated.task;
+}
+
+export async function upsertTaskExecutionPlanFrom(
+  startDir: string,
+  taskId: string,
+  plan: string,
+  now = new Date(),
+): Promise<Task> {
+  return upsertTaskExecutionPlan(await findForgeRoot(startDir), taskId, plan, now);
+}
+
 export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
   const tasksById = new Map<string, Task>();
   const sourcePathsByTaskId = new Map<string, string[]>();
@@ -760,6 +800,52 @@ function appendToMarkdownSection(
   const after = body.slice(insertAt);
 
   return `---\n${frontmatter}\n---${before}\n\n${text}\n\n${after}`;
+}
+
+function upsertMarkdownSection(
+  contents: string,
+  sectionTitle: string,
+  text: string,
+  insertBeforeTitles: string[],
+  sourcePath = "task.md",
+): string {
+  const { frontmatter, body } = splitFrontmatter(contents, sourcePath);
+  const headingPattern = new RegExp(`^## ${escapeRegExp(sectionTitle)}\\s*$`, "m");
+  const headingMatch = headingPattern.exec(body);
+  const section = `## ${sectionTitle}\n\n${text}\n`;
+
+  if (headingMatch) {
+    const sectionStart = headingMatch.index + headingMatch[0].length;
+    const rest = body.slice(sectionStart);
+    const nextHeadingMatch = /^## .*/m.exec(rest);
+    const sectionEnd = nextHeadingMatch
+      ? sectionStart + nextHeadingMatch.index
+      : body.length;
+    return replaceBodySection(frontmatter, body, headingMatch.index, sectionEnd, section);
+  }
+
+  const insertAt = findFirstSectionIndex(body, insertBeforeTitles) ?? body.length;
+  return replaceBodySection(frontmatter, body, insertAt, insertAt, section);
+}
+
+function findFirstSectionIndex(body: string, sectionTitles: string[]): number | undefined {
+  const indexes = sectionTitles
+    .map((title) => new RegExp(`^## ${escapeRegExp(title)}\\s*$`, "m").exec(body)?.index)
+    .filter((index): index is number => index !== undefined);
+
+  return indexes.length ? Math.min(...indexes) : undefined;
+}
+
+function replaceBodySection(
+  frontmatter: string,
+  body: string,
+  start: number,
+  end: number,
+  section: string,
+): string {
+  const before = body.slice(0, start).trimEnd();
+  const after = body.slice(end).trimStart();
+  return `---\n${frontmatter}\n---${before}\n\n${section}${after ? `\n${after}` : ""}`;
 }
 
 function upsertFrontmatterField(

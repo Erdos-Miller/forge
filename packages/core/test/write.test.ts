@@ -13,6 +13,7 @@ import {
   requestTaskReview,
   unblockTask,
   updateTaskFileContents,
+  upsertTaskExecutionPlan,
 } from "../src";
 
 const tempDirs: string[] = [];
@@ -263,6 +264,110 @@ describe("task write helpers", () => {
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(parsed.task.updated_at).toBe("2026-05-14T17:00:00.000Z");
     expect(parsed.task.body).toContain("Existing note.\n\nNew note.\n\n## History");
+  });
+
+  test("upsertTaskExecutionPlan inserts before Dependencies", async () => {
+    const { repoRoot, taskPath } = await makeRepo(
+      [
+        "---",
+        "id: F-9999",
+        "title: Example",
+        "kind: task",
+        "status: open",
+        "priority: medium",
+        'parent: ""',
+        "depends_on: []",
+        'claimed_by: ""',
+        "scope:",
+        "  - packages/**",
+        "created_at: 2026-05-14T00:00:00-05:00",
+        "updated_at: 2026-05-14T00:00:00-05:00",
+        "---",
+        "",
+        "# Example",
+        "",
+        "## Acceptance Criteria",
+        "",
+        "- Existing criterion.",
+        "",
+        "## Dependencies",
+        "",
+        "None.",
+        "",
+        "## Custom",
+        "",
+        "Keep this.",
+        "",
+      ].join("\n"),
+    );
+
+    await upsertTaskExecutionPlan(
+      repoRoot,
+      "F-9999",
+      "Summary: implement it.",
+      new Date("2026-05-14T18:00:00Z"),
+    );
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.updated_at).toBe("2026-05-14T18:00:00.000Z");
+    expect(parsed.task.body).toContain(
+      [
+        "## Acceptance Criteria",
+        "",
+        "- Existing criterion.",
+        "",
+        "## Execution Plan",
+        "",
+        "Summary: implement it.",
+        "",
+        "## Dependencies",
+      ].join("\n"),
+    );
+    expect(parsed.task.body).toContain("## Custom\n\nKeep this.");
+  });
+
+  test("upsertTaskExecutionPlan replaces the full existing section", async () => {
+    const { repoRoot, taskPath } = await makeRepo(
+      [
+        "---",
+        "id: F-9999",
+        "title: Example",
+        "kind: task",
+        "status: open",
+        "priority: medium",
+        'parent: ""',
+        "depends_on: []",
+        'claimed_by: ""',
+        "scope:",
+        "  - packages/**",
+        "created_at: 2026-05-14T00:00:00-05:00",
+        "updated_at: 2026-05-14T00:00:00-05:00",
+        "---",
+        "",
+        "# Example",
+        "",
+        "## Execution Plan",
+        "",
+        "Old plan.",
+        "",
+        "## Notes",
+        "",
+        "Keep this.",
+        "",
+      ].join("\n"),
+    );
+
+    await upsertTaskExecutionPlan(
+      repoRoot,
+      "F-9999",
+      "New plan.",
+      new Date("2026-05-14T18:30:00Z"),
+    );
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.body).not.toContain("Old plan.");
+    expect(parsed.task.body).toContain("## Execution Plan\n\nNew plan.\n\n## Notes");
+    expect(parsed.task.body).toContain("Keep this.");
   });
 
   test("writes fail clearly on malformed frontmatter", async () => {
