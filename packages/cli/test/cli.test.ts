@@ -149,6 +149,7 @@ describe("forge cli", () => {
       "blockers",
       "deps",
       "guidance",
+      "doctor",
       "create",
       "prompt",
       "loop-prompt",
@@ -509,6 +510,97 @@ describe("forge cli", () => {
 
     expect(result.code).toBe(3);
     expect(payload.error.code).toBe("task_not_found");
+  });
+
+  test("doctor --json reports a clean task store", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["doctor", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload).toEqual({
+      ok: true,
+      version: 1,
+      summary: { errors: 0, warnings: 0 },
+      diagnostics: [],
+    });
+  });
+
+  test("doctor --json reports parse, graph, conflict, block, and review diagnostics", async () => {
+    const { repoRoot } = await makeRepo();
+    const tasksDir = path.join(repoRoot, ".forge", "tasks");
+    await fs.writeFile(path.join(tasksDir, "bad-missing-frontmatter.md"), "# Missing");
+    await fs.writeFile(path.join(tasksDir, "bad-yaml.md"), "---\n:\n---\n");
+    await fs.writeFile(
+      path.join(tasksDir, "bad-status.md"),
+      taskFile({ id: "F-0100", title: "Bad status", status: "ready" }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "bad-date.md"),
+      taskFile({ id: "F-0101", title: "Bad date" }).replace(
+        "updated_at: 2026-05-14T00:00:00-05:00",
+        "updated_at: not-a-date",
+      ),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "conflict.md"),
+      `${taskFile({ id: "F-0102", title: "Conflict" })}\n<<<<<<< ours\n=======\n>>>>>>> theirs\n`,
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "duplicate-a.md"),
+      taskFile({ id: "F-0103", title: "Duplicate A" }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "duplicate-b.md"),
+      taskFile({ id: "F-0103", title: "Duplicate B" }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "missing-dep.md"),
+      taskFile({ id: "F-0104", title: "Missing dep", depends_on: ["F-9999"] }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "cycle-a.md"),
+      taskFile({ id: "F-0105", title: "Cycle A", depends_on: ["F-0106"] }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "cycle-b.md"),
+      taskFile({ id: "F-0106", title: "Cycle B", depends_on: ["F-0105"] }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "invalid-block-review.md"),
+      taskFile({ id: "F-0107", title: "Invalid fields" }).replace(
+        'claimed_by: ""',
+        'blocked_by: []\nreview: requested\nclaimed_by: ""',
+      ),
+    );
+
+    const result = await run(repoRoot, ["doctor", "--json"]);
+    const payload = parseStdoutJson(result);
+    const codes = payload.diagnostics.map((diagnostic: any) => diagnostic.code);
+
+    expect(result.code).toBe(4);
+    expect(payload.summary.errors).toBeGreaterThan(0);
+    expect(codes).toContain("missing_frontmatter");
+    expect(codes).toContain("malformed_yaml");
+    expect(codes).toContain("invalid_enum");
+    expect(codes).toContain("invalid_timestamp");
+    expect(codes).toContain("merge_conflict_marker");
+    expect(codes).toContain("duplicate_id");
+    expect(codes).toContain("missing_dependency");
+    expect(codes).toContain("dependency_cycle");
+    expect(codes).toContain("invalid_block_field");
+    expect(codes).toContain("invalid_review_field");
+    expect(payload.diagnostics[0]).toHaveProperty("sourcePath");
+  });
+
+  test("doctor rejects non-json usage", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["doctor"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(2);
+    expect(payload.error.code).toBe("usage_error");
+    expect(payload.error.message).toBe("usage: forge doctor --json");
   });
 
   test("output includes area when present", async () => {

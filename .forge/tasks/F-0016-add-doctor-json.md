@@ -2,7 +2,7 @@
 id: F-0016
 title: Add doctor JSON command
 kind: task
-status: open
+status: done
 priority: high
 parent: F-0000
 depends_on:
@@ -14,8 +14,8 @@ scope:
   - packages/cli/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T04:31:38.817Z
+closed_at: 2026-05-15T04:31:38.817Z
 close_reason: ""
 ---
 
@@ -43,13 +43,16 @@ Depends on `F-0011` because doctor should use the shared graph engine and diagno
 
 ## Verification
 
-- Run `bun test` in `packages/core` and `packages/cli`.
-- Smoke-check `forge doctor --json` on the Forge repo and on malformed temp fixtures.
+- `bun test packages/cli/test/cli.test.ts` passed.
+- `bun run quality:check` passed from the repo root.
+- `forge doctor --json` returned zero errors on the Forge repo.
+- CLI temp fixture tests cover malformed task stores.
 
 ## Notes
 
-Doctor should be useful to agents. Prefer actionable diagnostics over generic parse failures.
+Added JSON-only `forge doctor --json`. It scans task files directly so malformed files do not abort the run, reports stable diagnostics for parse/schema/graph/conflict/unsupported block-review fields, and exits `4` when errors are present.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Claimed and implemented 2026-05-15.

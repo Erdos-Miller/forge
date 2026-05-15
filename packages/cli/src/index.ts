@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   analyzeTasks,
@@ -12,12 +13,14 @@ import {
   rankReadyTaskQueue,
   rankReadyTasks,
   resolveGuidance,
+  parseTaskFile,
   type CreateTaskInput,
   type GuidanceBundle,
   type GuidanceMatch,
   type RankedQueueEntry,
   type Task,
   type TaskGraphAnalysis,
+  TaskParseError,
   type TaskPriority,
 } from "@forge/core";
 
@@ -39,6 +42,14 @@ export interface CommandMetadata {
   supportsJson: boolean;
   examples: string[];
   agentPurpose: string;
+}
+
+interface DoctorDiagnostic {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  taskId?: string;
+  sourcePath?: string;
 }
 
 export const COMMANDS = [
@@ -115,6 +126,15 @@ export const COMMANDS = [
     agentPurpose: "Load repo, task, cwd, and path guidance for an agent step.",
   },
   {
+    name: "doctor",
+    usage: "forge doctor --json",
+    description: "Validate task files and graph health.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge doctor --json"],
+    agentPurpose: "Check the repo before trusting or closing work.",
+  },
+  {
     name: "create",
     usage: "forge create <id> --title <title> [options]",
     description: "Create a canonical task file.",
@@ -187,6 +207,7 @@ const COMMAND_HANDLERS = {
   blockers,
   deps,
   guidance,
+  doctor,
   create,
   prompt,
   "loop-prompt": loopPrompt,
@@ -446,6 +467,33 @@ async function guidance(options: CliOptions, args: string[]): Promise<number> {
     }
     throw error;
   }
+}
+
+async function doctor(options: CliOptions, args: string[]): Promise<number> {
+  if (!isJsonOnly(args)) {
+    return writeJsonUsageError(options, "usage: forge doctor --json");
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  const { tasks, diagnostics } = await inspectTaskStore(repoRoot);
+
+  if (tasks.length > 0) {
+    diagnostics.push(...getGraphDoctorDiagnostics(analyzeTasks(tasks)));
+  }
+
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      summary: {
+        errors,
+        warnings: diagnostics.length - errors,
+      },
+      diagnostics,
+    }),
+  );
+  return errors === 0 ? 0 : 4;
 }
 
 async function claim(options: CliOptions, args: string[]): Promise<number> {
@@ -743,6 +791,149 @@ function parseGuidanceArgs(args: string[]):
   }
 
   return { ok: true, json, full, taskId, paths };
+}
+
+async function inspectTaskStore(
+  repoRoot: string,
+): Promise<{ tasks: Task[]; diagnostics: DoctorDiagnostic[] }> {
+  const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  const diagnostics: DoctorDiagnostic[] = [];
+  const tasks: Task[] = [];
+
+  for (const sourcePath of await listMarkdownFiles(tasksDir)) {
+    const contents = await fs.readFile(sourcePath, "utf8");
+    if (contents.includes("<<<<<<<") || contents.includes("=======") || contents.includes(">>>>>>>")) {
+      diagnostics.push({
+        code: "merge_conflict_marker",
+        severity: "error",
+        message: "task file contains merge conflict markers",
+        sourcePath,
+      });
+    }
+
+    try {
+      const parsed = parseTaskFile(sourcePath, contents);
+      tasks.push(parsed.task);
+      diagnostics.push(...getFrontmatterDoctorDiagnostics(parsed, sourcePath));
+    } catch (error) {
+      diagnostics.push(toParseDoctorDiagnostic(error, sourcePath));
+    }
+  }
+
+  return { tasks, diagnostics };
+}
+
+async function listMarkdownFiles(dir: string): Promise<string[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  return (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          return listMarkdownFiles(entryPath);
+        }
+        return entry.isFile() && entry.name.endsWith(".md") ? [entryPath] : [];
+      }),
+    )
+  )
+    .flat()
+    .sort();
+}
+
+function getFrontmatterDoctorDiagnostics(
+  parsed: ReturnType<typeof parseTaskFile>,
+  sourcePath: string,
+): DoctorDiagnostic[] {
+  const diagnostics: DoctorDiagnostic[] = [];
+  const taskId = parsed.task.id;
+
+  for (const field of ["blocked_by", "blocks", "block_reason"]) {
+    if (field in parsed.frontmatter) {
+      diagnostics.push({
+        code: "invalid_block_field",
+        severity: "error",
+        message: `unsupported block field "${field}"; use depends_on/status instead`,
+        taskId,
+        sourcePath,
+      });
+    }
+  }
+
+  for (const field of ["review", "review_state", "needs_review"]) {
+    if (field in parsed.frontmatter) {
+      diagnostics.push({
+        code: "invalid_review_field",
+        severity: "error",
+        message: `unsupported review field "${field}"`,
+        taskId,
+        sourcePath,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+function toParseDoctorDiagnostic(error: unknown, sourcePath: string): DoctorDiagnostic {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    code: getParseDiagnosticCode(error, message),
+    severity: "error",
+    message,
+    sourcePath,
+  };
+}
+
+function getParseDiagnosticCode(error: unknown, message: string): string {
+  if (
+    message.includes("malformed YAML frontmatter") ||
+    message.includes("end of the stream") ||
+    message.includes("bad indentation") ||
+    message.includes("can not read")
+  ) {
+    return "malformed_yaml";
+  }
+
+  if (!(error instanceof TaskParseError)) {
+    return "malformed_yaml";
+  }
+
+  if (error instanceof TaskParseError) {
+    if (message.includes("missing YAML frontmatter")) {
+      return "missing_frontmatter";
+    }
+    if (message.includes("timestamp")) {
+      return "invalid_timestamp";
+    }
+    if (message.includes("must be one of")) {
+      return "invalid_enum";
+    }
+  }
+  return "parse_failed";
+}
+
+function getGraphDoctorDiagnostics(analysis: TaskGraphAnalysis): DoctorDiagnostic[] {
+  return [
+    ...analysis.duplicateTaskIds.map((diagnostic) => ({
+      code: "duplicate_id",
+      severity: "error" as const,
+      message: `duplicate task id ${diagnostic.taskId}`,
+      taskId: diagnostic.taskId,
+      sourcePath: diagnostic.sourcePaths.join(", "),
+    })),
+    ...analysis.missingDependencies.map((diagnostic) => ({
+      code: "missing_dependency",
+      severity: "error" as const,
+      message: `task ${diagnostic.taskId} depends on missing task ${diagnostic.dependencyId}`,
+      taskId: diagnostic.taskId,
+    })),
+    ...analysis.dependencyCycles.map((diagnostic) => ({
+      code: "dependency_cycle",
+      severity: "error" as const,
+      message: `dependency cycle: ${diagnostic.taskIds.join(" -> ")}`,
+      taskId: diagnostic.taskIds[0],
+    })),
+  ];
 }
 
 function writeJsonUsageError(options: CliOptions, message: string): number {
