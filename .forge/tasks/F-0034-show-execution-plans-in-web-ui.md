@@ -2,21 +2,22 @@
 id: F-0034
 title: Show execution plans in web UI
 kind: task
-status: doing
+status: done
 priority: high
 parent: F-0000
 depends_on:
   - F-0032
-claimed_by: "codex"
+claimed_by: ""
 area: web
 scope:
   - packages/web/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T15:40:55.770Z
-closed_at: ""
-close_reason: ""
-review_reason: "Automated checks pass, but manual web inspection with and without an execution plan is still required before closure"
+updated_at: 2026-05-15T18:12:04.990Z
+closed_at: 2026-05-15T18:12:04.990Z
+close_reason: "Execution Plan section UI implemented and covered by web tests; accepted without additional manual hold."
+review_reason: ""
+blocked_reason: ""
 ---
 
 # Show execution plans in web UI

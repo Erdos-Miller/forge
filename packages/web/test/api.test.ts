@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getTaskGraphPayload } from "../src/api";
+import type { Task, TaskGraphAnalysis } from "@forge/core";
+import { getTaskGraphPayload, toTaskGraphPayload } from "../src/api";
 
 const tempDirs: string[] = [];
 
@@ -101,4 +102,54 @@ describe("getTaskGraphPayload", () => {
     expect(payload.readyTaskIds).toEqual(["F-0002"]);
     expect(payload.recommendedTaskIds).toEqual(["F-0002"]);
   });
+
+  test("derives availability when graph analysis has no availability map", () => {
+    const tasks = [
+      task({ id: "F-0001", title: "Done", status: "done" }),
+      task({ id: "F-0002", title: "Ready" }),
+      task({ id: "F-0003", title: "Active", status: "doing", claimed_by: "codex" }),
+      task({ id: "F-0004", title: "Claimed", claimed_by: "codex" }),
+      task({ id: "F-0005", title: "Blocked" }),
+    ];
+    const analysis = {
+      tasksById: new Map(tasks.map((task) => [task.id, task])),
+      childrenByParent: new Map(),
+      dependentsById: new Map(),
+      readyTaskIds: ["F-0002"],
+      blockersByTaskId: new Map([["F-0005", ["dependency F-0002 is open"]]]),
+      downstreamUnblockCountsByTaskId: new Map(),
+      diagnostics: [],
+      missingDependencies: [],
+      dependencyCycles: [],
+      duplicateTaskIds: [],
+    } satisfies Omit<TaskGraphAnalysis, "availabilityByTaskId">;
+
+    const payload = toTaskGraphPayload("/repo", tasks, analysis);
+
+    expect(payload.availabilityByTaskId).toEqual({
+      "F-0001": "closed",
+      "F-0002": "ready",
+      "F-0003": "active",
+      "F-0004": "claimed",
+      "F-0005": "blocked",
+    });
+  });
 });
+
+function task(overrides: Partial<Task> & { id: string; title: string }): Task {
+  return {
+    id: overrides.id,
+    title: overrides.title,
+    kind: "task",
+    status: overrides.status ?? "open",
+    priority: overrides.priority ?? "medium",
+    parent: "",
+    depends_on: overrides.depends_on ?? [],
+    claimed_by: overrides.claimed_by ?? "",
+    scope: ["packages/**"],
+    created_at: "2026-05-14T00:00:00-05:00",
+    updated_at: "2026-05-14T00:00:00-05:00",
+    body: "",
+    sourcePath: `/repo/.forge/tasks/${overrides.id}.md`,
+  };
+}

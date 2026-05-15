@@ -2,21 +2,22 @@
 id: F-0020
 title: Add keyboard queue navigation
 kind: task
-status: doing
+status: done
 priority: high
 parent: F-0000
 depends_on:
   - F-0005
-claimed_by: "codex"
+claimed_by: ""
 area: web
 scope:
   - packages/web/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T15:26:58.193Z
-closed_at: ""
-close_reason: ""
-review_reason: "Automated checks pass, but manual browser keyboard smoke-check is still required before closure"
+updated_at: 2026-05-15T18:12:05.025Z
+closed_at: 2026-05-15T18:12:05.025Z
+close_reason: "Keyboard queue navigation implemented and covered by web tests; accepted without additional manual hold."
+review_reason: ""
+blocked_reason: ""
 ---
 
 # Add keyboard queue navigation
