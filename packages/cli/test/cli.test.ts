@@ -173,6 +173,7 @@ describe("forge cli", () => {
       "block",
       "unblock",
       "review",
+      "set",
       "done",
       "web",
     ]);
@@ -839,6 +840,86 @@ describe("forge cli", () => {
     expect(parsed.task.status).toBe("open");
     expect(parsed.task.blocked_reason).toBe("");
     expect(parsed.task.review_reason).toBe("Needs human check");
+  });
+
+  test("set updates metadata and returns the updated task bundle", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+
+    const result = await run(nestedDir, [
+      "set",
+      "F-0002",
+      "--priority",
+      "urgent",
+      "--status",
+      "blocked",
+      "--area",
+      "core",
+      "--scope",
+      "packages/core/**",
+      "--scope",
+      "docs:notes",
+      "--json",
+    ]);
+    const payload = parseStdoutJson(result);
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(payload.task.title).toBe("Open");
+    expect(payload.task.priority).toBe("urgent");
+    expect(payload.task.status).toBe("blocked");
+    expect(payload.task.area).toBe("core");
+    expect(payload.task.scope).toEqual(["packages/core/**", "docs:notes"]);
+    expect(parsed.task.priority).toBe("urgent");
+    expect(parsed.task.status).toBe("blocked");
+    expect(parsed.task.area).toBe("core");
+    expect(parsed.task.scope).toEqual(["packages/core/**", "docs:notes"]);
+    expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.body).toBe("\n# Open\n\nBody stays readable.\n");
+  });
+
+  test("set preserves unrelated frontmatter and unknown sections", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: ["# Open", "", "## Extra", "", "Keep this.", ""].join("\n"),
+      }).replace('claimed_by: ""', 'claimed_by: ""\ncustom_field: keep'),
+    );
+
+    const result = await run(nestedDir, ["set", "F-0002", "--area", "web", "--json"]);
+    const contents = await fs.readFile(taskPath, "utf8");
+
+    expect(result.code).toBe(0);
+    expect(contents).toContain("custom_field: keep");
+    expect(contents).toContain("## Extra\n\nKeep this.");
+  });
+
+  test("set rejects invalid values and no-op usage", async () => {
+    const { nestedDir } = await makeRepo();
+
+    const invalidPriority = await run(nestedDir, [
+      "set",
+      "F-0002",
+      "--priority",
+      "highest",
+      "--json",
+    ]);
+    const noFields = await run(nestedDir, ["set", "F-0002", "--json"]);
+    const missingJson = await run(nestedDir, ["set", "F-0002", "--area", "web"]);
+
+    expect(invalidPriority.code).toBe(2);
+    expect(parseStderrJson(invalidPriority).error.message).toBe(
+      "priority must be one of: urgent, high, medium, low",
+    );
+    expect(noFields.code).toBe(2);
+    expect(parseStderrJson(noFields).error.message).toBe(
+      "set requires at least one field to update",
+    );
+    expect(missingJson.code).toBe(2);
+    expect(parseStderrJson(missingJson).error.message).toContain("usage: forge set");
   });
 
   test("done updates a task file", async () => {

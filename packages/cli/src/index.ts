@@ -26,6 +26,8 @@ import {
   type TaskGraphAnalysis,
   TaskParseError,
   type TaskPriority,
+  type TaskStatus,
+  updateTaskFile,
 } from "@forge/core";
 
 export interface CliOptions {
@@ -232,6 +234,15 @@ export const COMMANDS = [
     agentPurpose: "Flag judgment needed before continuing or closing.",
   },
   {
+    name: "set",
+    usage: "forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+    description: "Update common task metadata.",
+    classification: "write",
+    supportsJson: true,
+    examples: ["forge set F-0001 --priority high --json"],
+    agentPurpose: "Update scalar/list metadata without hand-editing frontmatter.",
+  },
+  {
     name: "done",
     usage: "forge done <id> [--reason <text>] [--json]",
     description: "Mark one task done.",
@@ -273,6 +284,7 @@ const COMMAND_WORKFLOWS = {
   block: "mutate",
   unblock: "mutate",
   review: "mutate",
+  set: "mutate",
   done: "close",
   web: "inspect",
 } satisfies Record<CommandName, CommandWorkflow>;
@@ -312,6 +324,7 @@ const COMMAND_HANDLERS = {
   block,
   unblock,
   review,
+  set,
   done,
   web,
 } satisfies Record<CommandName, CommandHandler>;
@@ -481,20 +494,7 @@ async function show(options: CliOptions, args: string[]): Promise<number> {
     stringifyJson({
       ok: true,
       version: 1,
-      task: {
-        ...toRobotTaskSummary(task),
-        kind: task.kind,
-        parent: task.parent || null,
-        created_at: task.created_at,
-        updated_at: task.updated_at,
-        closed_at: task.closed_at || null,
-        close_reason: task.close_reason || null,
-        blocked_reason: task.blocked_reason || null,
-        review_reason: task.review_reason || null,
-        sourcePath: task.sourcePath,
-        body: task.body,
-        sections: parseMarkdownSections(task.body),
-      },
+      task: toRobotTaskDocument(task),
     }),
   );
   return 0;
@@ -675,6 +675,28 @@ async function review(options: CliOptions, args: string[]): Promise<number> {
   return 0;
 }
 
+async function set(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseSetArgs(args);
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const existing = await findParsedTaskByIdFrom(options.cwd, parsed.taskId);
+  const task = await updateTaskFile(existing.task.sourcePath, {
+    ...parsed.updates,
+    updated_at: options.now.toISOString(),
+  });
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      task: toRobotTaskDocument(task),
+    }),
+  );
+  return 0;
+}
+
 async function create(options: CliOptions, args: string[]): Promise<number> {
   const input = parseCreateArgs(args);
   const task = await createTaskFrom(options.cwd, input, options.now);
@@ -851,6 +873,98 @@ function parseDoneArgs(
   return { ok: true, taskId, reason, json };
 }
 
+function parseSetArgs(args: string[]):
+  | {
+      ok: true;
+      taskId: string;
+      updates: Partial<Pick<Task, "priority" | "status" | "area" | "scope">>;
+    }
+  | { ok: false; message: string } {
+  const [taskId, ...rest] = args;
+  if (!taskId) {
+    return {
+      ok: false,
+      message:
+        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+    };
+  }
+
+  let json = false;
+  const updates: Partial<Pick<Task, "priority" | "status" | "area" | "scope">> = {};
+  const scopes: string[] = [];
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--priority": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --priority requires a value" };
+        }
+        try {
+          updates.priority = parsePriority(value);
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : String(error) };
+        }
+        index += 1;
+        break;
+      }
+      case "--status": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --status requires a value" };
+        }
+        try {
+          updates.status = parseStatus(value);
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : String(error) };
+        }
+        index += 1;
+        break;
+      }
+      case "--area": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --area requires a value" };
+        }
+        updates.area = value;
+        index += 1;
+        break;
+      }
+      case "--scope": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --scope requires a value" };
+        }
+        scopes.push(value);
+        index += 1;
+        break;
+      }
+      default:
+        return { ok: false, message: `unknown set option: ${arg}` };
+    }
+  }
+
+  if (!json) {
+    return {
+      ok: false,
+      message:
+        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+    };
+  }
+  if (scopes.length > 0) {
+    updates.scope = scopes;
+  }
+  if (Object.keys(updates).length === 0) {
+    return { ok: false, message: "set requires at least one field to update" };
+  }
+
+  return { ok: true, taskId, updates };
+}
+
 function parseCreateArgs(args: string[]): CreateTaskInput {
   const [id, ...rest] = args;
   if (!id) {
@@ -919,6 +1033,19 @@ function parsePriority(value: string): TaskPriority {
     return value;
   }
   throw new Error("priority must be one of: urgent, high, medium, low");
+}
+
+function parseStatus(value: string): TaskStatus {
+  if (
+    value === "open" ||
+    value === "doing" ||
+    value === "blocked" ||
+    value === "done" ||
+    value === "canceled"
+  ) {
+    return value;
+  }
+  throw new Error("status must be one of: open, doing, blocked, done, canceled");
 }
 
 function isJsonOnly(args: string[]): boolean {
@@ -1257,6 +1384,23 @@ function toRobotTaskSummary(task: Task): Record<string, unknown> {
     claimed_by: task.claimed_by || null,
     scope: task.scope,
     depends_on: task.depends_on,
+  };
+}
+
+function toRobotTaskDocument(task: Task): Record<string, unknown> {
+  return {
+    ...toRobotTaskSummary(task),
+    kind: task.kind,
+    parent: task.parent || null,
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+    closed_at: task.closed_at || null,
+    close_reason: task.close_reason || null,
+    blocked_reason: task.blocked_reason || null,
+    review_reason: task.review_reason || null,
+    sourcePath: task.sourcePath,
+    body: task.body,
+    sections: parseMarkdownSections(task.body),
   };
 }
 

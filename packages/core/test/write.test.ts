@@ -108,6 +108,17 @@ describe("updateTaskFileContents", () => {
     expect(updated).toContain("custom_field: keep me");
     expect(updated).toContain("## Custom\n\nDo not lose this.");
   });
+
+  test("replaces multiline array fields with quoted values", () => {
+    const updated = updateTaskFileContents(taskFile(), {
+      scope: ["packages/core/**", "value:with-colon"],
+      updated_at: "2026-05-14T12:00:00.000Z",
+    });
+
+    const parsed = parseTaskFile("updated.md", updated);
+    expect(parsed.task.scope).toEqual(["packages/core/**", "value:with-colon"]);
+    expect(updated).toContain('scope:\n  - "packages/core/**"\n  - "value:with-colon"');
+  });
 });
 
 describe("task write helpers", () => {

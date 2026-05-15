@@ -36,7 +36,10 @@ export type TaskFrontmatterUpdates = Partial<
   Pick<
     Task,
     | "status"
+    | "priority"
+    | "area"
     | "claimed_by"
+    | "scope"
     | "updated_at"
     | "closed_at"
     | "close_reason"
@@ -420,7 +423,7 @@ export function updateTaskFileContents(
     updatedFrontmatter = upsertFrontmatterField(
       updatedFrontmatter,
       field,
-      serializeFrontmatterScalar(field, value),
+      serializeFrontmatterValue(field, value),
     );
   }
 
@@ -749,26 +752,38 @@ function appendToMarkdownSection(
 function upsertFrontmatterField(
   frontmatter: string,
   field: string,
-  value: string,
+  valueLines: string[],
 ): string {
-  const fieldPattern = new RegExp(`^${escapeRegExp(field)}:.*$`, "m");
-  if (!fieldPattern.test(frontmatter)) {
-    return `${frontmatter}\n${field}: ${value}`;
+  const lines = frontmatter.split(/\r?\n/);
+  const fieldIndex = lines.findIndex((line) => line.startsWith(`${field}:`));
+
+  if (fieldIndex === -1) {
+    return `${frontmatter}\n${valueLines.join("\n")}`;
   }
 
-  return frontmatter.replace(fieldPattern, `${field}: ${value}`);
+  let endIndex = fieldIndex + 1;
+  while (endIndex < lines.length && /^\s+/.test(lines[endIndex])) {
+    endIndex += 1;
+  }
+  lines.splice(fieldIndex, endIndex - fieldIndex, ...valueLines);
+  return lines.join("\n");
 }
 
-function serializeFrontmatterScalar(field: string, value: string): string {
+function serializeFrontmatterValue(field: string, value: string | string[]): string[] {
+  if (Array.isArray(value)) {
+    return formatYamlArray(field, value);
+  }
+
   if (
     field === "claimed_by" ||
+    field === "area" ||
     field === "close_reason" ||
     field === "blocked_reason" ||
     field === "review_reason"
   ) {
-    return JSON.stringify(value);
+    return [`${field}: ${JSON.stringify(value)}`];
   }
-  return value;
+  return [`${field}: ${value}`];
 }
 
 function escapeRegExp(value: string): string {
