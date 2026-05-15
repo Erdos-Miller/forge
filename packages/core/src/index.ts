@@ -63,10 +63,19 @@ export interface DependencyCycleDiagnostic {
   taskIds: string[];
 }
 
+export type TaskGraphDiagnostic =
+  | ({ kind: "missing_dependency" } & MissingDependencyDiagnostic)
+  | ({ kind: "duplicate_task_id" } & DuplicateTaskIdDiagnostic)
+  | ({ kind: "dependency_cycle" } & DependencyCycleDiagnostic);
+
 export interface TaskGraphAnalysis {
   tasksById: Map<string, Task>;
+  childrenByParent: Map<string, string[]>;
+  dependentsById: Map<string, string[]>;
   readyTaskIds: string[];
   blockersByTaskId: Map<string, string[]>;
+  downstreamUnblockCountsByTaskId: Map<string, number>;
+  diagnostics: TaskGraphDiagnostic[];
   missingDependencies: MissingDependencyDiagnostic[];
   dependencyCycles: DependencyCycleDiagnostic[];
   duplicateTaskIds: DuplicateTaskIdDiagnostic[];
@@ -376,8 +385,9 @@ export async function completeTaskFrom(
 export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
   const tasksById = new Map<string, Task>();
   const sourcePathsByTaskId = new Map<string, string[]>();
+  const sortedTasks = tasks.slice().sort(compareTasks);
 
-  for (const task of tasks) {
+  for (const task of sortedTasks) {
     const sourcePaths = sourcePathsByTaskId.get(task.id) ?? [];
     sourcePaths.push(task.sourcePath);
     sourcePathsByTaskId.set(task.id, sourcePaths);
@@ -394,15 +404,24 @@ export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
     .map(([taskId, sourcePaths]) => ({ taskId, sourcePaths }));
   const duplicateIds = new Set(duplicateTaskIds.map((diagnostic) => diagnostic.taskId));
 
-  const missingDependencies = findMissingDependencies(tasks, tasksById);
+  const childrenByParent = buildChildrenByParent(sortedTasks);
+  const dependentsById = buildDependentsById(sortedTasks);
+  const downstreamUnblockCountsByTaskId =
+    countDownstreamUnblocks(tasksById, dependentsById);
+  const missingDependencies = findMissingDependencies(sortedTasks, tasksById);
   const missingByTaskId = groupMissingDependencies(missingDependencies);
   const dependencyCycles = findDependencyCycles(tasksById);
   const cycleMessagesByTaskId = groupCycleMessages(dependencyCycles);
+  const diagnostics = buildTaskGraphDiagnostics(
+    missingDependencies,
+    duplicateTaskIds,
+    dependencyCycles,
+  );
 
   const blockersByTaskId = new Map<string, string[]>();
   const readyTaskIds: string[] = [];
 
-  for (const task of tasks) {
+  for (const task of sortedTasks) {
     const blockers = getTaskBlockersFromDiagnostics(
       task,
       tasksById,
@@ -419,8 +438,12 @@ export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
 
   return {
     tasksById,
+    childrenByParent,
+    dependentsById,
     readyTaskIds,
     blockersByTaskId,
+    downstreamUnblockCountsByTaskId,
+    diagnostics,
     missingDependencies,
     dependencyCycles,
     duplicateTaskIds,
@@ -435,7 +458,6 @@ export function getReadyTasks(tasks: Task[]): Task[] {
 export function rankReadyTasks(tasks: Task[]): Task[] {
   const analysis = analyzeTasks(tasks);
   const readyTaskIds = new Set(analysis.readyTaskIds);
-  const downstreamCounts = countDownstreamDependencies(tasks);
 
   return tasks
     .filter((task) => readyTaskIds.has(task.id))
@@ -447,7 +469,8 @@ export function rankReadyTasks(tasks: Task[]): Task[] {
       }
 
       const downstreamDelta =
-        (downstreamCounts.get(right.id) ?? 0) - (downstreamCounts.get(left.id) ?? 0);
+        (analysis.downstreamUnblockCountsByTaskId.get(right.id) ?? 0) -
+        (analysis.downstreamUnblockCountsByTaskId.get(left.id) ?? 0);
       if (downstreamDelta !== 0) {
         return downstreamDelta;
       }
@@ -573,6 +596,93 @@ function findMissingDependencies(
   }
 
   return missingDependencies;
+}
+
+function buildChildrenByParent(tasks: Task[]): Map<string, string[]> {
+  const childrenByParent = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    if (!task.parent.trim()) {
+      continue;
+    }
+    const children = childrenByParent.get(task.parent) ?? [];
+    children.push(task.id);
+    childrenByParent.set(task.parent, children);
+  }
+
+  return sortStringArrayMap(childrenByParent);
+}
+
+function buildDependentsById(tasks: Task[]): Map<string, string[]> {
+  const dependentsById = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    for (const dependencyId of task.depends_on) {
+      const dependents = dependentsById.get(dependencyId) ?? [];
+      dependents.push(task.id);
+      dependentsById.set(dependencyId, dependents);
+    }
+  }
+
+  return sortStringArrayMap(dependentsById);
+}
+
+function countDownstreamUnblocks(
+  tasksById: Map<string, Task>,
+  dependentsById: Map<string, string[]>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const taskId of Array.from(tasksById.keys()).sort()) {
+    const downstreamTaskIds = new Set<string>();
+    collectDownstreamDependents(taskId, dependentsById, downstreamTaskIds);
+    counts.set(taskId, downstreamTaskIds.size);
+  }
+
+  return counts;
+}
+
+function collectDownstreamDependents(
+  taskId: string,
+  dependentsById: Map<string, string[]>,
+  downstreamTaskIds: Set<string>,
+): void {
+  for (const dependentId of dependentsById.get(taskId) ?? []) {
+    if (downstreamTaskIds.has(dependentId)) {
+      continue;
+    }
+    downstreamTaskIds.add(dependentId);
+    collectDownstreamDependents(dependentId, dependentsById, downstreamTaskIds);
+  }
+}
+
+function buildTaskGraphDiagnostics(
+  missingDependencies: MissingDependencyDiagnostic[],
+  duplicateTaskIds: DuplicateTaskIdDiagnostic[],
+  dependencyCycles: DependencyCycleDiagnostic[],
+): TaskGraphDiagnostic[] {
+  return [
+    ...missingDependencies.map((diagnostic) => ({
+      kind: "missing_dependency" as const,
+      ...diagnostic,
+    })),
+    ...duplicateTaskIds.map((diagnostic) => ({
+      kind: "duplicate_task_id" as const,
+      ...diagnostic,
+    })),
+    ...dependencyCycles.map((diagnostic) => ({
+      kind: "dependency_cycle" as const,
+      ...diagnostic,
+    })),
+  ];
+}
+
+function sortStringArrayMap(map: Map<string, string[]>): Map<string, string[]> {
+  return new Map(
+    Array.from(map.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, values]) => [key, values.slice().sort()]),
+  );
 }
 
 function groupMissingDependencies(
@@ -705,18 +815,6 @@ function getTaskBlockersFromDiagnostics(
   return blockers;
 }
 
-function countDownstreamDependencies(tasks: Task[]): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const task of tasks) {
-    for (const dependencyId of task.depends_on) {
-      counts.set(dependencyId, (counts.get(dependencyId) ?? 0) + 1);
-    }
-  }
-
-  return counts;
-}
-
 function priorityRank(priority: TaskPriority): number {
   switch (priority) {
     case "urgent":
@@ -728,6 +826,14 @@ function priorityRank(priority: TaskPriority): number {
     case "low":
       return 3;
   }
+}
+
+function compareTasks(left: Task, right: Task): number {
+  const idDelta = left.id.localeCompare(right.id);
+  if (idDelta !== 0) {
+    return idDelta;
+  }
+  return left.sourcePath.localeCompare(right.sourcePath);
 }
 
 export function validateTask(

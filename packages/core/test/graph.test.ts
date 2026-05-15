@@ -30,6 +30,29 @@ function task(overrides: Partial<Task> & { id: string }): Task {
 }
 
 describe("analyzeTasks", () => {
+  test("builds parent children, dependency dependents, and downstream unblock counts", () => {
+    const tasks = [
+      task({ id: "F-0003", parent: "F-0000", depends_on: ["F-0001", "F-0002"] }),
+      task({ id: "F-0002", parent: "F-0000", depends_on: ["F-0001"] }),
+      task({ id: "F-0001", parent: "F-0000" }),
+      task({ id: "F-0004", parent: "F-0003", depends_on: ["F-0003"] }),
+    ];
+    const analysis = analyzeTasks(tasks);
+
+    expect(analysis.tasksById.get("F-0001")?.title).toBe("F-0001");
+    expect(analysis.childrenByParent.get("F-0000")).toEqual([
+      "F-0001",
+      "F-0002",
+      "F-0003",
+    ]);
+    expect(analysis.childrenByParent.get("F-0003")).toEqual(["F-0004"]);
+    expect(analysis.dependentsById.get("F-0001")).toEqual(["F-0002", "F-0003"]);
+    expect(analysis.dependentsById.get("F-0003")).toEqual(["F-0004"]);
+    expect(analysis.downstreamUnblockCountsByTaskId.get("F-0001")).toBe(3);
+    expect(analysis.downstreamUnblockCountsByTaskId.get("F-0002")).toBe(2);
+    expect(analysis.downstreamUnblockCountsByTaskId.get("F-0004")).toBe(0);
+  });
+
   test("marks an open unclaimed task with no dependencies as ready", () => {
     const tasks = [task({ id: "F-0001" })];
     const analysis = analyzeTasks(tasks);
@@ -83,6 +106,9 @@ describe("analyzeTasks", () => {
     expect(analysis.missingDependencies).toEqual([
       { taskId: "F-0002", dependencyId: "F-9999" },
     ]);
+    expect(analysis.diagnostics).toEqual([
+      { kind: "missing_dependency", taskId: "F-0002", dependencyId: "F-9999" },
+    ]);
     expect(getTaskBlockers(tasks[0], analysis)).toContain(
       "missing dependency F-9999",
     );
@@ -99,6 +125,13 @@ describe("analyzeTasks", () => {
     expect(analysis.duplicateTaskIds).toEqual([
       { taskId: "F-0001", sourcePaths: ["one.md", "two.md"] },
     ]);
+    expect(analysis.diagnostics).toEqual([
+      {
+        kind: "duplicate_task_id",
+        taskId: "F-0001",
+        sourcePaths: ["one.md", "two.md"],
+      },
+    ]);
     expect(getTaskBlockers(tasks[0], analysis)).toContain("duplicate task id F-0001");
   });
 
@@ -108,6 +141,9 @@ describe("analyzeTasks", () => {
 
     expect(analysis.readyTaskIds).toEqual([]);
     expect(analysis.dependencyCycles).toEqual([{ taskIds: ["F-0001", "F-0001"] }]);
+    expect(analysis.diagnostics).toEqual([
+      { kind: "dependency_cycle", taskIds: ["F-0001", "F-0001"] },
+    ]);
     expect(getTaskBlockers(tasks[0], analysis)).toContain(
       "dependency cycle: F-0001 -> F-0001",
     );

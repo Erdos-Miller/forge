@@ -2,7 +2,7 @@
 id: F-0011
 title: Extract task graph engine
 kind: task
-status: open
+status: done
 priority: urgent
 parent: F-0000
 depends_on:
@@ -13,8 +13,8 @@ scope:
   - packages/core/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T03:59:25.224Z
+closed_at: 2026-05-15T03:59:25.224Z
 close_reason: ""
 ---
 
@@ -42,13 +42,14 @@ Depends on `F-0010` so the engine supports the robot JSON contracts rather than 
 
 ## Verification
 
-- Run `bun test` in `packages/core`.
-- Confirm existing CLI tests still pass after core graph extraction.
+- `bun test` passed in `packages/core`.
+- `bun test packages/cli/test/cli.test.ts` passed from the repo root.
 
 ## Notes
 
-This is an engine refactor. Avoid adding new CLI commands here except minimal exports needed for tests.
+Implemented the graph model inside `analyzeTasks` without adding CLI commands. The model now exposes parent-child edges, direct dependency dependents, blockers, typed diagnostics, and transitive downstream unblock counts.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Claimed and implemented 2026-05-15.
