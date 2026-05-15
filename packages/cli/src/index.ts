@@ -26,22 +26,161 @@ export interface CliOptions {
   stderr: (message: string) => void;
 }
 
-const USAGE = [
-  "Usage:",
-  "  forge list",
-  "  forge ready",
-  "  forge queue --json",
-  "  forge next [--claim] [--by <name>] --json",
-  "  forge show <id> --json",
-  "  forge blockers <id> --json",
-  "  forge deps <id> --json",
-  "  forge create <id> --title <title> [options]",
-  "  forge prompt <id|next>",
-  "  forge loop-prompt",
-  "  forge claim <id> [--by <name>]",
-  "  forge done <id>",
-  "  forge web [--host <host>] [--port <port>] [--dir <path>]",
-].join("\n");
+export type CommandClassification = "read" | "write" | "serve";
+
+export interface CommandMetadata {
+  name: string;
+  usage: string;
+  description: string;
+  classification: CommandClassification;
+  supportsJson: boolean;
+  examples: string[];
+  agentPurpose: string;
+}
+
+export const COMMANDS = [
+  {
+    name: "list",
+    usage: "forge list",
+    description: "List all task files.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge list"],
+    agentPurpose: "Inspect repo task state.",
+  },
+  {
+    name: "ready",
+    usage: "forge ready",
+    description: "List currently ready task files.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge ready"],
+    agentPurpose: "Find work that can be claimed without robot JSON.",
+  },
+  {
+    name: "queue",
+    usage: "forge queue --json",
+    description: "Emit the ranked ready queue.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge queue --json"],
+    agentPurpose: "Inspect ranked work and graph diagnostics.",
+  },
+  {
+    name: "next",
+    usage: "forge next [--claim] [--by <name>] --json",
+    description: "Return or claim the top ranked ready task.",
+    classification: "write",
+    supportsJson: true,
+    examples: ["forge next --json", "forge next --claim --by codex --json"],
+    agentPurpose: "Drive the execution loop by selecting the next task.",
+  },
+  {
+    name: "show",
+    usage: "forge show <id> --json",
+    description: "Emit one task document.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge show F-0001 --json"],
+    agentPurpose: "Load task context without parsing Markdown manually.",
+  },
+  {
+    name: "blockers",
+    usage: "forge blockers <id> --json",
+    description: "Emit blockers for one task.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge blockers F-0001 --json"],
+    agentPurpose: "Explain why a task is not ready.",
+  },
+  {
+    name: "deps",
+    usage: "forge deps <id> --json",
+    description: "Emit direct dependencies and dependents.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge deps F-0001 --json"],
+    agentPurpose: "Inspect local graph context.",
+  },
+  {
+    name: "create",
+    usage: "forge create <id> --title <title> [options]",
+    description: "Create a canonical task file.",
+    classification: "write",
+    supportsJson: false,
+    examples: ['forge create F-0006 --title "Add task creation"'],
+    agentPurpose: "Add planned work with the standard task shape.",
+  },
+  {
+    name: "prompt",
+    usage: "forge prompt <id|next>",
+    description: "Emit a reusable task prompt.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge prompt next", "forge prompt F-0001"],
+    agentPurpose: "Start an agent on a concrete task.",
+  },
+  {
+    name: "loop-prompt",
+    usage: "forge loop-prompt",
+    description: "Emit the generic Forge execution loop prompt.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge loop-prompt"],
+    agentPurpose: "Start an agent goal that keeps taking ready tasks.",
+  },
+  {
+    name: "claim",
+    usage: "forge claim <id> [--by <name>]",
+    description: "Claim one task.",
+    classification: "write",
+    supportsJson: false,
+    examples: ["forge claim F-0001 --by codex"],
+    agentPurpose: "Reserve work before editing files.",
+  },
+  {
+    name: "done",
+    usage: "forge done <id>",
+    description: "Mark one task done.",
+    classification: "write",
+    supportsJson: false,
+    examples: ["forge done F-0001"],
+    agentPurpose: "Close a task after verification.",
+  },
+  {
+    name: "web",
+    usage: "forge web [--host <host>] [--port <port>] [--dir <path>]",
+    description: "Serve the local web viewer.",
+    classification: "serve",
+    supportsJson: false,
+    examples: ["forge web", "forge web --dir /path/to/repo --port 5175"],
+    agentPurpose: "Open a human review surface for the task graph.",
+  },
+] satisfies CommandMetadata[];
+
+export type CommandName = (typeof COMMANDS)[number]["name"];
+
+const USAGE = ["Usage:", ...COMMANDS.map((command) => `  ${command.usage}`)].join(
+  "\n",
+);
+
+type CommandHandler = (options: CliOptions, args: string[]) => Promise<number>;
+
+const COMMAND_HANDLERS = {
+  list: listTasks,
+  ready: listReadyTasks,
+  queue,
+  next,
+  show,
+  blockers,
+  deps,
+  create,
+  prompt,
+  "loop-prompt": loopPrompt,
+  claim,
+  done,
+  web,
+} satisfies Record<CommandName, CommandHandler>;
 
 export async function runCli(
   args: string[],
@@ -58,42 +197,18 @@ export async function runCli(
   try {
     const [command, ...rest] = args;
 
-    switch (command) {
-      case "list":
-        return await listTasks(cliOptions, rest);
-      case "ready":
-        return await listReadyTasks(cliOptions, rest);
-      case "queue":
-        return await queue(cliOptions, rest);
-      case "next":
-        return await next(cliOptions, rest);
-      case "show":
-        return await show(cliOptions, rest);
-      case "blockers":
-        return await blockers(cliOptions, rest);
-      case "deps":
-        return await deps(cliOptions, rest);
-      case "create":
-        return await create(cliOptions, rest);
-      case "prompt":
-        return await prompt(cliOptions, rest);
-      case "loop-prompt":
-        return await loopPrompt(cliOptions, rest);
-      case "claim":
-        return await claim(cliOptions, rest);
-      case "done":
-        return await done(cliOptions, rest);
-      case "web":
-        return await web(cliOptions, rest);
-      case "-h":
-      case "--help":
-      case undefined:
-        cliOptions.stdout(USAGE);
-        return command === undefined ? 1 : 0;
-      default:
-        cliOptions.stderr(`unknown command: ${command}\n\n${USAGE}`);
-        return 1;
+    if (command === "-h" || command === "--help" || command === undefined) {
+      cliOptions.stdout(USAGE);
+      return command === undefined ? 1 : 0;
     }
+
+    const handler = COMMAND_HANDLERS[command as CommandName];
+    if (handler) {
+      return await handler(cliOptions, rest);
+    }
+
+    cliOptions.stderr(`unknown command: ${command}\n\n${USAGE}`);
+    return 1;
   } catch (error) {
     cliOptions.stderr(error instanceof Error ? error.message : String(error));
     return 1;

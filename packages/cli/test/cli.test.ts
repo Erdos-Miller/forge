@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseTaskFile } from "@forge/core";
-import { runCli } from "../src";
+import { COMMANDS, runCli } from "../src";
 
 const tempDirs: string[] = [];
 
@@ -105,6 +105,41 @@ function parseStderrJson(result: { stderr: string[] }): any {
 }
 
 describe("forge cli", () => {
+  test("command registry covers the runnable CLI surface", () => {
+    expect(COMMANDS.map((command) => command.name)).toEqual([
+      "list",
+      "ready",
+      "queue",
+      "next",
+      "show",
+      "blockers",
+      "deps",
+      "create",
+      "prompt",
+      "loop-prompt",
+      "claim",
+      "done",
+      "web",
+    ]);
+
+    for (const command of COMMANDS) {
+      expect(command.usage.startsWith(`forge ${command.name}`)).toBe(true);
+      expect(command.description.length).toBeGreaterThan(0);
+      expect(command.examples.length).toBeGreaterThan(0);
+      expect(command.agentPurpose.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("top-level usage is generated from registered commands in order", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["--help"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual([
+      ["Usage:", ...COMMANDS.map((command) => `  ${command.usage}`)].join("\n"),
+    ]);
+  });
+
   test("list prints all tasks", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["list"]);
