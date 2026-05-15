@@ -79,6 +79,121 @@ async function makeRepo(): Promise<{ repoRoot: string; nestedDir: string }> {
   return { repoRoot, nestedDir };
 }
 
+async function makeMonorepoRepo(): Promise<{
+  repoRoot: string;
+  toolhubDir: string;
+  eclipsetouchDir: string;
+}> {
+  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-monorepo-guidance-"));
+  tempDirs.push(repoRoot);
+
+  const forgeDir = path.join(repoRoot, ".forge");
+  const guidanceDir = path.join(forgeDir, "guidance");
+  const tasksDir = path.join(forgeDir, "tasks");
+  const toolhubDir = path.join(repoRoot, "product", "toolhub", "apps", "web", "src");
+  const eclipsetouchDir = path.join(repoRoot, "product", "eclipsetouch", "src");
+  await Promise.all(
+    [guidanceDir, tasksDir, toolhubDir, eclipsetouchDir].map((dir) =>
+      fs.mkdir(dir, { recursive: true }),
+    ),
+  );
+
+  await fs.writeFile(
+    path.join(forgeDir, "guidance.yml"),
+    [
+      "version: 1",
+      "routes:",
+      "  - include: guidance/toolhub-widget.md",
+      "    when:",
+      "      path:",
+      "        - product/toolhub/packages/frontend/**",
+      "  - include: guidance/toolhub-project.md",
+      "    when:",
+      "      path:",
+      "        - product/toolhub/**",
+      "  - include: guidance/shared-frontend.md",
+      "    when:",
+      "      path:",
+      "        - product/toolhub/packages/frontend/**",
+      "        - packages/frontend/**",
+      "  - include: guidance/toolhub-cwd.md",
+      "    when:",
+      "      cwd:",
+      "        - product/toolhub/**",
+      "  - include: guidance/eclipsetouch-cwd.md",
+      "    when:",
+      "      cwd:",
+      "        - product/eclipsetouch/**",
+      "  - include: guidance/eclipsetouch-task.md",
+      "    when:",
+      "      area:",
+      "        - eclipsetouch",
+      "      scope:",
+      "        - product/eclipsetouch/**",
+      "  - include: guidance/rust-library.md",
+      "    when:",
+      "      area:",
+      "        - rust",
+      "      scope:",
+      "        - lib/rust/**",
+      "  - include: guidance/shared-frontend-task.md",
+      "    when:",
+      "      scope:",
+      "        - packages/frontend/**",
+      "",
+    ].join("\n"),
+  );
+
+  await writePromptSummary(guidanceDir, "toolhub-widget.md", "Toolhub widget guidance.");
+  await writePromptSummary(guidanceDir, "toolhub-project.md", "Toolhub project guidance.");
+  await writePromptSummary(guidanceDir, "shared-frontend.md", "Shared frontend guidance.");
+  await writePromptSummary(guidanceDir, "toolhub-cwd.md", "Toolhub cwd guidance.");
+  await writePromptSummary(guidanceDir, "eclipsetouch-cwd.md", "EclipseTouch cwd guidance.");
+  await writePromptSummary(guidanceDir, "eclipsetouch-task.md", "EclipseTouch task guidance.");
+  await writePromptSummary(guidanceDir, "rust-library.md", "Rust library guidance.");
+  await writePromptSummary(guidanceDir, "shared-frontend-task.md", "Frontend task guidance.");
+  await fs.writeFile(
+    path.join(tasksDir, "F-1001-rust.md"),
+    taskFile({
+      id: "F-1001",
+      title: "Rust task",
+      area: "rust",
+      scope: ["lib/rust/fluxchart/**"],
+    }),
+  );
+  await fs.writeFile(
+    path.join(tasksDir, "F-1002-frontend.md"),
+    taskFile({
+      id: "F-1002",
+      title: "Frontend task",
+      area: "frontend",
+      scope: ["packages/frontend/**"],
+    }),
+  );
+  await fs.writeFile(
+    path.join(tasksDir, "F-1003-eclipsetouch.md"),
+    taskFile({
+      id: "F-1003",
+      title: "EclipseTouch task",
+      area: "eclipsetouch",
+      scope: ["product/eclipsetouch/**"],
+    }),
+  );
+
+  return { repoRoot, toolhubDir, eclipsetouchDir };
+}
+
+async function writePromptSummary(
+  guidanceDir: string,
+  filename: string,
+  summary: string,
+): Promise<void> {
+  await fs.writeFile(
+    path.join(guidanceDir, filename),
+    [`# ${filename}`, "", "## Prompt Summary", "", summary, ""].join("\n"),
+  );
+}
+
 function taskFile(options: {
   id: string;
   title: string;
@@ -153,6 +268,67 @@ describe("resolveGuidance", () => {
     });
 
     expect(bundle.matches[0].content).toContain("# Core");
+  });
+
+  test("resolves monorepo guidance by project, library, cwd, task, and path", async () => {
+    const { repoRoot, toolhubDir, eclipsetouchDir } = await makeMonorepoRepo();
+    const toolhubBundle = await resolveGuidance({
+      cwd: toolhubDir,
+      paths: [
+        "product/toolhub/packages/frontend/src/Widget.tsx",
+        "packages/frontend/src/Button.tsx",
+      ],
+    });
+
+    expect(toolhubBundle.matches.map((match) => match.path)).toEqual([
+      "guidance/toolhub-widget.md",
+      "guidance/toolhub-project.md",
+      "guidance/shared-frontend.md",
+      "guidance/toolhub-cwd.md",
+    ]);
+    expect(toolhubBundle.matches.map((match) => match.reasons)).toEqual([
+      ["path:product/toolhub/packages/frontend/src/Widget.tsx"],
+      ["path:product/toolhub/packages/frontend/src/Widget.tsx"],
+      ["path:product/toolhub/packages/frontend/src/Widget.tsx"],
+      ["cwd:product/toolhub/apps/web/src"],
+    ]);
+
+    const eclipsetouchCwdBundle = await resolveGuidance({ cwd: eclipsetouchDir });
+    expect(eclipsetouchCwdBundle.matches.map((match) => match.path)).toEqual([
+      "guidance/eclipsetouch-cwd.md",
+    ]);
+    expect(eclipsetouchCwdBundle.matches[0].reasons).toEqual([
+      "cwd:product/eclipsetouch/src",
+    ]);
+
+    const rustTaskBundle = await resolveGuidance({ cwd: repoRoot, taskId: "F-1001" });
+    expect(rustTaskBundle.matches.map((match) => match.path)).toEqual([
+      "guidance/rust-library.md",
+    ]);
+    expect(rustTaskBundle.matches[0].reasons).toEqual([
+      "area:rust",
+      "scope:lib/rust/fluxchart/**",
+    ]);
+
+    const frontendTaskBundle = await resolveGuidance({ cwd: repoRoot, taskId: "F-1002" });
+    expect(frontendTaskBundle.matches.map((match) => match.path)).toEqual([
+      "guidance/shared-frontend-task.md",
+    ]);
+    expect(frontendTaskBundle.matches[0].reasons).toEqual([
+      "scope:packages/frontend/**",
+    ]);
+
+    const eclipsetouchTaskBundle = await resolveGuidance({
+      cwd: repoRoot,
+      taskId: "F-1003",
+    });
+    expect(eclipsetouchTaskBundle.matches.map((match) => match.path)).toEqual([
+      "guidance/eclipsetouch-task.md",
+    ]);
+    expect(eclipsetouchTaskBundle.matches[0].reasons).toEqual([
+      "area:eclipsetouch",
+      "scope:product/eclipsetouch/**",
+    ]);
   });
 
   test("returns diagnostics for missing config and missing include files", async () => {
