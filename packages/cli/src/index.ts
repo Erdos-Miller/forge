@@ -34,10 +34,13 @@ import {
   parseDoneArgs,
   parseGuidanceArgs,
   parseIdJsonArgs,
+  parseReadyArgs,
   parseNextArgs,
   parseReasonCommandArgs,
   parseSetArgs,
+  parseTaskListArgs,
   parseWebArgs,
+  type LinkMode,
 } from "./args";
 import {
   getGraphDoctorDiagnostics,
@@ -76,6 +79,7 @@ export interface CliOptions {
   cwd: string;
   env: Record<string, string | undefined>;
   now: Date;
+  stdoutIsTTY: boolean;
   stdout: (message: string) => void;
   stderr: (message: string) => void;
   stdin: () => Promise<string>;
@@ -118,6 +122,7 @@ export async function runCli(
     cwd: options.cwd ?? process.cwd(),
     env: options.env ?? process.env,
     now: options.now ?? new Date(),
+    stdoutIsTTY: options.stdoutIsTTY ?? process.stdout.isTTY === true,
     stdout: options.stdout ?? ((message) => console.log(message)),
     stderr: options.stderr ?? ((message) => console.error(message)),
     stdin: options.stdin ?? (() => Bun.stdin.text()),
@@ -170,47 +175,34 @@ async function help(options: CliOptions, args: string[]): Promise<number> {
 }
 
 async function listTasks(options: CliOptions, args: string[]): Promise<number> {
-  const mode = parseListMode(args);
-  if (!mode) {
-    options.stderr("usage: forge list [--all|--closed]");
+  const parsed = parseTaskListArgs(args);
+  if (!parsed) {
+    options.stderr("usage: forge list [--all|--closed] [--links=auto|always|never]");
     return 1;
   }
 
-  const tasks = await loadTasksFrom(options.cwd);
-  writeTaskLines(options, filterListTasks(tasks, mode));
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await loadTasksFrom(repoRoot);
+  const linkBaseUrl = await getTaskLinkBaseUrl(options, repoRoot, parsed.links);
+  writeTaskLines(options, filterListTasks(tasks, parsed.mode), linkBaseUrl);
   return 0;
 }
 
 async function listReadyTasks(options: CliOptions, args: string[]): Promise<number> {
-  if (args.length > 0) {
-    options.stderr("usage: forge ready");
+  const parsed = parseReadyArgs(args);
+  if (!parsed) {
+    options.stderr("usage: forge ready [--links=auto|always|never]");
     return 1;
   }
 
-  const tasks = await loadTasksFrom(options.cwd);
-  writeTaskLines(options, getReadyTasks(tasks));
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await loadTasksFrom(repoRoot);
+  const linkBaseUrl = await getTaskLinkBaseUrl(options, repoRoot, parsed.links);
+  writeTaskLines(options, getReadyTasks(tasks), linkBaseUrl);
   return 0;
 }
 
-type ListMode = "active" | "all" | "closed";
-
-function parseListMode(args: string[]): ListMode | null {
-  if (args.length === 0) {
-    return "active";
-  }
-  if (args.length !== 1) {
-    return null;
-  }
-  if (args[0] === "--all") {
-    return "all";
-  }
-  if (args[0] === "--closed") {
-    return "closed";
-  }
-  return null;
-}
-
-function filterListTasks(tasks: Task[], mode: ListMode): Task[] {
+function filterListTasks(tasks: Task[], mode: "active" | "all" | "closed"): Task[] {
   if (mode === "all") {
     return tasks;
   }
@@ -826,19 +818,39 @@ function writeDependencyEditError(options: CliOptions, error: unknown): number {
   return 1;
 }
 
-function writeTaskLines(options: CliOptions, tasks: Task[]): void {
+function writeTaskLines(options: CliOptions, tasks: Task[], linkBaseUrl: string | null): void {
   for (const task of tasks) {
-    options.stdout(formatTaskLine(task));
+    options.stdout(formatTaskLine(task, linkBaseUrl));
   }
 }
 
-function formatTaskLine(task: Task): string {
-  const fields = [task.id, task.status, task.claimed_by || "-"];
+function formatTaskLine(task: Task, linkBaseUrl: string | null): string {
+  const fields = [formatTaskId(task.id, linkBaseUrl), task.status, task.claimed_by || "-"];
   if (task.area) {
     fields.push(task.area);
   }
   fields.push(task.title);
   return fields.join("\t");
+}
+
+async function getTaskLinkBaseUrl(
+  options: CliOptions,
+  repoRoot: string,
+  mode: LinkMode,
+): Promise<string | null> {
+  if (mode === "never" || (mode === "auto" && !options.stdoutIsTTY)) {
+    return null;
+  }
+  return (await discoverWebSession(repoRoot, options.env))?.baseUrl ?? null;
+}
+
+function formatTaskId(taskId: string, linkBaseUrl: string | null): string {
+  if (!linkBaseUrl) {
+    return taskId;
+  }
+  const url = new URL(linkBaseUrl);
+  url.searchParams.set("task", taskId);
+  return `\u001B]8;;${url.toString()}\u0007${taskId}\u001B]8;;\u0007`;
 }
 
 if (import.meta.main) {

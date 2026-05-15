@@ -126,13 +126,18 @@ async function run(
   cwd: string,
   args: string[],
   stdin = "",
+  options: {
+    env?: Record<string, string | undefined>;
+    stdoutIsTTY?: boolean;
+  } = {},
 ): Promise<{ code: number; stdout: string[]; stderr: string[] }> {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await runCli(args, {
     cwd,
-    env: { USER: "tester" },
+    env: { USER: "tester", ...options.env },
     now: new Date("2026-05-14T12:00:00Z"),
+    stdoutIsTTY: options.stdoutIsTTY ?? false,
     stdout: (message) => stdout.push(message),
     stderr: (message) => stderr.push(message),
     stdin: async () => stdin,
@@ -314,12 +319,12 @@ describe("forge cli", () => {
     expect(await run(repoRoot, ["list", "--all", "--closed"])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge list [--all|--closed]"],
+      stderr: ["usage: forge list [--all|--closed] [--links=auto|always|never]"],
     });
     expect(await run(repoRoot, ["list", "--cwd", repoRoot])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge list [--all|--closed]"],
+      stderr: ["usage: forge list [--all|--closed] [--links=auto|always|never]"],
     });
   });
 
@@ -329,7 +334,7 @@ describe("forge cli", () => {
     expect(await run(repoRoot, ["ready", "--cwd", repoRoot])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge ready"],
+      stderr: ["usage: forge ready [--links=auto|always|never]"],
     });
   });
 

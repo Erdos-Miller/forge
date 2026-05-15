@@ -2,7 +2,7 @@
 id: F-0061
 title: Render terminal task hyperlinks
 kind: task
-status: open
+status: done
 priority: high
 parent: F-0000
 depends_on:
@@ -13,9 +13,9 @@ scope:
   - packages/cli/**
   - .forge/tasks/**
 created_at: 2026-05-15T16:17:58-05:00
-updated_at: 2026-05-15T16:17:58-05:00
-closed_at:
-close_reason:
+updated_at: 2026-05-15T21:39:56.579Z
+closed_at: 2026-05-15T21:39:56.579Z
+close_reason: "Terminal task links added for list and ready; JSON unchanged; focused tests, harness, live smoke, and quality pass."
 blocked_reason: ""
 review_reason: ""
 ---
@@ -75,6 +75,26 @@ Depends on `F-0060` because terminal links need reliable worktree session discov
 ## Notes
 
 This task should not add browser control, WebSocket navigation, or changes to robot JSON contracts.
+
+Implemented terminal task links for human-readable task listings.
+
+Decisions:
+- Added `--links=auto|always|never` to `forge list` and `forge ready`.
+- `auto` only links when stdout is a TTY and a live web session is discoverable.
+- `always` still falls back to plain IDs when no live session exists.
+- Links use OSC 8 around only the task ID and target `${baseUrl}?task=<id>`.
+- JSON commands stay on their existing robot output paths.
+- Moved terminal-link tests into a separate test file to stay under the readability ratchet instead of adding an exception.
+
+Verification:
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/task-links.test.ts packages/cli/test/web-session.test.ts`
+- `bun run harness:cli`
+- Live smoke: started `forge web --host 127.0.0.1 --port 5191 --dir <temp repo>`, confirmed `forge list --links=always` and `forge ready --links=always` emitted OSC 8 links to `http://127.0.0.1:5191/?task=T-0001`, and confirmed that URL selected the task in the web UI.
+- `bun run quality:check`
+
+Closeout review:
+- Stop condition did not trigger; the changed commands are human-readable listings, and JSON outputs were covered by non-regression tests.
+- Human review trigger did not apply; links default to `auto`, which does not emit links in non-TTY output.
 
 ## History
 

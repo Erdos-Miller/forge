@@ -38,6 +38,70 @@ export function parseClaimArgs(
   return { taskId, claimedBy };
 }
 
+export type LinkMode = "auto" | "always" | "never";
+
+export interface TaskListArgs {
+  mode: "active" | "all" | "closed";
+  links: LinkMode;
+}
+
+export function parseTaskListArgs(args: string[]): TaskListArgs | null {
+  let mode: TaskListArgs["mode"] = "active";
+  let links: LinkMode = "auto";
+
+  for (const arg of args) {
+    if (arg === "--all") {
+      if (mode === "closed") {
+        return null;
+      }
+      mode = "all";
+      continue;
+    }
+    if (arg === "--closed") {
+      if (mode === "all") {
+        return null;
+      }
+      mode = "closed";
+      continue;
+    }
+    if (arg.startsWith("--links=")) {
+      const parsed = parseLinkMode(arg.slice("--links=".length));
+      if (!parsed) {
+        return null;
+      }
+      links = parsed;
+      continue;
+    }
+    return null;
+  }
+
+  return { mode, links };
+}
+
+export function parseReadyArgs(args: string[]): { links: LinkMode } | null {
+  let links: LinkMode = "auto";
+
+  for (const arg of args) {
+    if (!arg.startsWith("--links=")) {
+      return null;
+    }
+    const parsed = parseLinkMode(arg.slice("--links=".length));
+    if (!parsed) {
+      return null;
+    }
+    links = parsed;
+  }
+
+  return { links };
+}
+
+function parseLinkMode(value: string): LinkMode | null {
+  if (value === "auto" || value === "always" || value === "never") {
+    return value;
+  }
+  return null;
+}
+
 export function parseReasonCommandArgs(
   args: string[],
   usage: string,
