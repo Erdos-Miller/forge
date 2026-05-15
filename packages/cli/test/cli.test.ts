@@ -18,6 +18,8 @@ function taskFile(options: {
   claimed_by?: string;
   depends_on?: string[];
   area?: string;
+  priority?: string;
+  body?: string;
 }): string {
   const dependsOn = options.depends_on?.length
     ? options.depends_on.map((id) => `  - ${id}`).join("\n")
@@ -30,7 +32,7 @@ function taskFile(options: {
     `title: ${options.title}`,
     "kind: task",
     `status: ${options.status ?? "open"}`,
-    "priority: medium",
+    `priority: ${options.priority ?? "medium"}`,
     ...area,
     'parent: ""',
     `depends_on: ${dependsOn === "[]" ? "[]" : "\n" + dependsOn}`,
@@ -41,10 +43,7 @@ function taskFile(options: {
     "updated_at: 2026-05-14T00:00:00-05:00",
     "---",
     "",
-    `# ${options.title}`,
-    "",
-    "Body stays readable.",
-    "",
+    options.body ?? [`# ${options.title}`, "", "Body stays readable.", ""].join("\n"),
   ].join("\n");
 }
 
@@ -95,6 +94,16 @@ async function run(
   return { code, stdout, stderr };
 }
 
+function parseStdoutJson(result: { stdout: string[] }): any {
+  expect(result.stdout).toHaveLength(1);
+  return JSON.parse(result.stdout[0]);
+}
+
+function parseStderrJson(result: { stderr: string[] }): any {
+  expect(result.stderr).toHaveLength(1);
+  return JSON.parse(result.stderr[0]);
+}
+
 describe("forge cli", () => {
   test("list prints all tasks", async () => {
     const { repoRoot } = await makeRepo();
@@ -136,6 +145,162 @@ describe("forge cli", () => {
       stdout: [],
       stderr: ["usage: forge ready"],
     });
+  });
+
+  test("queue --json prints ranked ready tasks with diagnostics", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["queue", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload.ok).toBe(true);
+    expect(payload.version).toBe(1);
+    expect(payload.repoRoot).toBe(repoRoot);
+    expect(payload.tasks.map((task: any) => task.id)).toEqual(["F-0002"]);
+    expect(payload.tasks[0]).toMatchObject({
+      id: "F-0002",
+      title: "Open",
+      claimed_by: null,
+      ready: true,
+      rank: 1,
+      blockers: [],
+      reasons: [
+        { kind: "priority", priority: "medium", rank: 2 },
+        { kind: "downstream_unblock_count", count: 1 },
+        { kind: "no_blockers" },
+      ],
+    });
+    expect(payload.diagnostics).toEqual({
+      missingDependencies: [],
+      dependencyCycles: [],
+      duplicateTaskIds: [],
+    });
+  });
+
+  test("queue --json rejects invalid usage with a robot error", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["queue"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(2);
+    expect(payload.error.code).toBe("usage_error");
+    expect(payload.error.message).toBe("usage: forge queue --json");
+  });
+
+  test("show --json prints a task bundle with markdown sections", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: [
+          "# Open",
+          "",
+          "Intro.",
+          "",
+          "## Why",
+          "",
+          "Because agents need context.",
+          "",
+          "## Verification",
+          "",
+          "- bun test",
+          "",
+        ].join("\n"),
+      }),
+    );
+
+    const result = await run(repoRoot, ["show", "F-0002", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload.task).toMatchObject({
+      id: "F-0002",
+      title: "Open",
+      kind: "task",
+      parent: null,
+      claimed_by: null,
+      depends_on: ["F-0001"],
+      sourcePath: taskPath,
+    });
+    expect(payload.task.body).toContain("## Why");
+    expect(payload.task.sections).toEqual([
+      { title: "Why", body: "Because agents need context." },
+      { title: "Verification", body: "- bun test" },
+    ]);
+  });
+
+  test("show --json reports unknown task ids with robot error shape", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["show", "F-9999", "--json"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(3);
+    expect(payload).toEqual({
+      ok: false,
+      version: 1,
+      error: {
+        code: "task_not_found",
+        message: "task F-9999 not found",
+        details: { taskId: "F-9999" },
+      },
+    });
+  });
+
+  test("blockers --json prints structured blockers for one task", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["blockers", "F-0003", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload).toEqual({
+      ok: true,
+      version: 1,
+      taskId: "F-0003",
+      blockers: [
+        {
+          kind: "dependency_status",
+          message: "dependency F-0002 is open",
+          taskId: "F-0003",
+          dependencyId: "F-0002",
+        },
+      ],
+    });
+  });
+
+  test("blockers --json reports unknown task ids", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["blockers", "F-9999", "--json"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(3);
+    expect(payload.error.code).toBe("task_not_found");
+  });
+
+  test("deps --json prints direct dependencies and dependents", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["deps", "F-0002", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload).toEqual({
+      ok: true,
+      version: 1,
+      taskId: "F-0002",
+      depends_on: [{ id: "F-0001", title: "Done", status: "done" }],
+      dependents: [{ id: "F-0003", title: "Blocked", status: "open" }],
+    });
+  });
+
+  test("deps --json reports unknown task ids", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["deps", "F-9999", "--json"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(3);
+    expect(payload.error.code).toBe("task_not_found");
   });
 
   test("output includes area when present", async () => {

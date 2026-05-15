@@ -2,7 +2,7 @@
 id: F-0013
 title: Add robot queue and introspection commands
 kind: task
-status: open
+status: done
 priority: urgent
 parent: F-0000
 depends_on:
@@ -14,8 +14,8 @@ scope:
   - packages/core/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T04:11:56.183Z
+closed_at: 2026-05-15T04:11:56.183Z
 close_reason: ""
 ---
 
@@ -44,13 +44,15 @@ Depends on `F-0012` because commands should expose ranked queue data rather than
 
 ## Verification
 
-- Run `bun test` in `packages/core` and `packages/cli`.
-- Smoke-check `forge queue --json` from the repo root.
+- `bun test packages/cli/test/cli.test.ts` passed.
+- `bun run quality:check` passed from the repo root.
+- `forge queue --json` returned a ranked JSON payload from the repo root.
 
 ## Notes
 
-Keep output compact and deterministic. Human pretty output can remain minimal or be deferred.
+Added JSON-only `queue`, `show`, `blockers`, and `deps` commands. The queue command exposes the core ranked queue reasons; `show` includes parsed Markdown `##` sections; task lookup failures use the documented robot error envelope and exit `3`.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Claimed and implemented 2026-05-15.

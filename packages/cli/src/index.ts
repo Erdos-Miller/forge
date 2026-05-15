@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import {
+  analyzeTasks,
   claimTaskFrom,
   completeTaskFrom,
   createTaskFrom,
@@ -8,9 +9,11 @@ import {
   findForgeRoot,
   getReadyTasks,
   loadTasksFrom,
+  rankReadyTaskQueue,
   rankReadyTasks,
   type CreateTaskInput,
   type Task,
+  type TaskGraphAnalysis,
   type TaskPriority,
 } from "@forge/core";
 
@@ -26,6 +29,10 @@ const USAGE = [
   "Usage:",
   "  forge list",
   "  forge ready",
+  "  forge queue --json",
+  "  forge show <id> --json",
+  "  forge blockers <id> --json",
+  "  forge deps <id> --json",
   "  forge create <id> --title <title> [options]",
   "  forge prompt <id|next>",
   "  forge loop-prompt",
@@ -54,6 +61,14 @@ export async function runCli(
         return await listTasks(cliOptions, rest);
       case "ready":
         return await listReadyTasks(cliOptions, rest);
+      case "queue":
+        return await queue(cliOptions, rest);
+      case "show":
+        return await show(cliOptions, rest);
+      case "blockers":
+        return await blockers(cliOptions, rest);
+      case "deps":
+        return await deps(cliOptions, rest);
       case "create":
         return await create(cliOptions, rest);
       case "prompt":
@@ -100,6 +115,120 @@ async function listReadyTasks(options: CliOptions, args: string[]): Promise<numb
 
   const tasks = await loadTasksFrom(options.cwd);
   writeTaskLines(options, getReadyTasks(tasks));
+  return 0;
+}
+
+async function queue(options: CliOptions, args: string[]): Promise<number> {
+  if (!isJsonOnly(args)) {
+    return writeJsonUsageError(options, "usage: forge queue --json");
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await loadTasksFrom(repoRoot);
+  const analysis = analyzeTasks(tasks);
+  const entries = rankReadyTaskQueue(tasks);
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      repoRoot,
+      tasks: entries.map((entry) => ({
+        ...toRobotTaskSummary(entry.task),
+        ready: true,
+        rank: entry.rank,
+        blockers: entry.blockers,
+        reasons: entry.reasons,
+      })),
+      diagnostics: toRobotDiagnostics(analysis),
+    }),
+  );
+  return 0;
+}
+
+async function show(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseIdJsonArgs(args, "usage: forge show <id> --json");
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const tasks = await loadTasksFrom(options.cwd);
+  const task = tasks.find((candidate) => candidate.id === parsed.taskId);
+  if (!task) {
+    return writeTaskNotFound(options, parsed.taskId);
+  }
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      task: {
+        ...toRobotTaskSummary(task),
+        kind: task.kind,
+        parent: task.parent || null,
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+        closed_at: task.closed_at || null,
+        close_reason: task.close_reason || null,
+        sourcePath: task.sourcePath,
+        body: task.body,
+        sections: parseMarkdownSections(task.body),
+      },
+    }),
+  );
+  return 0;
+}
+
+async function blockers(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseIdJsonArgs(args, "usage: forge blockers <id> --json");
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const tasks = await loadTasksFrom(options.cwd);
+  const task = tasks.find((candidate) => candidate.id === parsed.taskId);
+  if (!task) {
+    return writeTaskNotFound(options, parsed.taskId);
+  }
+
+  const analysis = analyzeTasks(tasks);
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      taskId: task.id,
+      blockers: toRobotBlockers(task, analysis),
+    }),
+  );
+  return 0;
+}
+
+async function deps(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseIdJsonArgs(args, "usage: forge deps <id> --json");
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const tasks = await loadTasksFrom(options.cwd);
+  const analysis = analyzeTasks(tasks);
+  const task = analysis.tasksById.get(parsed.taskId);
+  if (!task) {
+    return writeTaskNotFound(options, parsed.taskId);
+  }
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      taskId: task.id,
+      depends_on: task.depends_on.map((dependencyId) =>
+        toDependencySummary(dependencyId, analysis.tasksById.get(dependencyId)),
+      ),
+      dependents: (analysis.dependentsById.get(task.id) ?? []).map((dependentId) =>
+        toDependencySummary(dependentId, analysis.tasksById.get(dependentId)),
+      ),
+    }),
+  );
   return 0;
 }
 
@@ -295,6 +424,172 @@ function parsePriority(value: string): TaskPriority {
     return value;
   }
   throw new Error("priority must be one of: urgent, high, medium, low");
+}
+
+function isJsonOnly(args: string[]): boolean {
+  return args.length === 1 && args[0] === "--json";
+}
+
+function parseIdJsonArgs(
+  args: string[],
+  usage: string,
+): { ok: true; taskId: string } | { ok: false; message: string } {
+  const [taskId, jsonFlag, ...extra] = args;
+  if (!taskId || jsonFlag !== "--json" || extra.length > 0) {
+    return { ok: false, message: usage };
+  }
+  return { ok: true, taskId };
+}
+
+function writeJsonUsageError(options: CliOptions, message: string): number {
+  options.stderr(
+    stringifyJson({
+      ok: false,
+      version: 1,
+      error: {
+        code: "usage_error",
+        message,
+        details: null,
+      },
+    }),
+  );
+  return 2;
+}
+
+function writeTaskNotFound(options: CliOptions, taskId: string): number {
+  options.stderr(
+    stringifyJson({
+      ok: false,
+      version: 1,
+      error: {
+        code: "task_not_found",
+        message: `task ${taskId} not found`,
+        details: { taskId },
+      },
+    }),
+  );
+  return 3;
+}
+
+function toRobotTaskSummary(task: Task): Record<string, unknown> {
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    area: task.area ?? null,
+    claimed_by: task.claimed_by || null,
+    scope: task.scope,
+    depends_on: task.depends_on,
+  };
+}
+
+function toRobotDiagnostics(analysis: TaskGraphAnalysis): Record<string, unknown> {
+  return {
+    missingDependencies: analysis.missingDependencies,
+    dependencyCycles: analysis.dependencyCycles,
+    duplicateTaskIds: analysis.duplicateTaskIds,
+  };
+}
+
+function toRobotBlockers(task: Task, analysis: TaskGraphAnalysis): Array<Record<string, unknown>> {
+  const blockers: Array<Record<string, unknown>> = [];
+
+  if (task.status !== "open") {
+    blockers.push({
+      kind: "status",
+      message: `status is ${task.status}`,
+      taskId: task.id,
+    });
+  }
+
+  if (task.claimed_by.trim() !== "") {
+    blockers.push({
+      kind: "claim",
+      message: `claimed by ${task.claimed_by}`,
+      taskId: task.id,
+    });
+  }
+
+  for (const diagnostic of analysis.duplicateTaskIds.filter(
+    (candidate) => candidate.taskId === task.id,
+  )) {
+    blockers.push({
+      kind: "duplicate_id",
+      message: `duplicate task id ${task.id}`,
+      taskId: task.id,
+      sourcePaths: diagnostic.sourcePaths,
+    });
+  }
+
+  for (const diagnostic of analysis.missingDependencies.filter(
+    (candidate) => candidate.taskId === task.id,
+  )) {
+    blockers.push({
+      kind: "missing_dependency",
+      message: `missing dependency ${diagnostic.dependencyId}`,
+      taskId: task.id,
+      dependencyId: diagnostic.dependencyId,
+    });
+  }
+
+  for (const dependencyId of task.depends_on) {
+    const dependency = analysis.tasksById.get(dependencyId);
+    if (!dependency || dependency.status === "done" || dependency.status === "canceled") {
+      continue;
+    }
+    blockers.push({
+      kind: "dependency_status",
+      message: `dependency ${dependencyId} is ${dependency.status}`,
+      taskId: task.id,
+      dependencyId,
+    });
+  }
+
+  for (const diagnostic of analysis.dependencyCycles.filter((candidate) =>
+    candidate.taskIds.includes(task.id),
+  )) {
+    blockers.push({
+      kind: "cycle",
+      message: `dependency cycle: ${diagnostic.taskIds.join(" -> ")}`,
+      taskId: task.id,
+      taskIds: diagnostic.taskIds,
+    });
+  }
+
+  return blockers;
+}
+
+function toDependencySummary(
+  taskId: string,
+  task: Task | undefined,
+): Record<string, unknown> {
+  return {
+    id: taskId,
+    title: task?.title ?? null,
+    status: task?.status ?? null,
+  };
+}
+
+function parseMarkdownSections(body: string): Array<{ title: string; body: string }> {
+  const sections: Array<{ title: string; body: string }> = [];
+  const headingPattern = /^##\s+(.+)$/gm;
+  const matches = Array.from(body.matchAll(headingPattern));
+
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const nextMatch = matches[index + 1];
+    const title = match[1].trim();
+    const start = match.index! + match[0].length;
+    const end = nextMatch?.index ?? body.length;
+    sections.push({ title, body: body.slice(start, end).trim() });
+  }
+
+  return sections;
+}
+
+function stringifyJson(value: unknown): string {
+  return JSON.stringify(value);
 }
 
 function parseWebArgs(
