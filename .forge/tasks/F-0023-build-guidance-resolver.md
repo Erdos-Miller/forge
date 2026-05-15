@@ -15,9 +15,9 @@ scope:
   - packages/core/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T04:20:41.682Z
-closed_at: 2026-05-15T04:20:41.682Z
-close_reason: ""
+updated_at: 2026-05-15T05:30:00.000Z
+closed_at: 2026-05-15T05:00:00.000Z
+close_reason: "Backfilled by F-0045; timestamp is approximate."
 ---
 
 # Build guidance resolver

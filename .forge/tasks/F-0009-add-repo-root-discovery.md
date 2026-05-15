@@ -13,7 +13,9 @@ scope:
   - README.md
   - packages/**
 created_at: 2026-05-14T17:59:55-05:00
-updated_at: 2026-05-14T18:02:40-05:00
+updated_at: 2026-05-15T05:30:00.000Z
+closed_at: 2026-05-14T23:02:40.000Z
+close_reason: "Backfilled by F-0045; timestamp is approximate."
 ---
 
 # Add repo root discovery

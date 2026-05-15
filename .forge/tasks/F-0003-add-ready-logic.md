@@ -12,7 +12,9 @@ scope:
   - packages/**
   - .forge/tasks/**
 created_at: 2026-05-14T00:00:00-05:00
-updated_at: 2026-05-14T17:46:19-05:00
+updated_at: 2026-05-15T05:30:00.000Z
+closed_at: 2026-05-14T22:46:19.000Z
+close_reason: "Backfilled by F-0045; timestamp is approximate."
 ---
 
 # Add ready task logic
