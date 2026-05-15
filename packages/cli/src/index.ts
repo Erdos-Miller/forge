@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import path from "node:path";
 import {
   analyzeTasks,
   addTaskDependencyFrom,
@@ -721,7 +722,18 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
     },
   );
 
-  return await child.exited;
+  const stopChild = () => {
+    child.kill("SIGTERM");
+  };
+  process.once("SIGINT", stopChild);
+  process.once("SIGTERM", stopChild);
+
+  try {
+    return await child.exited;
+  } finally {
+    process.off("SIGINT", stopChild);
+    process.off("SIGTERM", stopChild);
+  }
 }
 
 function writeJsonUsageError(options: CliOptions, message: string): number {
