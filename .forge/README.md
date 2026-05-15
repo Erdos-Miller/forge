@@ -199,6 +199,19 @@ A task is ready when:
 - `claimed_by` is empty
 - every task in `depends_on` is `done` or `canceled`
 
+## Internal Harness Commands
+
+Forge keeps internal developer and agent checks as package scripts, not as
+customer-facing `forge` CLI commands.
+
+- `bun run harness:cli` runs the focused CLI workflow harness.
+- `bun run harness:web` runs the current web harness checks.
+- `bun run harness:check` runs the aggregate in-repo harness and test suite.
+- `bun run quality:check` runs `harness:check` and the production web build.
+
+Use the focused harness when a task touches one surface. Use `quality:check`
+before closing broad or cross-surface work.
+
 ## Cache Policy
 
 Future tools may create a local cache or index, but cache files must be ignored by git. Markdown task files remain canonical.

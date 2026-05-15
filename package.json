@@ -10,6 +10,9 @@
     "forge": "bun packages/cli/src/index.ts",
     "web": "bun packages/cli/src/index.ts web",
     "test": "bun test packages/core packages/cli packages/web",
-    "quality:check": "bun run test && bun run --cwd packages/web build"
+    "harness:cli": "bun test packages/cli/test/harness.test.ts",
+    "harness:web": "bun test packages/web",
+    "harness:check": "bun run test",
+    "quality:check": "bun run harness:check && bun run --cwd packages/web build"
   }
 }
