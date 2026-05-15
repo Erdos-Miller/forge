@@ -9,6 +9,7 @@
   "scripts": {
     "forge": "bun packages/cli/src/index.ts",
     "web": "bun packages/cli/src/index.ts web",
-    "test": "bun test packages/core packages/cli packages/web"
+    "test": "bun test packages/core packages/cli packages/web",
+    "quality:check": "bun run test && bun run --cwd packages/web build"
   }
 }
