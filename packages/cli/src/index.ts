@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   analyzeTasks,
+  addTaskDependencyFrom,
   appendTaskNoteFrom,
   blockTaskFrom,
   claimTaskFrom,
@@ -17,6 +18,7 @@ import {
   requestTaskReviewFrom,
   resolveGuidance,
   parseTaskFile,
+  removeTaskDependencyFrom,
   unblockTaskFrom,
   upsertTaskExecutionPlanFrom,
   type CreateTaskInput,
@@ -137,12 +139,16 @@ export const COMMANDS = [
   },
   {
     name: "deps",
-    usage: "forge deps <id> --json",
-    description: "Emit direct dependencies and dependents.",
-    classification: "read",
+    usage: "forge deps <id> --json | forge deps add <id> <dependency> --json | forge deps remove <id> <dependency> --json",
+    description: "Emit or edit direct dependencies.",
+    classification: "write",
     supportsJson: true,
-    examples: ["forge deps F-0001 --json"],
-    agentPurpose: "Inspect local graph context.",
+    examples: [
+      "forge deps F-0001 --json",
+      "forge deps add F-0002 F-0001 --json",
+      "forge deps remove F-0002 F-0001 --json",
+    ],
+    agentPurpose: "Inspect graph context and make validated dependency edits.",
   },
   {
     name: "guidance",
@@ -283,7 +289,7 @@ const COMMAND_WORKFLOWS = {
   next: "claim",
   show: "inspect",
   blockers: "inspect",
-  deps: "inspect",
+  deps: "mutate",
   guidance: "inspect",
   doctor: "verify",
   create: "plan",
@@ -587,9 +593,41 @@ async function blockers(options: CliOptions, args: string[]): Promise<number> {
 }
 
 async function deps(options: CliOptions, args: string[]): Promise<number> {
-  const parsed = parseIdJsonArgs(args, "usage: forge deps <id> --json");
+  const parsed = parseDepsArgs(args);
   if (!parsed.ok) {
     return writeJsonUsageError(options, parsed.message);
+  }
+
+  if (parsed.action !== "show") {
+    try {
+      const result =
+        parsed.action === "add"
+          ? await addTaskDependencyFrom(
+              options.cwd,
+              parsed.taskId,
+              parsed.dependencyId,
+              options.now,
+            )
+          : await removeTaskDependencyFrom(
+              options.cwd,
+              parsed.taskId,
+              parsed.dependencyId,
+              options.now,
+            );
+      options.stdout(
+        stringifyJson({
+          ok: true,
+          version: 1,
+          action: parsed.action,
+          changed: result.changed,
+          reason: result.reason,
+          task: toRobotTaskDocument(result.task),
+        }),
+      );
+      return 0;
+    } catch (error) {
+      return writeDependencyEditError(options, error);
+    }
   }
 
   const tasks = await loadTasksFrom(options.cwd);
@@ -1183,6 +1221,27 @@ function parseIdJsonArgs(
   return { ok: true, taskId };
 }
 
+const DEPS_USAGE =
+  "usage: forge deps <id> --json | forge deps add <id> <dependency> --json | forge deps remove <id> <dependency> --json";
+
+function parseDepsArgs(args: string[]):
+  | { ok: true; action: "show"; taskId: string }
+  | { ok: true; action: "add" | "remove"; taskId: string; dependencyId: string }
+  | { ok: false; message: string } {
+  const [first, second, third, fourth, ...extra] = args;
+  if (first === "add" || first === "remove") {
+    if (!second || !third || fourth !== "--json" || extra.length > 0) {
+      return { ok: false, message: DEPS_USAGE };
+    }
+    return { ok: true, action: first, taskId: second, dependencyId: third };
+  }
+
+  if (!first || second !== "--json" || third !== undefined) {
+    return { ok: false, message: DEPS_USAGE };
+  }
+  return { ok: true, action: "show", taskId: first };
+}
+
 function parseNextArgs(
   args: string[],
   options: CliOptions,
@@ -1492,6 +1551,42 @@ function writeTaskNotFound(options: CliOptions, taskId: string): number {
     }),
   );
   return 3;
+}
+
+function writeDependencyEditError(options: CliOptions, error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  const taskMatch = /^task (\S+) not found$/.exec(message);
+  if (taskMatch) {
+    return writeTaskNotFound(options, taskMatch[1]);
+  }
+
+  if (message.startsWith("dependency edit would create a cycle:")) {
+    options.stderr(
+      stringifyJson({
+        ok: false,
+        version: 1,
+        error: {
+          code: "dependency_cycle",
+          message,
+          details: null,
+        },
+      }),
+    );
+    return 4;
+  }
+
+  options.stderr(
+    stringifyJson({
+      ok: false,
+      version: 1,
+      error: {
+        code: "dependency_edit_failed",
+        message,
+        details: null,
+      },
+    }),
+  );
+  return 1;
 }
 
 function toRobotTaskSummary(task: Task): Record<string, unknown> {

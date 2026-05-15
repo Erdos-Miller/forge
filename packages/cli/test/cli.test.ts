@@ -243,7 +243,8 @@ describe("forge cli", () => {
     expect(text).toContain("Inspect:\n- forge commands --json [read]");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title> [options] [write]");
-    expect(text).toContain("Mutate:\n- forge note <id> --stdin [write]");
+    expect(text).toContain("Mutate:\n- forge deps <id> --json");
+    expect(text).toContain("- forge note <id> --stdin [write]");
     expect(text).toContain("Verify:\n- forge doctor --json [read]");
     expect(text).toContain("Close:\n- forge done <id> [--reason <text>] [--json] [write]");
   });
