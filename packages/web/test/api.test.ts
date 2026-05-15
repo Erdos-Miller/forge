@@ -81,6 +81,11 @@ describe("getTaskGraphPayload", () => {
     ]);
     expect(payload.readyTaskIds).toEqual(["F-0002"]);
     expect(payload.recommendedTaskIds).toEqual(["F-0002"]);
+    expect(payload.availabilityByTaskId).toEqual({
+      "F-0001": "closed",
+      "F-0002": "ready",
+      "F-0003": "blocked",
+    });
     expect(payload.blockersByTaskId["F-0003"]).toEqual([
       "dependency F-0002 is open",
     ]);

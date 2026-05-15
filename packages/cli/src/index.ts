@@ -1525,22 +1525,6 @@ function formatGuidanceMatchText(match: GuidanceMatch, full: boolean): string {
 function toRobotBlockers(task: Task, analysis: TaskGraphAnalysis): Array<Record<string, unknown>> {
   const blockers: Array<Record<string, unknown>> = [];
 
-  if (task.status !== "open") {
-    blockers.push({
-      kind: "status",
-      message: `status is ${task.status}`,
-      taskId: task.id,
-    });
-  }
-
-  if (task.claimed_by.trim() !== "") {
-    blockers.push({
-      kind: "claim",
-      message: `claimed by ${task.claimed_by}`,
-      taskId: task.id,
-    });
-  }
-
   for (const diagnostic of analysis.duplicateTaskIds.filter(
     (candidate) => candidate.taskId === task.id,
   )) {

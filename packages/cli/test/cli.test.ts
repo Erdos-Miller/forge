@@ -493,6 +493,31 @@ describe("forge cli", () => {
     });
   });
 
+  test("blockers --json does not treat active or claimed state as graph blockers", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        status: "doing",
+        claimed_by: "codex",
+        depends_on: ["F-0001"],
+      }),
+    );
+
+    const result = await run(repoRoot, ["blockers", "F-0002", "--json"]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload).toEqual({
+      ok: true,
+      version: 1,
+      taskId: "F-0002",
+      blockers: [],
+    });
+  });
+
   test("blockers --json reports unknown task ids", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["blockers", "F-9999", "--json"]);

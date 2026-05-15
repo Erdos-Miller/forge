@@ -4,6 +4,7 @@ import {
   loadTasks,
   rankReadyTasks,
   type Task,
+  type TaskAvailability,
 } from "@forge/core";
 
 export interface TaskGraphPayload {
@@ -11,6 +12,7 @@ export interface TaskGraphPayload {
   tasks: Task[];
   readyTaskIds: string[];
   recommendedTaskIds: string[];
+  availabilityByTaskId: Record<string, TaskAvailability>;
   blockersByTaskId: Record<string, string[]>;
   diagnostics: {
     missingDependencies: Array<{ taskId: string; dependencyId: string }>;
@@ -31,6 +33,7 @@ export async function getTaskGraphPayload(
     tasks,
     readyTaskIds: analysis.readyTaskIds,
     recommendedTaskIds: rankReadyTasks(tasks).map((task) => task.id),
+    availabilityByTaskId: Object.fromEntries(analysis.availabilityByTaskId.entries()),
     blockersByTaskId: Object.fromEntries(analysis.blockersByTaskId.entries()),
     diagnostics: {
       missingDependencies: analysis.missingDependencies,

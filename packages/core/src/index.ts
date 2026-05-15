@@ -5,6 +5,7 @@ import matter from "gray-matter";
 export type TaskKind = "task" | "spec";
 export type TaskStatus = "open" | "doing" | "blocked" | "done" | "canceled";
 export type TaskPriority = "urgent" | "high" | "medium" | "low";
+export type TaskAvailability = "ready" | "active" | "claimed" | "blocked" | "closed";
 
 export interface Task {
   id: string;
@@ -114,6 +115,7 @@ export interface TaskGraphAnalysis {
   childrenByParent: Map<string, string[]>;
   dependentsById: Map<string, string[]>;
   readyTaskIds: string[];
+  availabilityByTaskId: Map<string, TaskAvailability>;
   blockersByTaskId: Map<string, string[]>;
   downstreamUnblockCountsByTaskId: Map<string, number>;
   diagnostics: TaskGraphDiagnostic[];
@@ -631,19 +633,22 @@ export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
   );
 
   const blockersByTaskId = new Map<string, string[]>();
+  const availabilityByTaskId = new Map<string, TaskAvailability>();
   const readyTaskIds: string[] = [];
 
   for (const task of sortedTasks) {
-    const blockers = getTaskBlockersFromDiagnostics(
+    const blockers = getTaskProblemBlockers(
       task,
       tasksById,
       duplicateIds,
       missingByTaskId,
       cycleMessagesByTaskId,
     );
+    const availability = classifyTaskAvailability(task, blockers);
     blockersByTaskId.set(task.id, blockers);
+    availabilityByTaskId.set(task.id, availability);
 
-    if (blockers.length === 0) {
+    if (availability === "ready") {
       readyTaskIds.push(task.id);
     }
   }
@@ -653,6 +658,7 @@ export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
     childrenByParent,
     dependentsById,
     readyTaskIds,
+    availabilityByTaskId,
     blockersByTaskId,
     downstreamUnblockCountsByTaskId,
     diagnostics,
@@ -687,6 +693,13 @@ export function getTaskBlockers(
   analysis: TaskGraphAnalysis,
 ): string[] {
   return analysis.blockersByTaskId.get(task.id) ?? [];
+}
+
+export function getTaskAvailability(
+  task: Task,
+  analysis: TaskGraphAnalysis,
+): TaskAvailability {
+  return analysis.availabilityByTaskId.get(task.id) ?? "blocked";
 }
 
 export function parseTaskFile(sourcePath: string, contents: string): ParsedTask {
@@ -1347,7 +1360,7 @@ function groupCycleMessages(
   return byTaskId;
 }
 
-function getTaskBlockersFromDiagnostics(
+function getTaskProblemBlockers(
   task: Task,
   tasksById: Map<string, Task>,
   duplicateIds: Set<string>,
@@ -1355,14 +1368,6 @@ function getTaskBlockersFromDiagnostics(
   cycleMessagesByTaskId: Map<string, string[]>,
 ): string[] {
   const blockers: string[] = [];
-
-  if (task.status !== "open") {
-    blockers.push(`status is ${task.status}`);
-  }
-
-  if (task.claimed_by.trim() !== "") {
-    blockers.push(`claimed by ${task.claimed_by}`);
-  }
 
   if (duplicateIds.has(task.id)) {
     blockers.push(`duplicate task id ${task.id}`);
@@ -1385,6 +1390,25 @@ function getTaskBlockersFromDiagnostics(
   blockers.push(...(cycleMessagesByTaskId.get(task.id) ?? []));
 
   return blockers;
+}
+
+function classifyTaskAvailability(
+  task: Task,
+  blockers: string[],
+): TaskAvailability {
+  if (task.status === "done" || task.status === "canceled") {
+    return "closed";
+  }
+  if (blockers.length > 0 || task.status === "blocked") {
+    return "blocked";
+  }
+  if (task.status === "doing") {
+    return "active";
+  }
+  if (task.claimed_by.trim() !== "") {
+    return "claimed";
+  }
+  return "ready";
 }
 
 function createRankedQueueEntry(

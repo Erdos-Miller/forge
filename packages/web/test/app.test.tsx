@@ -74,8 +74,13 @@ const payload: TaskGraphPayload = {
   ],
   readyTaskIds: ["F-0002"],
   recommendedTaskIds: ["F-0002"],
+  availabilityByTaskId: {
+    "F-0001": "closed",
+    "F-0002": "ready",
+    "F-0003": "active",
+  },
   blockersByTaskId: {
-    "F-0003": ["claimed by codex"],
+    "F-0003": [],
   },
   diagnostics: {
     missingDependencies: [],

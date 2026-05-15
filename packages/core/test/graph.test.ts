@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
   analyzeTasks,
+  getTaskAvailability,
   getReadyTasks,
   getTaskBlockers,
   loadTasks,
@@ -59,6 +60,7 @@ describe("analyzeTasks", () => {
     const analysis = analyzeTasks(tasks);
 
     expect(analysis.readyTaskIds).toEqual(["F-0001"]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("ready");
     expect(getReadyTasks(tasks).map((readyTask) => readyTask.id)).toEqual(["F-0001"]);
   });
 
@@ -80,23 +82,49 @@ describe("analyzeTasks", () => {
     const analysis = analyzeTasks(tasks);
 
     expect(analysis.readyTaskIds).toEqual([]);
+    expect(getTaskAvailability(tasks[1], analysis)).toBe("blocked");
     expect(getTaskBlockers(tasks[1], analysis)).toContain("dependency F-0001 is doing");
   });
 
-  test("blocks claimed tasks", () => {
+  test("classifies claimed open tasks separately from blockers", () => {
     const tasks = [task({ id: "F-0001", claimed_by: "codex" })];
     const analysis = analyzeTasks(tasks);
 
     expect(analysis.readyTaskIds).toEqual([]);
-    expect(getTaskBlockers(tasks[0], analysis)).toEqual(["claimed by codex"]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("claimed");
+    expect(getTaskBlockers(tasks[0], analysis)).toEqual([]);
   });
 
-  test("blocks tasks with non-open status", () => {
+  test("classifies doing tasks as active", () => {
+    const tasks = [task({ id: "F-0001", status: "doing", claimed_by: "codex" })];
+    const analysis = analyzeTasks(tasks);
+
+    expect(analysis.readyTaskIds).toEqual([]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("active");
+    expect(getTaskBlockers(tasks[0], analysis)).toEqual([]);
+  });
+
+  test("classifies explicitly blocked tasks as blocked", () => {
     const tasks = [task({ id: "F-0001", status: "blocked" })];
     const analysis = analyzeTasks(tasks);
 
     expect(analysis.readyTaskIds).toEqual([]);
-    expect(getTaskBlockers(tasks[0], analysis)).toEqual(["status is blocked"]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("blocked");
+    expect(getTaskBlockers(tasks[0], analysis)).toEqual([]);
+  });
+
+  test("classifies done and canceled tasks as closed", () => {
+    const tasks = [
+      task({ id: "F-0001", status: "done" }),
+      task({ id: "F-0002", status: "canceled" }),
+    ];
+    const analysis = analyzeTasks(tasks);
+
+    expect(analysis.readyTaskIds).toEqual([]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("closed");
+    expect(getTaskAvailability(tasks[1], analysis)).toBe("closed");
+    expect(getTaskBlockers(tasks[0], analysis)).toEqual([]);
+    expect(getTaskBlockers(tasks[1], analysis)).toEqual([]);
   });
 
   test("reports missing dependency ids", () => {
@@ -110,6 +138,7 @@ describe("analyzeTasks", () => {
     expect(analysis.diagnostics).toEqual([
       { kind: "missing_dependency", taskId: "F-0002", dependencyId: "F-9999" },
     ]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("blocked");
     expect(getTaskBlockers(tasks[0], analysis)).toContain(
       "missing dependency F-9999",
     );
@@ -133,6 +162,7 @@ describe("analyzeTasks", () => {
         sourcePaths: ["one.md", "two.md"],
       },
     ]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("blocked");
     expect(getTaskBlockers(tasks[0], analysis)).toContain("duplicate task id F-0001");
   });
 
@@ -145,6 +175,7 @@ describe("analyzeTasks", () => {
     expect(analysis.diagnostics).toEqual([
       { kind: "dependency_cycle", taskIds: ["F-0001", "F-0001"] },
     ]);
+    expect(getTaskAvailability(tasks[0], analysis)).toBe("blocked");
     expect(getTaskBlockers(tasks[0], analysis)).toContain(
       "dependency cycle: F-0001 -> F-0001",
     );
