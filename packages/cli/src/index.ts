@@ -172,11 +172,11 @@ export const COMMANDS = [
   },
   {
     name: "prompt",
-    usage: "forge prompt <id|next>",
-    description: "Emit a reusable task prompt.",
+    usage: "forge prompt <id|next> [--full]",
+    description: "Emit a reusable task prompt with matched guidance.",
     classification: "read",
     supportsJson: false,
-    examples: ["forge prompt next", "forge prompt F-0001"],
+    examples: ["forge prompt next", "forge prompt F-0001 --full"],
     agentPurpose: "Start an agent on a concrete task.",
   },
   {
@@ -441,6 +441,23 @@ function filterListTasks(tasks: Task[], mode: ListMode): Task[] {
 
 function isClosedTask(task: Task): boolean {
   return task.status === "done" || task.status === "canceled";
+}
+
+function parsePromptArgs(args: string[]): { ok: true; target: string; full: boolean } | { ok: false; message: string } {
+  const usage = "usage: forge prompt <id|next> [--full]";
+  if (args.length === 0 || args.length > 2) {
+    return { ok: false, message: usage };
+  }
+
+  const [target, option] = args;
+  if (!target || target === "--full") {
+    return { ok: false, message: usage };
+  }
+  if (option !== undefined && option !== "--full") {
+    return { ok: false, message: usage };
+  }
+
+  return { ok: true, target, full: option === "--full" };
 }
 
 async function queue(options: CliOptions, args: string[]): Promise<number> {
@@ -738,23 +755,29 @@ async function create(options: CliOptions, args: string[]): Promise<number> {
 }
 
 async function prompt(options: CliOptions, args: string[]): Promise<number> {
-  const [target, ...extra] = args;
-  if (!target || extra.length > 0) {
-    options.stderr("usage: forge prompt <id|next>");
+  const parsed = parsePromptArgs(args);
+  if (!parsed.ok) {
+    options.stderr(parsed.message);
     return 1;
   }
 
   const task =
-    target === "next"
+    parsed.target === "next"
       ? await findNextPromptTask(options.cwd)
-      : (await findParsedTaskByIdFrom(options.cwd, target)).task;
+      : (await findParsedTaskByIdFrom(options.cwd, parsed.target)).task;
 
   if (!task) {
     options.stderr("no ready tasks");
     return 1;
   }
 
-  options.stdout(formatAgentPrompt(task));
+  const guidance = await resolveGuidance({
+    cwd: options.cwd,
+    taskId: task.id,
+    includeContent: parsed.full,
+  });
+
+  options.stdout(formatAgentPrompt(task, guidance, parsed.full));
   return 0;
 }
 
@@ -1696,7 +1719,7 @@ function formatTaskLine(task: Task): string {
   return fields.join("\t");
 }
 
-function formatAgentPrompt(task: Task): string {
+function formatAgentPrompt(task: Task, guidance: GuidanceBundle, fullGuidance: boolean): string {
   const lines = [
     `Goal: Complete Forge task ${task.id} - ${task.title}`,
     "",
@@ -1714,9 +1737,25 @@ function formatAgentPrompt(task: Task): string {
     "Task body:",
     task.body.trim(),
     "",
+    "Guidance:",
+    formatGuidanceText(guidance, fullGuidance),
+    "",
+    ...formatGuidanceDiagnostics(guidance),
   ];
 
   return lines.join("\n");
+}
+
+function formatGuidanceDiagnostics(guidance: GuidanceBundle): string[] {
+  if (guidance.diagnostics.length === 0) {
+    return [];
+  }
+
+  return [
+    "Guidance diagnostics:",
+    ...guidance.diagnostics.map((diagnostic) => `- ${diagnostic.message}`),
+    "",
+  ];
 }
 
 function formatLoopPrompt(): string {
