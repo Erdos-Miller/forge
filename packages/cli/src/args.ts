@@ -409,8 +409,15 @@ export function parseGuidanceArgs(args: string[]):
 export function parseWebArgs(
   args: string[],
   defaultStartDir: string,
-): { host: string; port: number; startDir: string } {
+):
+  | { action: "serve"; host: string; port: number; startDir: string }
+  | { action: "status"; json: true; startDir: string } {
+  if (args[0] === "status") {
+    return parseWebStatusArgs(args.slice(1), defaultStartDir);
+  }
+
   const webOptions = {
+    action: "serve" as const,
     host: "127.0.0.1",
     port: 5174,
     startDir: defaultStartDir,
@@ -446,4 +453,38 @@ export function parseWebArgs(
   }
 
   return webOptions;
+}
+
+function parseWebStatusArgs(
+  args: string[],
+  defaultStartDir: string,
+): { action: "status"; json: true; startDir: string } {
+  let json = false;
+  let startDir = defaultStartDir;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--dir": {
+        const value = args[index + 1];
+        if (!value) {
+          throw new Error("web status option --dir requires a value");
+        }
+        startDir = value;
+        index += 1;
+        break;
+      }
+      default:
+        throw new Error(`unknown web status option: ${arg}`);
+    }
+  }
+
+  if (!json) {
+    throw new Error("usage: forge web status --json [--dir <path>]");
+  }
+
+  return { action: "status", json, startDir };
 }

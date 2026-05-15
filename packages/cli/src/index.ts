@@ -59,6 +59,11 @@ import {
   toRobotTaskDocument,
   toRobotTaskSummary,
 } from "./robot";
+import {
+  discoverWebSession,
+  removeWebSession,
+  writeWebSession,
+} from "./web-session";
 
 export { COMMANDS } from "./command-metadata";
 export type {
@@ -693,6 +698,18 @@ async function findNextPromptTask(cwd: string): Promise<Task | null> {
 async function web(options: CliOptions, args: string[]): Promise<number> {
   const webOptions = parseWebArgs(args, options.cwd);
   const repoRoot = await findForgeRoot(webOptions.startDir);
+  if (webOptions.action === "status") {
+    options.stdout(
+      stringifyJson({
+        ok: true,
+        version: 1,
+        repoRoot,
+        session: await discoverWebSession(repoRoot, options.env),
+      }),
+    );
+    return 0;
+  }
+
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
   const url = `http://${webOptions.host}:${webOptions.port}/`;
 
@@ -721,6 +738,12 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
       stdout: "inherit",
     },
   );
+  await writeWebSession(repoRoot, {
+    host: webOptions.host,
+    port: webOptions.port,
+    pid: child.pid,
+    startedAt: options.now.toISOString(),
+  });
 
   const stopChild = () => {
     child.kill("SIGTERM");
@@ -733,6 +756,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
   } finally {
     process.off("SIGINT", stopChild);
     process.off("SIGTERM", stopChild);
+    await removeWebSession(repoRoot, child.pid);
   }
 }
 
