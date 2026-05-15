@@ -1411,6 +1411,7 @@ function getFrontmatterDoctorDiagnostics(
   }
 
   diagnostics.push(...getCompletionTimestampDoctorDiagnostics(parsed.task));
+  diagnostics.push(...getExecutionPlanDoctorDiagnostics(parsed.task));
 
   return diagnostics;
 }
@@ -1459,6 +1460,35 @@ function getCompletionTimestampDoctorDiagnostics(task: Task): DoctorDiagnostic[]
   }
 
   return [];
+}
+
+function getExecutionPlanDoctorDiagnostics(task: Task): DoctorDiagnostic[] {
+  if (!taskIsActiveForPlanning(task) || hasMarkdownSection(task.body, "Execution Plan")) {
+    return [];
+  }
+
+  return [
+    {
+      code: "missing_execution_plan",
+      severity: "warning",
+      message: `active task ${task.id} is missing ## Execution Plan; run forge plan ${task.id} --stdin`,
+      taskId: task.id,
+      sourcePath: task.sourcePath,
+      repairHint: `Run forge plan ${task.id} --stdin before continuing implementation.`,
+    },
+  ];
+}
+
+function taskIsActiveForPlanning(task: Task): boolean {
+  return task.status === "doing" || Boolean(task.claimed_by);
+}
+
+function hasMarkdownSection(body: string, sectionTitle: string): boolean {
+  return new RegExp(`^## ${escapeRegExp(sectionTitle)}\\s*$`, "m").test(body);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function getGuidanceDoctorDiagnostics(repoRoot: string): Promise<DoctorDiagnostic[]> {

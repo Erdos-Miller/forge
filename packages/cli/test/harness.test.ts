@@ -8,6 +8,7 @@ import {
   createForgeFixtureRepo,
   doneForgeFixtureTasks,
   legacyForgeFixtureTasks,
+  plannedBody,
   scaleForgeFixtureTasks,
   type ForgeFixtureRepo,
 } from "../../core/test/fixture-repo";
@@ -179,7 +180,12 @@ describe("Forge agent harness scenarios", () => {
       { id: "F-0001", title: "Finished base", status: "done" },
       { id: "F-0002", title: "Ready harness task", priority: "high", depends_on: ["F-0001"] },
       { id: "F-0003", title: "Blocked follow-up", depends_on: ["F-0002"] },
-      { id: "F-0004", title: "Claimed task", claimed_by: "codex" },
+      {
+        id: "F-0004",
+        title: "Claimed task",
+        claimed_by: "codex",
+        body: plannedBody("Claimed task"),
+      },
     ]);
 
     const rootList = await runEntrypoint(repo.repoRoot, ["list"]);

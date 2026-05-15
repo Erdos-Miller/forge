@@ -114,7 +114,15 @@ export function blockedForgeFixtureTasks(): ForgeFixtureTask[] {
 }
 
 export function claimedForgeFixtureTasks(): ForgeFixtureTask[] {
-  return [{ id: "F-0201", title: "Claimed task", priority: "high", claimed_by: "codex" }];
+  return [
+    {
+      id: "F-0201",
+      title: "Claimed task",
+      priority: "high",
+      claimed_by: "codex",
+      body: plannedBody("Claimed task"),
+    },
+  ];
 }
 
 export function doneForgeFixtureTasks(): ForgeFixtureTask[] {
@@ -167,6 +175,17 @@ function getClosedFields(
   }
 
   return ['closed_at: ""', 'close_reason: ""'];
+}
+
+export function plannedBody(title: string): string {
+  return [
+    `# ${title}`,
+    "",
+    "## Execution Plan",
+    "",
+    "Summary: Fixture task has a plan.",
+    "",
+  ].join("\n");
 }
 
 function formatList(values: string[]): string {
