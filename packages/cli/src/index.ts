@@ -82,12 +82,12 @@ export const COMMANDS = [
   },
   {
     name: "list",
-    usage: "forge list",
-    description: "List all task files.",
+    usage: "forge list [--all|--closed]",
+    description: "List active task files.",
     classification: "read",
     supportsJson: false,
-    examples: ["forge list"],
-    agentPurpose: "Inspect repo task state.",
+    examples: ["forge list", "forge list --all", "forge list --closed"],
+    agentPurpose: "Inspect current repo task state without closed-task noise.",
   },
   {
     name: "ready",
@@ -389,13 +389,14 @@ async function help(options: CliOptions, args: string[]): Promise<number> {
 }
 
 async function listTasks(options: CliOptions, args: string[]): Promise<number> {
-  if (args.length > 0) {
-    options.stderr("usage: forge list");
+  const mode = parseListMode(args);
+  if (!mode) {
+    options.stderr("usage: forge list [--all|--closed]");
     return 1;
   }
 
   const tasks = await loadTasksFrom(options.cwd);
-  writeTaskLines(options, tasks);
+  writeTaskLines(options, filterListTasks(tasks, mode));
   return 0;
 }
 
@@ -408,6 +409,38 @@ async function listReadyTasks(options: CliOptions, args: string[]): Promise<numb
   const tasks = await loadTasksFrom(options.cwd);
   writeTaskLines(options, getReadyTasks(tasks));
   return 0;
+}
+
+type ListMode = "active" | "all" | "closed";
+
+function parseListMode(args: string[]): ListMode | null {
+  if (args.length === 0) {
+    return "active";
+  }
+  if (args.length !== 1) {
+    return null;
+  }
+  if (args[0] === "--all") {
+    return "all";
+  }
+  if (args[0] === "--closed") {
+    return "closed";
+  }
+  return null;
+}
+
+function filterListTasks(tasks: Task[], mode: ListMode): Task[] {
+  if (mode === "all") {
+    return tasks;
+  }
+  if (mode === "closed") {
+    return tasks.filter(isClosedTask);
+  }
+  return tasks.filter((task) => !isClosedTask(task));
+}
+
+function isClosedTask(task: Task): boolean {
+  return task.status === "done" || task.status === "canceled";
 }
 
 async function queue(options: CliOptions, args: string[]): Promise<number> {

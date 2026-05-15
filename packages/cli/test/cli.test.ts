@@ -255,14 +255,35 @@ describe("forge cli", () => {
     expect(result.stderr).toEqual(["usage: forge help --agent"]);
   });
 
-  test("list prints all tasks", async () => {
+  test("list prints active tasks by default", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["list"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("F-0001\tdone\t-\tDone");
-    expect(result.stdout).toContain("F-0002\topen\t-\tOpen");
-    expect(result.stdout).toContain("F-0003\topen\t-\tBlocked");
+    expect(result.stdout).toEqual([
+      "F-0002\topen\t-\tOpen",
+      "F-0003\topen\t-\tBlocked",
+    ]);
+  });
+
+  test("list --all includes closed tasks", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["list", "--all"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual([
+      "F-0001\tdone\t-\tDone",
+      "F-0002\topen\t-\tOpen",
+      "F-0003\topen\t-\tBlocked",
+    ]);
+  });
+
+  test("list --closed prints only done and canceled tasks", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["list", "--closed"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual(["F-0001\tdone\t-\tDone"]);
   });
 
   test("ready prints only ready tasks", async () => {
@@ -277,19 +298,30 @@ describe("forge cli", () => {
     const { nestedDir } = await makeRepo();
 
     expect((await run(nestedDir, ["list"])).stdout).toContain("F-0002\topen\t-\tOpen");
+    expect((await run(nestedDir, ["list"])).stdout).not.toContain("F-0001\tdone\t-\tDone");
     expect((await run(nestedDir, ["ready"])).stdout).toEqual([
       "F-0002\topen\t-\tOpen",
     ]);
   });
 
-  test("list and ready reject unexpected extra args", async () => {
+  test("list rejects incompatible flags and unexpected args", async () => {
     const { repoRoot } = await makeRepo();
 
+    expect(await run(repoRoot, ["list", "--all", "--closed"])).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge list [--all|--closed]"],
+    });
     expect(await run(repoRoot, ["list", "--cwd", repoRoot])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge list"],
+      stderr: ["usage: forge list [--all|--closed]"],
     });
+  });
+
+  test("ready rejects unexpected extra args", async () => {
+    const { repoRoot } = await makeRepo();
+
     expect(await run(repoRoot, ["ready", "--cwd", repoRoot])).toEqual({
       code: 1,
       stdout: [],
