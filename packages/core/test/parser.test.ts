@@ -67,6 +67,8 @@ describe("parseTaskFile", () => {
       "updated_at: 2026-05-14T00:00:00-05:00",
       "closed_at: 2026-05-14T01:00:00-05:00",
       "close_reason: Completed",
+      "blocked_reason: Waiting",
+      "review_reason: Check this",
       "---",
       "",
       "# Example",
@@ -81,6 +83,8 @@ describe("parseTaskFile", () => {
     expect(parsed.task.depends_on).toEqual([]);
     expect(parsed.task.closed_at).toBe("2026-05-14T06:00:00.000Z");
     expect(parsed.task.close_reason).toBe("Completed");
+    expect(parsed.task.blocked_reason).toBe("Waiting");
+    expect(parsed.task.review_reason).toBe("Check this");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
   });
 

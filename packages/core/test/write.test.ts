@@ -3,9 +3,13 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  appendTaskNote,
+  blockTask,
   claimTask,
   completeTask,
   parseTaskFile,
+  requestTaskReview,
+  unblockTask,
   updateTaskFileContents,
 } from "../src";
 
@@ -30,6 +34,8 @@ function taskFile(overrides: Partial<Record<string, string>> = {}): string {
     "  - packages/**",
     "created_at: 2026-05-14T00:00:00-05:00",
     `updated_at: ${overrides.updated_at ?? "2026-05-14T00:00:00-05:00"}`,
+    ...(overrides.blocked_reason ? [`blocked_reason: ${overrides.blocked_reason}`] : []),
+    ...(overrides.review_reason ? [`review_reason: ${overrides.review_reason}`] : []),
     "---",
     "",
     "# Example",
@@ -82,16 +88,100 @@ describe("task write helpers", () => {
 
   test("completeTask marks a task done and clears claimed_by", async () => {
     const { repoRoot, taskPath } = await makeRepo(
-      taskFile({ status: "doing", claimed_by: "codex" }),
+      taskFile({
+        status: "doing",
+        claimed_by: "codex",
+        blocked_reason: "Waiting",
+        review_reason: "Check",
+      }),
     );
 
-    await completeTask(repoRoot, "F-9999", new Date("2026-05-14T13:00:00Z"));
+    await completeTask(repoRoot, "F-9999", new Date("2026-05-14T13:00:00Z"), "Verified");
 
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(parsed.task.status).toBe("done");
     expect(parsed.task.claimed_by).toBe("");
     expect(parsed.task.updated_at).toBe("2026-05-14T13:00:00.000Z");
     expect(parsed.task.closed_at).toBe("2026-05-14T13:00:00.000Z");
+    expect(parsed.task.close_reason).toBe("Verified");
+    expect(parsed.task.blocked_reason).toBe("");
+    expect(parsed.task.review_reason).toBe("");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
+  });
+
+  test("blockTask records blocked status and reason", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+
+    await blockTask(repoRoot, "F-9999", "Waiting on API", new Date("2026-05-14T14:00:00Z"));
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.status).toBe("blocked");
+    expect(parsed.task.blocked_reason).toBe("Waiting on API");
+    expect(parsed.task.updated_at).toBe("2026-05-14T14:00:00.000Z");
+    expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
+  });
+
+  test("unblockTask clears blocked_reason and reopens the task", async () => {
+    const { repoRoot, taskPath } = await makeRepo(
+      taskFile({ status: "blocked", blocked_reason: "Waiting" }),
+    );
+
+    await unblockTask(repoRoot, "F-9999", new Date("2026-05-14T15:00:00Z"));
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.status).toBe("open");
+    expect(parsed.task.blocked_reason).toBe("");
+    expect(parsed.task.updated_at).toBe("2026-05-14T15:00:00.000Z");
+    expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
+  });
+
+  test("requestTaskReview records review_reason without changing status", async () => {
+    const { repoRoot, taskPath } = await makeRepo(taskFile({ status: "doing" }));
+
+    await requestTaskReview(repoRoot, "F-9999", "Needs review", new Date("2026-05-14T16:00:00Z"));
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.status).toBe("doing");
+    expect(parsed.task.review_reason).toBe("Needs review");
+    expect(parsed.task.updated_at).toBe("2026-05-14T16:00:00.000Z");
+    expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");
+  });
+
+  test("appendTaskNote appends to the Notes section and preserves the rest of the body", async () => {
+    const { repoRoot, taskPath } = await makeRepo(
+      [
+        "---",
+        "id: F-9999",
+        "title: Example",
+        "kind: task",
+        "status: open",
+        "priority: medium",
+        'parent: ""',
+        "depends_on: []",
+        'claimed_by: ""',
+        "scope:",
+        "  - packages/**",
+        "created_at: 2026-05-14T00:00:00-05:00",
+        "updated_at: 2026-05-14T00:00:00-05:00",
+        "---",
+        "",
+        "# Example",
+        "",
+        "## Notes",
+        "",
+        "Existing note.",
+        "",
+        "## History",
+        "",
+        "- Created.",
+        "",
+      ].join("\n"),
+    );
+
+    await appendTaskNote(repoRoot, "F-9999", "New note.", new Date("2026-05-14T17:00:00Z"));
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(parsed.task.updated_at).toBe("2026-05-14T17:00:00.000Z");
+    expect(parsed.task.body).toContain("Existing note.\n\nNew note.\n\n## History");
   });
 });

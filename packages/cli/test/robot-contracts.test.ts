@@ -12,6 +12,7 @@ const expectedTopLevelKeys = {
   blockers: ["ok", "version", "taskId", "blockers"],
   deps: ["ok", "version", "taskId", "depends_on", "dependents"],
   doctor: ["ok", "version", "summary", "diagnostics"],
+  done: ["ok", "version", "task"],
   error: ["ok", "version", "error"],
 } as const;
 
@@ -61,6 +62,8 @@ describe("robot JSON contract documentation", () => {
       "updated_at",
       "closed_at",
       "close_reason",
+      "blocked_reason",
+      "review_reason",
       "sourcePath",
       "body",
     ]);

@@ -92,6 +92,8 @@ None.
 - `updated_at`: ISO timestamp.
 - `closed_at`: optional ISO timestamp for completed or canceled work.
 - `close_reason`: optional human-readable completion or cancellation reason.
+- `blocked_reason`: optional human-readable reason the task is blocked.
+- `review_reason`: optional human-readable reason the task needs review.
 
 ## Canonical Markdown Sections
 

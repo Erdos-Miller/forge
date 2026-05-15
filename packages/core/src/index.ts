@@ -21,6 +21,8 @@ export interface Task {
   updated_at: string;
   closed_at?: string;
   close_reason?: string;
+  blocked_reason?: string;
+  review_reason?: string;
   body: string;
   sourcePath: string;
 }
@@ -31,7 +33,16 @@ export interface ParsedTask {
 }
 
 export type TaskFrontmatterUpdates = Partial<
-  Pick<Task, "status" | "claimed_by" | "updated_at" | "closed_at" | "close_reason">
+  Pick<
+    Task,
+    | "status"
+    | "claimed_by"
+    | "updated_at"
+    | "closed_at"
+    | "close_reason"
+    | "blocked_reason"
+    | "review_reason"
+  >
 >;
 
 export interface CreateTaskInput {
@@ -442,6 +453,7 @@ export async function completeTask(
   repoRoot: string,
   taskId: string,
   now = new Date(),
+  reason = "",
 ): Promise<Task> {
   const timestamp = now.toISOString();
   const parsed = await findParsedTaskById(repoRoot, taskId);
@@ -450,6 +462,9 @@ export async function completeTask(
     claimed_by: "",
     updated_at: timestamp,
     closed_at: timestamp,
+    close_reason: reason,
+    blocked_reason: "",
+    review_reason: "",
   });
 }
 
@@ -457,8 +472,113 @@ export async function completeTaskFrom(
   startDir: string,
   taskId: string,
   now = new Date(),
+  reason = "",
 ): Promise<Task> {
-  return completeTask(await findForgeRoot(startDir), taskId, now);
+  return completeTask(await findForgeRoot(startDir), taskId, now, reason);
+}
+
+export async function blockTask(
+  repoRoot: string,
+  taskId: string,
+  reason: string,
+  now = new Date(),
+): Promise<Task> {
+  if (!reason.trim()) {
+    throw new TaskWriteError("block requires a reason");
+  }
+
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  return updateTaskFile(parsed.task.sourcePath, {
+    status: "blocked",
+    blocked_reason: reason,
+    updated_at: now.toISOString(),
+  });
+}
+
+export async function blockTaskFrom(
+  startDir: string,
+  taskId: string,
+  reason: string,
+  now = new Date(),
+): Promise<Task> {
+  return blockTask(await findForgeRoot(startDir), taskId, reason, now);
+}
+
+export async function unblockTask(
+  repoRoot: string,
+  taskId: string,
+  now = new Date(),
+): Promise<Task> {
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  return updateTaskFile(parsed.task.sourcePath, {
+    status: "open",
+    blocked_reason: "",
+    updated_at: now.toISOString(),
+  });
+}
+
+export async function unblockTaskFrom(
+  startDir: string,
+  taskId: string,
+  now = new Date(),
+): Promise<Task> {
+  return unblockTask(await findForgeRoot(startDir), taskId, now);
+}
+
+export async function requestTaskReview(
+  repoRoot: string,
+  taskId: string,
+  reason: string,
+  now = new Date(),
+): Promise<Task> {
+  if (!reason.trim()) {
+    throw new TaskWriteError("review requires a reason");
+  }
+
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  return updateTaskFile(parsed.task.sourcePath, {
+    review_reason: reason,
+    updated_at: now.toISOString(),
+  });
+}
+
+export async function requestTaskReviewFrom(
+  startDir: string,
+  taskId: string,
+  reason: string,
+  now = new Date(),
+): Promise<Task> {
+  return requestTaskReview(await findForgeRoot(startDir), taskId, reason, now);
+}
+
+export async function appendTaskNote(
+  repoRoot: string,
+  taskId: string,
+  note: string,
+  now = new Date(),
+): Promise<Task> {
+  if (!note.trim()) {
+    throw new TaskWriteError("note requires non-empty stdin");
+  }
+
+  const parsed = await findParsedTaskById(repoRoot, taskId);
+  const contents = await fs.readFile(parsed.task.sourcePath, "utf8");
+  const notedContents = appendToMarkdownSection(contents, "Notes", note.trim(), parsed.task.sourcePath);
+  const updatedContents = updateTaskFileContents(notedContents, {
+    updated_at: now.toISOString(),
+  }, parsed.task.sourcePath);
+  const updated = parseTaskFile(parsed.task.sourcePath, updatedContents);
+  await fs.writeFile(parsed.task.sourcePath, updatedContents);
+  return updated.task;
+}
+
+export async function appendTaskNoteFrom(
+  startDir: string,
+  taskId: string,
+  note: string,
+  now = new Date(),
+): Promise<Task> {
+  return appendTaskNote(await findForgeRoot(startDir), taskId, note, now);
 }
 
 export function analyzeTasks(tasks: Task[]): TaskGraphAnalysis {
@@ -586,6 +706,30 @@ function splitFrontmatter(
   return { frontmatter: match[1], body: match[2] };
 }
 
+function appendToMarkdownSection(
+  contents: string,
+  sectionTitle: string,
+  text: string,
+  sourcePath = "task.md",
+): string {
+  const { frontmatter, body } = splitFrontmatter(contents, sourcePath);
+  const headingPattern = new RegExp(`^## ${escapeRegExp(sectionTitle)}\\s*$`, "m");
+  const headingMatch = headingPattern.exec(body);
+
+  if (!headingMatch) {
+    return `---\n${frontmatter}\n---${body.trimEnd()}\n\n## ${sectionTitle}\n\n${text}\n`;
+  }
+
+  const sectionStart = headingMatch.index + headingMatch[0].length;
+  const rest = body.slice(sectionStart);
+  const nextHeadingMatch = /^## .*/m.exec(rest);
+  const insertAt = nextHeadingMatch ? sectionStart + nextHeadingMatch.index : body.length;
+  const before = body.slice(0, insertAt).trimEnd();
+  const after = body.slice(insertAt);
+
+  return `---\n${frontmatter}\n---${before}\n\n${text}\n\n${after}`;
+}
+
 function upsertFrontmatterField(
   frontmatter: string,
   field: string,
@@ -600,7 +744,12 @@ function upsertFrontmatterField(
 }
 
 function serializeFrontmatterScalar(field: string, value: string): string {
-  if (field === "claimed_by") {
+  if (
+    field === "claimed_by" ||
+    field === "close_reason" ||
+    field === "blocked_reason" ||
+    field === "review_reason"
+  ) {
     return JSON.stringify(value);
   }
   return value;
@@ -1274,6 +1423,8 @@ export function validateTask(
   const updated_at = requireTimestamp(raw, sourcePath, "updated_at");
   const closed_at = optionalTimestamp(raw, sourcePath, "closed_at");
   const close_reason = optionalString(raw, sourcePath, "close_reason");
+  const blocked_reason = optionalString(raw, sourcePath, "blocked_reason");
+  const review_reason = optionalString(raw, sourcePath, "review_reason");
 
   return {
     id,
@@ -1290,6 +1441,8 @@ export function validateTask(
     updated_at,
     closed_at,
     close_reason,
+    blocked_reason,
+    review_reason,
     body,
     sourcePath,
   };
@@ -1301,7 +1454,7 @@ function optionalString(
   field: string,
 ): string | undefined {
   const value = raw[field];
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     return undefined;
   }
   if (typeof value !== "string") {

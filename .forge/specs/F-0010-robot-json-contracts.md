@@ -169,8 +169,34 @@ Returns one full task document for agent context.
     "updated_at": "2026-05-15T00:00:00-05:00",
     "closed_at": null,
     "close_reason": null,
+    "blocked_reason": null,
+    "review_reason": null,
     "sourcePath": "/repo/.forge/tasks/F-0010-define-robot-json-contracts.md",
     "body": "# Define robot JSON contracts\n\n## Why\n\nAgents need stable command output."
+  }
+}
+```
+
+### `done`
+
+Marks one task done and returns the updated task summary when `--json` is present.
+
+<!-- contract:done -->
+```json
+{
+  "ok": true,
+  "version": 1,
+  "task": {
+    "id": "F-0010",
+    "title": "Define robot JSON contracts",
+    "status": "done",
+    "priority": "urgent",
+    "area": "cli",
+    "claimed_by": null,
+    "scope": [".forge/**", "packages/cli/**", "packages/core/**"],
+    "depends_on": ["F-0004"],
+    "closed_at": "2026-05-15T01:00:00-05:00",
+    "close_reason": "Verified"
   }
 }
 ```

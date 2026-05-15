@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   analyzeTasks,
+  appendTaskNoteFrom,
+  blockTaskFrom,
   claimTaskFrom,
   completeTaskFrom,
   createTaskFrom,
@@ -12,8 +14,10 @@ import {
   loadTasksFrom,
   rankReadyTaskQueue,
   rankReadyTasks,
+  requestTaskReviewFrom,
   resolveGuidance,
   parseTaskFile,
+  unblockTaskFrom,
   type CreateTaskInput,
   type GuidanceBundle,
   type GuidanceMatch,
@@ -30,6 +34,7 @@ export interface CliOptions {
   now: Date;
   stdout: (message: string) => void;
   stderr: (message: string) => void;
+  stdin: () => Promise<string>;
 }
 
 export type CommandClassification = "read" | "write" | "serve";
@@ -172,12 +177,48 @@ export const COMMANDS = [
     agentPurpose: "Reserve work before editing files.",
   },
   {
-    name: "done",
-    usage: "forge done <id>",
-    description: "Mark one task done.",
+    name: "note",
+    usage: "forge note <id> --stdin",
+    description: "Append text from stdin to the task Notes section.",
     classification: "write",
     supportsJson: false,
-    examples: ["forge done F-0001"],
+    examples: ['printf "Decision: ..." | forge note F-0001 --stdin'],
+    agentPurpose: "Record implementation context without hand-editing Markdown.",
+  },
+  {
+    name: "block",
+    usage: "forge block <id> --reason <text>",
+    description: "Block one task with a reason.",
+    classification: "write",
+    supportsJson: false,
+    examples: ['forge block F-0001 --reason "Waiting on API decision"'],
+    agentPurpose: "Pause work with explicit context.",
+  },
+  {
+    name: "unblock",
+    usage: "forge unblock <id>",
+    description: "Clear the block reason and reopen one task.",
+    classification: "write",
+    supportsJson: false,
+    examples: ["forge unblock F-0001"],
+    agentPurpose: "Return blocked work to the open queue.",
+  },
+  {
+    name: "review",
+    usage: "forge review <id> --reason <text>",
+    description: "Record a review reason without changing task status.",
+    classification: "write",
+    supportsJson: false,
+    examples: ['forge review F-0001 --reason "Needs product wording decision"'],
+    agentPurpose: "Flag judgment needed before continuing or closing.",
+  },
+  {
+    name: "done",
+    usage: "forge done <id> [--reason <text>] [--json]",
+    description: "Mark one task done.",
+    classification: "write",
+    supportsJson: true,
+    examples: ["forge done F-0001", 'forge done F-0001 --reason "Verified" --json'],
     agentPurpose: "Close a task after verification.",
   },
   {
@@ -213,6 +254,10 @@ const COMMAND_HANDLERS = {
   prompt,
   "loop-prompt": loopPrompt,
   claim,
+  note,
+  block,
+  unblock,
+  review,
   done,
   web,
 } satisfies Record<CommandName, CommandHandler>;
@@ -227,6 +272,7 @@ export async function runCli(
     now: options.now ?? new Date(),
     stdout: options.stdout ?? ((message) => console.log(message)),
     stderr: options.stderr ?? ((message) => console.error(message)),
+    stdin: options.stdin ?? (() => Bun.stdin.text()),
   };
 
   try {
@@ -364,6 +410,8 @@ async function show(options: CliOptions, args: string[]): Promise<number> {
         updated_at: task.updated_at,
         closed_at: task.closed_at || null,
         close_reason: task.close_reason || null,
+        blocked_reason: task.blocked_reason || null,
+        review_reason: task.review_reason || null,
         sourcePath: task.sourcePath,
         body: task.body,
         sections: parseMarkdownSections(task.body),
@@ -504,6 +552,50 @@ async function claim(options: CliOptions, args: string[]): Promise<number> {
   return 0;
 }
 
+async function note(options: CliOptions, args: string[]): Promise<number> {
+  const [taskId, stdinFlag, ...extra] = args;
+  if (!taskId || stdinFlag !== "--stdin" || extra.length > 0) {
+    options.stderr("usage: forge note <id> --stdin");
+    return 1;
+  }
+
+  const task = await appendTaskNoteFrom(options.cwd, taskId, await options.stdin(), options.now);
+  options.stdout(`noted ${task.id}`);
+  return 0;
+}
+
+async function block(options: CliOptions, args: string[]): Promise<number> {
+  const { taskId, reason } = parseReasonCommandArgs(
+    args,
+    "usage: forge block <id> --reason <text>",
+  );
+  const task = await blockTaskFrom(options.cwd, taskId, reason, options.now);
+  options.stdout(`blocked ${task.id}`);
+  return 0;
+}
+
+async function unblock(options: CliOptions, args: string[]): Promise<number> {
+  const [taskId, ...extra] = args;
+  if (!taskId || extra.length > 0) {
+    options.stderr("usage: forge unblock <id>");
+    return 1;
+  }
+
+  const task = await unblockTaskFrom(options.cwd, taskId, options.now);
+  options.stdout(`unblocked ${task.id}`);
+  return 0;
+}
+
+async function review(options: CliOptions, args: string[]): Promise<number> {
+  const { taskId, reason } = parseReasonCommandArgs(
+    args,
+    "usage: forge review <id> --reason <text>",
+  );
+  const task = await requestTaskReviewFrom(options.cwd, taskId, reason, options.now);
+  options.stdout(`review requested ${task.id}`);
+  return 0;
+}
+
 async function create(options: CliOptions, args: string[]): Promise<number> {
   const input = parseCreateArgs(args);
   const task = await createTaskFrom(options.cwd, input, options.now);
@@ -543,13 +635,28 @@ async function loopPrompt(options: CliOptions, args: string[]): Promise<number> 
 }
 
 async function done(options: CliOptions, args: string[]): Promise<number> {
-  const [taskId, ...extra] = args;
-  if (!taskId || extra.length > 0) {
-    options.stderr(`usage: forge done <id>`);
+  const parsed = parseDoneArgs(args);
+  if (!parsed.ok) {
+    options.stderr(parsed.message);
     return 1;
   }
 
-  const task = await completeTaskFrom(options.cwd, taskId, options.now);
+  const task = await completeTaskFrom(options.cwd, parsed.taskId, options.now, parsed.reason);
+  if (parsed.json) {
+    options.stdout(
+      stringifyJson({
+        ok: true,
+        version: 1,
+        task: {
+          ...toRobotTaskSummary(task),
+          closed_at: task.closed_at ?? null,
+          close_reason: task.close_reason ?? null,
+        },
+      }),
+    );
+    return 0;
+  }
+
   options.stdout(`done ${task.id}`);
   return 0;
 }
@@ -619,6 +726,50 @@ function parseClaimArgs(
   }
 
   return { taskId, claimedBy };
+}
+
+function parseReasonCommandArgs(
+  args: string[],
+  usage: string,
+): { taskId: string; reason: string } {
+  const [taskId, reasonFlag, reason, ...extra] = args;
+  if (!taskId || reasonFlag !== "--reason" || !reason || extra.length > 0) {
+    throw new Error(usage);
+  }
+  return { taskId, reason };
+}
+
+function parseDoneArgs(
+  args: string[],
+): { ok: true; taskId: string; reason: string; json: boolean } | { ok: false; message: string } {
+  const [taskId, ...rest] = args;
+  if (!taskId) {
+    return { ok: false, message: "usage: forge done <id> [--reason <text>] [--json]" };
+  }
+
+  let reason = "";
+  let json = false;
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+    switch (arg) {
+      case "--reason": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "done option --reason requires a value" };
+        }
+        reason = value;
+        index += 1;
+        break;
+      }
+      case "--json":
+        json = true;
+        break;
+      default:
+        return { ok: false, message: `unknown done option: ${arg}` };
+    }
+  }
+
+  return { ok: true, taskId, reason, json };
 }
 
 function parseCreateArgs(args: string[]): CreateTaskInput {

@@ -125,6 +125,7 @@ async function writeGuidanceFixture(repoRoot: string): Promise<void> {
 async function run(
   cwd: string,
   args: string[],
+  stdin = "",
 ): Promise<{ code: number; stdout: string[]; stderr: string[] }> {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -134,6 +135,7 @@ async function run(
     now: new Date("2026-05-14T12:00:00Z"),
     stdout: (message) => stdout.push(message),
     stderr: (message) => stderr.push(message),
+    stdin: async () => stdin,
   });
 
   return { code, stdout, stderr };
@@ -165,6 +167,10 @@ describe("forge cli", () => {
       "prompt",
       "loop-prompt",
       "claim",
+      "note",
+      "block",
+      "unblock",
+      "review",
       "done",
       "web",
     ]);
@@ -715,19 +721,81 @@ describe("forge cli", () => {
     expect(parsed.task.claimed_by).toBe("tester");
   });
 
+  test("note appends stdin to the Notes section", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: ["# Open", "", "## Notes", "", "Existing.", "", "## History", "", "- Created.", ""].join(
+          "\n",
+        ),
+      }),
+    );
+
+    const result = await run(nestedDir, ["note", "F-0002", "--stdin"], "New note.");
+
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual(["noted F-0002"]);
+    expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.body).toContain("Existing.\n\nNew note.\n\n## History");
+  });
+
+  test("block, unblock, and review update lifecycle fields", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+
+    const blockResult = await run(nestedDir, [
+      "block",
+      "F-0002",
+      "--reason",
+      "Waiting on API",
+    ]);
+    let parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(blockResult.code).toBe(0);
+    expect(blockResult.stdout).toEqual(["blocked F-0002"]);
+    expect(parsed.task.status).toBe("blocked");
+    expect(parsed.task.blocked_reason).toBe("Waiting on API");
+
+    const reviewResult = await run(nestedDir, [
+      "review",
+      "F-0002",
+      "--reason",
+      "Needs human check",
+    ]);
+    parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(reviewResult.code).toBe(0);
+    expect(reviewResult.stdout).toEqual(["review requested F-0002"]);
+    expect(parsed.task.status).toBe("blocked");
+    expect(parsed.task.review_reason).toBe("Needs human check");
+
+    const unblockResult = await run(nestedDir, ["unblock", "F-0002"]);
+    parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+    expect(unblockResult.code).toBe(0);
+    expect(unblockResult.stdout).toEqual(["unblocked F-0002"]);
+    expect(parsed.task.status).toBe("open");
+    expect(parsed.task.blocked_reason).toBe("");
+    expect(parsed.task.review_reason).toBe("Needs human check");
+  });
+
   test("done updates a task file", async () => {
     const { nestedDir, taskPath } = await makeRepo();
     await run(nestedDir, ["claim", "F-0002", "--by", "codex"]);
 
-    const result = await run(nestedDir, ["done", "F-0002"]);
+    const result = await run(nestedDir, ["done", "F-0002", "--reason", "Verified", "--json"]);
+    const payload = parseStdoutJson(result);
 
     const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
     expect(result.code).toBe(0);
-    expect(result.stdout).toEqual(["done F-0002"]);
+    expect(payload.task.status).toBe("done");
+    expect(payload.task.close_reason).toBe("Verified");
     expect(parsed.task.status).toBe("done");
     expect(parsed.task.claimed_by).toBe("");
     expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
     expect(parsed.task.closed_at).toBe("2026-05-14T12:00:00.000Z");
+    expect(parsed.task.close_reason).toBe("Verified");
     expect(parsed.task.body).toBe("\n# Open\n\nBody stays readable.\n");
   });
 
