@@ -61,6 +61,9 @@ describe("prompt command guidance", () => {
     expect(output).toContain("Command guidance:");
     expect(output).toContain("Prefer structured Forge commands");
     expect(output).toContain("Direct Markdown edits are acceptable");
+    expect(output).toContain("bun run harness:web");
+    expect(output).toContain("bun run harness:cli");
+    expect(output).toContain("bun run harness:check");
     for (const command of COMMANDS) {
       expect(output).toContain(command.usage);
     }
@@ -71,6 +74,9 @@ describe("prompt command guidance", () => {
     const output = await run(repoRoot, ["loop-prompt"]);
 
     expect(output).toContain("Command guidance:");
+    expect(output).toContain("bun run harness:web");
+    expect(output).toContain("bun run harness:cli");
+    expect(output).toContain("bun run harness:check");
     for (const command of COMMANDS) {
       expect(output).toContain(command.usage);
     }

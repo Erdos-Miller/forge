@@ -275,9 +275,20 @@ customer-facing `forge` CLI commands.
 - `bun run harness:check` runs the aggregate in-repo harness and test suite.
 - `bun run quality:check` runs `harness:check` and the production web build.
 
-Use the focused harness when a task touches one surface. Use `quality:check`
-before closing broad or cross-surface work.
+Use the focused harness when a task touches one surface:
+
+- Web UI, Vite server, or `/api/tasks` changes should name
+  `bun run harness:web`.
+- CLI workflow, command, prompt, or robot JSON changes should name
+  `bun run harness:cli`.
+- Broad behavior, graph, task-store, or cross-surface changes should name
+  `bun run harness:check`.
+
+Use `bun run quality:check` before closing broad or cross-surface work. These
+checks are advisory task guidance, not schema fields, and they should be written
+in the task `Verification` or `Notes` sections when relevant.
 
 ## Cache Policy
 
-Future tools may create a local cache or index, but cache files must be ignored by git. Markdown task files remain canonical.
+Future tools may create a local cache or index, but cache files must be ignored
+by git. Markdown task files remain canonical.
