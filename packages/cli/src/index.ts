@@ -11,7 +11,10 @@ import {
   loadTasksFrom,
   rankReadyTaskQueue,
   rankReadyTasks,
+  resolveGuidance,
   type CreateTaskInput,
+  type GuidanceBundle,
+  type GuidanceMatch,
   type RankedQueueEntry,
   type Task,
   type TaskGraphAnalysis,
@@ -103,6 +106,15 @@ export const COMMANDS = [
     agentPurpose: "Inspect local graph context.",
   },
   {
+    name: "guidance",
+    usage: "forge guidance [--json] [--for-task <id>] [--path <path>] [--full]",
+    description: "Resolve contextual guidance.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge guidance", "forge guidance --for-task F-0001 --json"],
+    agentPurpose: "Load repo, task, cwd, and path guidance for an agent step.",
+  },
+  {
     name: "create",
     usage: "forge create <id> --title <title> [options]",
     description: "Create a canonical task file.",
@@ -174,6 +186,7 @@ const COMMAND_HANDLERS = {
   show,
   blockers,
   deps,
+  guidance,
   create,
   prompt,
   "loop-prompt": loopPrompt,
@@ -389,6 +402,50 @@ async function deps(options: CliOptions, args: string[]): Promise<number> {
     }),
   );
   return 0;
+}
+
+async function guidance(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseGuidanceArgs(args);
+  if (!parsed.ok) {
+    if (parsed.json) {
+      return writeJsonUsageError(options, parsed.message);
+    }
+    options.stderr(parsed.message);
+    return 2;
+  }
+
+  try {
+    const bundle = await resolveGuidance({
+      cwd: options.cwd,
+      taskId: parsed.taskId,
+      paths: parsed.paths,
+      includeContent: parsed.full,
+    });
+
+    if (parsed.json) {
+      options.stdout(
+        stringifyJson({
+          ok: true,
+          version: 1,
+          ...toRobotGuidanceBundle(bundle),
+        }),
+      );
+    } else {
+      options.stdout(formatGuidanceText(bundle, parsed.full));
+    }
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const taskMatch = /^task (\S+) not found$/.exec(message);
+    if (taskMatch) {
+      if (parsed.json) {
+        return writeTaskNotFound(options, taskMatch[1]);
+      }
+      options.stderr(message);
+      return 3;
+    }
+    throw error;
+  }
 }
 
 async function claim(options: CliOptions, args: string[]): Promise<number> {
@@ -645,6 +702,49 @@ function parseNextArgs(
   return claim ? { ok: true, claim, claimedBy } : { ok: true, claim };
 }
 
+function parseGuidanceArgs(args: string[]):
+  | { ok: true; json: boolean; full: boolean; taskId?: string; paths: string[] }
+  | { ok: false; json: boolean; message: string } {
+  let json = false;
+  let full = false;
+  let taskId: string | undefined;
+  const paths: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--full":
+        full = true;
+        break;
+      case "--for-task": {
+        const value = args[index + 1];
+        if (!value) {
+          return { ok: false, json, message: "guidance option --for-task requires a value" };
+        }
+        taskId = value;
+        index += 1;
+        break;
+      }
+      case "--path": {
+        const value = args[index + 1];
+        if (!value) {
+          return { ok: false, json, message: "guidance option --path requires a value" };
+        }
+        paths.push(value);
+        index += 1;
+        break;
+      }
+      default:
+        return { ok: false, json, message: `unknown guidance option: ${arg}` };
+    }
+  }
+
+  return { ok: true, json, full, taskId, paths };
+}
+
 function writeJsonUsageError(options: CliOptions, message: string): number {
   options.stderr(
     stringifyJson({
@@ -707,6 +807,40 @@ function toRobotDiagnostics(analysis: TaskGraphAnalysis): Record<string, unknown
     dependencyCycles: analysis.dependencyCycles,
     duplicateTaskIds: analysis.duplicateTaskIds,
   };
+}
+
+function toRobotGuidanceBundle(bundle: GuidanceBundle): Record<string, unknown> {
+  return {
+    repoRoot: bundle.repoRoot,
+    matches: bundle.matches.map((match) => ({
+      path: match.path,
+      sourcePath: match.sourcePath,
+      reasons: match.reasons,
+      promptSummary: match.promptSummary,
+      ...(match.content === undefined ? {} : { content: match.content }),
+    })),
+    diagnostics: bundle.diagnostics,
+  };
+}
+
+function formatGuidanceText(bundle: GuidanceBundle, full: boolean): string {
+  if (bundle.matches.length === 0) {
+    return "No guidance matched.";
+  }
+
+  return bundle.matches
+    .map((match) => formatGuidanceMatchText(match, full))
+    .join("\n\n");
+}
+
+function formatGuidanceMatchText(match: GuidanceMatch, full: boolean): string {
+  const lines = [
+    match.path,
+    `reasons: ${match.reasons.join(", ")}`,
+    "",
+    full ? (match.content ?? "") : (match.promptSummary ?? "No prompt summary."),
+  ];
+  return lines.join("\n").trimEnd();
 }
 
 function toRobotBlockers(task: Task, analysis: TaskGraphAnalysis): Array<Record<string, unknown>> {

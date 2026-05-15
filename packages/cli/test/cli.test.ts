@@ -77,6 +77,40 @@ async function makeRepo(): Promise<{
   return { repoRoot, nestedDir, taskPath: openPath };
 }
 
+async function writeGuidanceFixture(repoRoot: string): Promise<void> {
+  const forgeDir = path.join(repoRoot, ".forge");
+  const guidanceDir = path.join(forgeDir, "guidance");
+  await fs.mkdir(guidanceDir, { recursive: true });
+  await fs.writeFile(
+    path.join(forgeDir, "guidance.yml"),
+    [
+      "version: 1",
+      "routes:",
+      "  - include: guidance/core.md",
+      "    when:",
+      "      cwd:",
+      "        - packages/cli/**",
+      "  - include: guidance/core.md",
+      "    when:",
+      "      path:",
+      "        - packages/cli/src/**",
+      "  - include: guidance/task.md",
+      "    when:",
+      "      scope:",
+      "        - packages/**",
+      "",
+    ].join("\n"),
+  );
+  await fs.writeFile(
+    path.join(guidanceDir, "core.md"),
+    ["# Core", "", "## Prompt Summary", "", "Use the local CLI patterns.", ""].join("\n"),
+  );
+  await fs.writeFile(
+    path.join(guidanceDir, "task.md"),
+    ["# Task", "", "## Prompt Summary", "", "Task-scoped guidance.", ""].join("\n"),
+  );
+}
+
 async function run(
   cwd: string,
   args: string[],
@@ -114,6 +148,7 @@ describe("forge cli", () => {
       "show",
       "blockers",
       "deps",
+      "guidance",
       "create",
       "prompt",
       "loop-prompt",
@@ -405,6 +440,71 @@ describe("forge cli", () => {
   test("deps --json reports unknown task ids", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["deps", "F-9999", "--json"]);
+    const payload = parseStderrJson(result);
+
+    expect(result.code).toBe(3);
+    expect(payload.error.code).toBe("task_not_found");
+  });
+
+  test("guidance prints concise text output for cwd matches", async () => {
+    const { repoRoot, nestedDir } = await makeRepo();
+    await writeGuidanceFixture(repoRoot);
+
+    const result = await run(nestedDir, ["guidance"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout[0]).toContain("guidance/core.md");
+    expect(result.stdout[0]).toContain("reasons: cwd:packages/cli/src");
+    expect(result.stdout[0]).toContain("Use the local CLI patterns.");
+    expect(result.stdout[0]).not.toContain("# Core");
+  });
+
+  test("guidance --json resolves task and path context", async () => {
+    const { repoRoot } = await makeRepo();
+    await writeGuidanceFixture(repoRoot);
+
+    const result = await run(repoRoot, [
+      "guidance",
+      "--for-task",
+      "F-0002",
+      "--path",
+      "packages/cli/src/index.ts",
+      "--json",
+    ]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload.ok).toBe(true);
+    expect(payload.matches.map((match: any) => match.path)).toEqual([
+      "guidance/core.md",
+      "guidance/task.md",
+    ]);
+    expect(payload.matches[0].promptSummary).toBe("Use the local CLI patterns.");
+    expect(payload.matches[0].content).toBeUndefined();
+  });
+
+  test("guidance --full includes full matched content", async () => {
+    const { repoRoot } = await makeRepo();
+    await writeGuidanceFixture(repoRoot);
+
+    const result = await run(repoRoot, [
+      "guidance",
+      "--path",
+      "packages/cli/src/index.ts",
+      "--full",
+      "--json",
+    ]);
+    const payload = parseStdoutJson(result);
+
+    expect(result.code).toBe(0);
+    expect(payload.matches[0].content).toContain("# Core");
+  });
+
+  test("guidance --json reports missing task ids", async () => {
+    const { repoRoot } = await makeRepo();
+    await writeGuidanceFixture(repoRoot);
+
+    const result = await run(repoRoot, ["guidance", "--for-task", "F-9999", "--json"]);
     const payload = parseStderrJson(result);
 
     expect(result.code).toBe(3);
