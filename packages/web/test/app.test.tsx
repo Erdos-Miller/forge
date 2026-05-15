@@ -56,6 +56,14 @@ const payload: TaskGraphPayload = {
         "",
         "- Queue renders.",
         "",
+        "## Execution Plan",
+        "",
+        "Summary: build the queue view.",
+        "",
+        "## Notes",
+        "",
+        "Keep the task readable.",
+        "",
         "## Verification",
         "",
         "- bun test",
@@ -119,7 +127,54 @@ describe("App", () => {
     expect(html).toContain("What success looks like");
     expect(html).toContain("We need local visibility");
     expect(html).toContain("Build the board.");
+    expect(html).toContain("Execution Plan");
+    expect(html).toContain("Summary: build the queue view.");
     expect(html).toContain("<summary>Dependencies (1)</summary>");
+  });
+
+  test("renders Execution Plan expanded before Notes and Additional Details", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [
+            {
+              ...payload.tasks[1],
+              body: [
+                "# Ready task",
+                "",
+                "## Acceptance Criteria",
+                "",
+                "- Queue renders.",
+                "",
+                "## Execution Plan",
+                "",
+                "Summary: build it.",
+                "",
+                "## Notes",
+                "",
+                "Visible note.",
+                "",
+                "## Extra Review Notes",
+                "",
+                "Unknown section.",
+                "",
+              ].join("\n"),
+            },
+          ],
+          readyTaskIds: ["F-0002"],
+          recommendedTaskIds: ["F-0002"],
+          availabilityByTaskId: { "F-0002": "ready" },
+          blockersByTaskId: { "F-0002": [] },
+        }}
+      />,
+    );
+
+    expect(html).toContain('<section class="markdown taskSection normal"><h3>Execution Plan</h3>');
+    expect(html.indexOf("Acceptance Criteria")).toBeLessThan(html.indexOf("Execution Plan"));
+    expect(html.indexOf("Execution Plan")).toBeLessThan(html.indexOf("Notes"));
+    expect(html.indexOf("Notes")).toBeLessThan(html.indexOf("Additional Details"));
+    expect(html).toContain("Unknown section.");
   });
 
   test("renders graph diagnostics without replacing the page", () => {

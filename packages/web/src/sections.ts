@@ -2,6 +2,7 @@ export type CanonicalSectionKey =
   | "why"
   | "success"
   | "acceptance"
+  | "executionPlan"
   | "dependencies"
   | "verification"
   | "notes"
@@ -17,6 +18,7 @@ export interface OrganizedTaskSections {
   why?: MarkdownSection;
   success?: MarkdownSection;
   acceptance?: MarkdownSection;
+  executionPlan?: MarkdownSection;
   dependencies?: MarkdownSection;
   verification?: MarkdownSection;
   notes: MarkdownSection[];
@@ -46,6 +48,7 @@ export function organizeTaskMarkdown(body: string): OrganizedTaskSections {
   const why = selectSection(sections, used, ["why", "problem", "context"]);
   const success = selectSection(sections, used, ["what success looks like", "goal", "outcome"]);
   const acceptance = selectSection(sections, used, ["acceptance criteria", "acceptance"]);
+  const executionPlan = selectSection(sections, used, ["execution plan"]);
   const dependencies = selectSection(sections, used, ["dependencies", "dependency"]);
   const verification = selectSection(sections, used, ["verification", "verify"]);
   const notes = selectAllSections(sections, used, ["notes", "implementation notes"]);
@@ -66,6 +69,7 @@ export function organizeTaskMarkdown(body: string): OrganizedTaskSections {
     why,
     success,
     acceptance,
+    executionPlan,
     dependencies,
     verification,
     notes,

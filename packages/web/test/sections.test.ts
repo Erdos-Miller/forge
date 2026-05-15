@@ -23,12 +23,17 @@ describe("organizeTaskMarkdown", () => {
         "",
         "- It works.",
         "",
+        "## Execution Plan",
+        "",
+        "Summary: implement it.",
+        "",
       ].join("\n"),
     );
 
     expect(sections.why?.body).toBe("This matters.");
     expect(sections.success?.body).toBe("The task is done.");
     expect(sections.acceptance?.body).toBe("- It works.");
+    expect(sections.executionPlan?.body).toBe("Summary: implement it.");
     expect(sections.verification?.body).toBe("- bun test");
   });
 

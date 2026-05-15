@@ -606,6 +606,7 @@ function TaskDetail({
         <TaskSection section={sections.why} title="Why" variant="lead" />
         <TaskSection section={sections.success} title="What success looks like" />
         <TaskSection section={sections.acceptance} title="Acceptance Criteria" variant="list" />
+        <TaskSection section={sections.executionPlan} title="Execution Plan" />
         {sections.notes.map((section) => (
           <TaskSection key={section.index} section={section} title={section.title} />
         ))}
