@@ -38,24 +38,7 @@ interface RatchetFailure {
   message: string;
 }
 
-const exceptions: Record<string, FileRatchetException> = {
-  "packages/cli/src/index.ts": {
-    lineCount: {
-      reason: "Current CLI command surface is still centralized before command modules exist.",
-      cleanupTaskId: "F-0051",
-    },
-    maxLineLength: {
-      reason: "Current CLI usage and prompt strings predate the source readability ratchet.",
-      cleanupTaskId: "F-0051",
-    },
-  },
-  "packages/core/src/index.ts": {
-    lineCount: {
-      reason: "Current core parser, graph, guidance, and write helpers are still centralized.",
-      cleanupTaskId: "F-0051",
-    },
-  },
-};
+const exceptions: Record<string, FileRatchetException> = {};
 
 describe("source readability ratchet", () => {
   test("package source and test files stay within readability budgets", async () => {
