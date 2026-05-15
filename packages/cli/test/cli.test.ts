@@ -165,6 +165,7 @@ describe("forge cli", () => {
       "deps",
       "guidance",
       "doctor",
+      "closeout",
       "create",
       "prompt",
       "plan",
@@ -246,7 +247,8 @@ describe("forge cli", () => {
     expect(text).toContain("Mutate:\n- forge deps <id> --json");
     expect(text).toContain("- forge note <id> --stdin [write]");
     expect(text).toContain("Verify:\n- forge doctor --json [read]");
-    expect(text).toContain("Close:\n- forge done <id> [--reason <text>] [--json] [write]");
+    expect(text).toContain("Close:\n- forge closeout <id> --json [read]");
+    expect(text).toContain("- forge done <id> [--reason <text>] [--json] [write]");
   });
 
   test("help --agent rejects invalid usage", async () => {

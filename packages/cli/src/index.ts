@@ -170,6 +170,15 @@ export const COMMANDS = [
     agentPurpose: "Check the repo before trusting or closing work.",
   },
   {
+    name: "closeout",
+    usage: "forge closeout <id> --json",
+    description: "Emit advisory closeout guidance for one task.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge closeout F-0001 --json"],
+    agentPurpose: "Check what evidence or review concerns remain before closing a task.",
+  },
+  {
     name: "create",
     usage: "forge create <id> --title <title> [options]",
     description: "Create a canonical task file.",
@@ -293,6 +302,7 @@ const COMMAND_WORKFLOWS = {
   deps: "mutate",
   guidance: "inspect",
   doctor: "verify",
+  closeout: "close",
   create: "plan",
   prompt: "plan",
   plan: "plan",
@@ -334,6 +344,7 @@ const COMMAND_HANDLERS = {
   deps,
   guidance,
   doctor,
+  closeout,
   create,
   prompt,
   plan,
@@ -724,6 +735,37 @@ async function doctor(options: CliOptions, args: string[]): Promise<number> {
     }),
   );
   return errors === 0 ? 0 : 4;
+}
+
+async function closeout(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseIdJsonArgs(args, "usage: forge closeout <id> --json");
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  let task: Task;
+  try {
+    task = (await findParsedTaskByIdFrom(repoRoot, parsed.taskId)).task;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const taskMatch = /^task (\S+) not found$/.exec(message);
+    if (taskMatch) {
+      return writeTaskNotFound(options, taskMatch[1]);
+    }
+    throw error;
+  }
+  const guidance = await getTaskCloseoutGuidance(repoRoot, task);
+
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      taskId: task.id,
+      closeout: guidance,
+    }),
+  );
+  return 0;
 }
 
 async function claim(options: CliOptions, args: string[]): Promise<number> {
@@ -1543,6 +1585,160 @@ function getGuidanceRepairHint(
     case "missing_config":
       return "Create .forge/guidance.yml if this repo uses routed guidance.";
   }
+}
+
+async function getTaskCloseoutGuidance(
+  repoRoot: string,
+  task: Task,
+): Promise<Record<string, unknown>> {
+  const sections = parseMarkdownSections(task.body);
+  const executionPlan = findSection(sections, "Execution Plan");
+  const notes = findSection(sections, "Notes");
+  const verificationNotesPresent = hasVerificationNotes(notes?.body ?? "");
+  const stopConditions = extractLabeledBlock(executionPlan?.body ?? "", "Stop conditions");
+  const humanReviewTriggers = extractLabeledBlock(
+    executionPlan?.body ?? "",
+    "Human review triggers",
+  );
+  const blockers = [
+    ...stringIfPresent(task.blocked_reason),
+    ...extractPrefixedLines(notes?.body ?? "", "Blocked:"),
+  ];
+  const review = [
+    ...stringIfPresent(task.review_reason),
+    ...humanReviewTriggers,
+    ...extractPrefixedLines(notes?.body ?? "", "Review needed:"),
+  ];
+  const findings = getCloseoutFindings(task, {
+    executionPlanPresent: Boolean(executionPlan),
+    verificationNotesPresent,
+    blockers,
+    review,
+    stopConditions,
+  });
+
+  return {
+    ready_to_close: findings.length === 0,
+    execution_plan_present: Boolean(executionPlan),
+    verification_notes_present: verificationNotesPresent,
+    expected_quality_command: await getExpectedQualityCommand(repoRoot),
+    blockers,
+    review,
+    stop_conditions: stopConditions,
+    findings,
+  };
+}
+
+function getCloseoutFindings(
+  task: Task,
+  input: {
+    executionPlanPresent: boolean;
+    verificationNotesPresent: boolean;
+    blockers: string[];
+    review: string[];
+    stopConditions: string[];
+  },
+): Array<{ code: string; severity: "warning"; message: string }> {
+  const findings: Array<{ code: string; severity: "warning"; message: string }> = [];
+  if (!input.executionPlanPresent) {
+    findings.push({
+      code: "missing_execution_plan",
+      severity: "warning",
+      message: `task ${task.id} has no ## Execution Plan`,
+    });
+  }
+  if (!input.verificationNotesPresent) {
+    findings.push({
+      code: "missing_verification_notes",
+      severity: "warning",
+      message: `task ${task.id} has no verification evidence in Notes`,
+    });
+  }
+  if (input.blockers.length > 0 || task.status === "blocked") {
+    findings.push({
+      code: "blocker_present",
+      severity: "warning",
+      message: `task ${task.id} still has blocker context`,
+    });
+  }
+  if (input.review.length > 0) {
+    findings.push({
+      code: "review_needed",
+      severity: "warning",
+      message: `task ${task.id} has review context to resolve before closeout`,
+    });
+  }
+  if (input.stopConditions.length > 0) {
+    findings.push({
+      code: "stop_condition_present",
+      severity: "warning",
+      message: `task ${task.id} has stop-condition text to review before closeout`,
+    });
+  }
+  return findings;
+}
+
+async function getExpectedQualityCommand(repoRoot: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(repoRoot, "package.json"), "utf8");
+    const scripts = JSON.parse(raw).scripts ?? {};
+    for (const scriptName of ["quality:check", "harness:check", "test"]) {
+      if (typeof scripts[scriptName] === "string") {
+        return `bun run ${scriptName}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function findSection(
+  sections: Array<{ title: string; body: string }>,
+  title: string,
+): { title: string; body: string } | undefined {
+  return sections.find((section) => section.title.toLowerCase() === title.toLowerCase());
+}
+
+function hasVerificationNotes(notes: string): boolean {
+  return /^Verification:\s*$/im.test(notes) || /^- `?(bun|npm|pnpm|yarn|cargo|deno) /im.test(notes);
+}
+
+function extractPrefixedLines(body: string, prefix: string): string[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))
+    .map((line) => line.slice(prefix.length).trim())
+    .filter(Boolean);
+}
+
+function extractLabeledBlock(body: string, label: string): string[] {
+  const labelPattern = new RegExp(`^${escapeRegExp(label)}:\\s*$`, "im");
+  const match = labelPattern.exec(body);
+  if (!match) {
+    return [];
+  }
+
+  const rest = body.slice(match.index + match[0].length);
+  const nextLabel = /^\w[\w -]+:\s*$/m.exec(rest);
+  const rawBlock = rest.slice(0, nextLabel?.index ?? rest.length).trim();
+  return normalizeAdvisoryLines(rawBlock);
+}
+
+function normalizeAdvisoryLines(rawBlock: string): string[] {
+  if (!rawBlock || /^(none|n\/a|not applicable)\.?$/i.test(rawBlock)) {
+    return [];
+  }
+  return rawBlock
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
+    .filter(Boolean)
+    .filter((line) => !/^(none|n\/a|not applicable)\.?$/i.test(line));
+}
+
+function stringIfPresent(value: string | undefined): string[] {
+  return value?.trim() ? [value.trim()] : [];
 }
 
 function toParseDoctorDiagnostic(error: unknown, sourcePath: string): DoctorDiagnostic {
