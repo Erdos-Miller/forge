@@ -14,6 +14,7 @@ import {
 import { runCli } from "../src";
 
 const fixtureRepos: ForgeFixtureRepo[] = [];
+const cliEntrypoint = path.resolve(import.meta.dir, "..", "src", "index.ts");
 
 afterEach(async () => {
   await Promise.all(fixtureRepos.splice(0).map((repo) => repo.cleanup()));
@@ -46,9 +47,34 @@ async function run(cwd: string, args: string[], stdin = ""): Promise<RunResult> 
   return { code, stdout, stderr };
 }
 
+async function runEntrypoint(cwd: string, args: string[]): Promise<RunResult> {
+  const proc = Bun.spawn(["bun", cliEntrypoint, ...args], {
+    cwd,
+    env: { ...process.env, USER: "harness" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [code, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  return {
+    code,
+    stdout: splitOutputLines(stdout),
+    stderr: splitOutputLines(stderr),
+  };
+}
+
 function parseStdoutJson(result: RunResult): any {
   expect(result.stdout).toHaveLength(1);
   return JSON.parse(result.stdout[0]);
+}
+
+function splitOutputLines(output: string): string[] {
+  const trimmed = output.trimEnd();
+  return trimmed ? trimmed.split("\n") : [];
 }
 
 async function measure(label: string, action: () => Promise<RunResult>) {
@@ -61,9 +87,9 @@ async function measure(label: string, action: () => Promise<RunResult>) {
 
 describe("Forge agent harness scenarios", () => {
   test("runs a full robot workflow against an isolated temp repo", async () => {
-    const { repoRoot } = await makeRepo();
+    const { repoRoot, nestedDir } = await makeRepo();
 
-    const createResult = await run(repoRoot, [
+    const createResult = await run(nestedDir, [
       "create",
       "F-0001",
       "--title",
@@ -81,7 +107,7 @@ describe("Forge agent harness scenarios", () => {
     expect(queuePayload.tasks.map((task: any) => task.id)).toEqual(["F-0001"]);
 
     const claimedPayload = parseStdoutJson(
-      await run(repoRoot, ["next", "--claim", "--by", "codex", "--json"]),
+      await run(nestedDir, ["next", "--claim", "--by", "codex", "--json"]),
     );
     expect(claimedPayload).toMatchObject({
       reason: "claimed",
@@ -93,14 +119,14 @@ describe("Forge agent harness scenarios", () => {
     expect(parsed.task.status).toBe("doing");
     expect(parsed.task.claimed_by).toBe("codex");
 
-    expect(await run(repoRoot, ["note", "F-0001", "--stdin"], "Decision: exercise the full loop.")).toMatchObject({
+    expect(await run(nestedDir, ["note", "F-0001", "--stdin"], "Decision: exercise the full loop.")).toMatchObject({
       code: 0,
       stderr: [],
     });
     parsed = parseTaskFile(createdPath, await fs.readFile(createdPath, "utf8"));
     expect(parsed.task.body).toContain("Decision: exercise the full loop.");
 
-    expect(await run(repoRoot, ["block", "F-0001", "--reason", "Waiting on fixture"])).toMatchObject({
+    expect(await run(nestedDir, ["block", "F-0001", "--reason", "Waiting on fixture"])).toMatchObject({
       code: 0,
       stdout: ["blocked F-0001"],
     });
@@ -108,7 +134,7 @@ describe("Forge agent harness scenarios", () => {
     expect(parsed.task.status).toBe("blocked");
     expect(parsed.task.blocked_reason).toBe("Waiting on fixture");
 
-    expect(await run(repoRoot, ["unblock", "F-0001"])).toMatchObject({
+    expect(await run(nestedDir, ["unblock", "F-0001"])).toMatchObject({
       code: 0,
       stdout: ["unblocked F-0001"],
     });
@@ -116,7 +142,7 @@ describe("Forge agent harness scenarios", () => {
     expect(parsed.task.status).toBe("open");
     expect(parsed.task.blocked_reason).toBe("");
 
-    expect(await run(repoRoot, ["review", "F-0001", "--reason", "Needs harness review"])).toMatchObject({
+    expect(await run(nestedDir, ["review", "F-0001", "--reason", "Needs harness review"])).toMatchObject({
       code: 0,
       stdout: ["review requested F-0001"],
     });
@@ -124,7 +150,7 @@ describe("Forge agent harness scenarios", () => {
     expect(parsed.task.review_reason).toBe("Needs harness review");
 
     const donePayload = parseStdoutJson(
-      await run(repoRoot, ["done", "F-0001", "--reason", "Harness verified", "--json"]),
+      await run(nestedDir, ["done", "F-0001", "--reason", "Harness verified", "--json"]),
     );
     expect(donePayload.task).toMatchObject({
       id: "F-0001",
@@ -141,9 +167,58 @@ describe("Forge agent harness scenarios", () => {
     expect(parsed.task.closed_at).toBe("2026-05-15T12:00:00.000Z");
     expect(parsed.task.body).toContain("Decision: exercise the full loop.");
 
-    expect(parseStdoutJson(await run(repoRoot, ["doctor", "--json"]))).toMatchObject({
+    expect(parseStdoutJson(await run(nestedDir, ["doctor", "--json"]))).toMatchObject({
       summary: { errors: 0, warnings: 0 },
     });
+  });
+
+  test("runs read and selection commands through the real entrypoint from root and nested cwd", async () => {
+    const repo = await makeRepo();
+    const realRepoRoot = await fs.realpath(repo.repoRoot);
+    await repo.writeTasks([
+      { id: "F-0001", title: "Finished base", status: "done" },
+      { id: "F-0002", title: "Ready harness task", priority: "high", depends_on: ["F-0001"] },
+      { id: "F-0003", title: "Blocked follow-up", depends_on: ["F-0002"] },
+      { id: "F-0004", title: "Claimed task", claimed_by: "codex" },
+    ]);
+
+    const rootList = await runEntrypoint(repo.repoRoot, ["list"]);
+    const nestedList = await runEntrypoint(repo.nestedDir, ["list"]);
+    expect(rootList).toEqual(nestedList);
+    expect(rootList.stdout).toEqual([
+      "F-0002\topen\t-\tharness\tReady harness task",
+      "F-0003\topen\t-\tharness\tBlocked follow-up",
+      "F-0004\topen\tcodex\tharness\tClaimed task",
+    ]);
+
+    const rootReady = await runEntrypoint(repo.repoRoot, ["ready"]);
+    const nestedReady = await runEntrypoint(repo.nestedDir, ["ready"]);
+    expect(rootReady).toEqual(nestedReady);
+    expect(rootReady.stdout).toEqual([
+      "F-0002\topen\t-\tharness\tReady harness task",
+    ]);
+
+    for (const cwd of [repo.repoRoot, repo.nestedDir]) {
+      const queuePayload = parseStdoutJson(await runEntrypoint(cwd, ["queue", "--json"]));
+      expect(queuePayload.repoRoot).toBe(realRepoRoot);
+      expect(queuePayload.tasks.map((task: any) => task.id)).toEqual(["F-0002"]);
+
+      const nextPayload = parseStdoutJson(await runEntrypoint(cwd, ["next", "--json"]));
+      expect(nextPayload).toMatchObject({
+        reason: "ready",
+        task: { id: "F-0002", title: "Ready harness task" },
+      });
+
+      const promptResult = await runEntrypoint(cwd, ["prompt", "next"]);
+      expect(promptResult).toMatchObject({ code: 0, stderr: [] });
+      expect(promptResult.stdout.join("\n")).toContain(
+        "Goal: Complete Forge task F-0002 - Ready harness task",
+      );
+
+      expect(parseStdoutJson(await runEntrypoint(cwd, ["doctor", "--json"]))).toMatchObject({
+        summary: { errors: 0, warnings: 0 },
+      });
+    }
   });
 
   test("covers graph fixtures for dependency shapes and diagnostics", async () => {
@@ -212,6 +287,52 @@ describe("Forge agent harness scenarios", () => {
       },
     ]);
     expect(parseStdoutJson(await run(repoRoot, ["blockers", "F-0601", "--json"])).blockers).toEqual([]);
+  });
+
+  test("reports malformed fixture repos with useful doctor diagnostics", async () => {
+    const repo = await makeRepo();
+    const realTasksDir = await fs.realpath(repo.tasksDir);
+    await fs.writeFile(path.join(repo.tasksDir, "bad-missing-frontmatter.md"), "# Missing");
+    await fs.writeFile(path.join(repo.tasksDir, "bad-yaml.md"), "---\n:\n---\n");
+    await fs.writeFile(
+      path.join(repo.tasksDir, "bad-status.md"),
+      [
+        "---",
+        "id: F-0901",
+        'title: "Invalid status"',
+        "kind: task",
+        "status: ready",
+        "priority: high",
+        "---",
+        "",
+        "# Invalid status",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runEntrypoint(repo.nestedDir, ["doctor", "--json"]);
+    const payload = parseStdoutJson(result);
+    const diagnosticsByCode = new Map(
+      payload.diagnostics.map((diagnostic: any) => [diagnostic.code, diagnostic]),
+    );
+
+    expect(result.code).toBe(4);
+    expect(payload.summary.errors).toBe(3);
+    expect(diagnosticsByCode.get("missing_frontmatter")).toMatchObject({
+      severity: "error",
+      sourcePath: path.join(realTasksDir, "bad-missing-frontmatter.md"),
+    });
+    expect(diagnosticsByCode.get("malformed_yaml")).toMatchObject({
+      severity: "error",
+      sourcePath: path.join(realTasksDir, "bad-yaml.md"),
+    });
+    expect(diagnosticsByCode.get("invalid_enum")).toMatchObject({
+      severity: "error",
+      sourcePath: path.join(realTasksDir, "bad-status.md"),
+    });
+    expect(payload.diagnostics.map((diagnostic: any) => diagnostic.message).join("\n")).toContain(
+      "must be one of",
+    );
   });
 
   test("reuses shared fixture shapes for task store edge cases", async () => {
