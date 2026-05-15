@@ -177,11 +177,13 @@ Include order is deterministic:
 1. Read routes from `.forge/guidance.yml` in file order.
 2. Include matching shared guidance files in route order.
 3. De-duplicate by normalized repo-relative guidance path.
-4. Include ignored local user guidance from `.forge/guidance.local.md` last when
+4. Include ignored local user guidance from `.forge/local/user.md` last when
    that file exists.
 
-Local guidance is for machine-specific preferences or temporary notes. It must
-not be required for the repo to work.
+Local guidance is for machine-specific preferences or temporary notes. It can
+override or supplement user preferences after committed repo and project
+guidance, but it must not change task acceptance criteria or be required for the
+repo to work. Keep every file under `.forge/local/` out of git.
 
 ## Derived Relationships
 

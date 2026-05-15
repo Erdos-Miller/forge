@@ -51,8 +51,12 @@ Markdown files remain the source of truth.
 Repo and project guidance can also live under `.forge/`. The committed
 `.forge/guidance.yml` file routes shared `.forge/guidance/*.md` files by task
 area, task scope, explicit paths, and current working directory. Personal
-machine-local guidance belongs in ignored `.forge/guidance.local.md` and is
-included last by tools that support guidance routing.
+machine-local guidance belongs in ignored `.forge/local/user.md` and is included
+last by tools that support guidance routing.
+
+Local guidance can override or supplement personal preferences, but it should
+not change task acceptance criteria. The repo must work when `.forge/local/`
+does not exist.
 
 ## First Loop
 
