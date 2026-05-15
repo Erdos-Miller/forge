@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskGraphPayload } from "./api";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
+import {
+  getVisibleSelectedTask,
+  readInitialTaskSearchParam,
+  writeTaskSelectionToUrl,
+} from "./url-selection";
 
 interface AppProps {
   initialData?: TaskGraphPayload;
@@ -25,9 +30,11 @@ interface BurndownData {
 }
 
 export function App({ initialData }: AppProps) {
+  const initialUrlTaskId = readInitialTaskSearchParam();
+  const [urlRequestedTaskId, setUrlRequestedTaskId] = useState<string | null>(initialUrlTaskId);
   const [data, setData] = useState<TaskGraphPayload | null>(initialData ?? null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    initialData?.recommendedTaskIds[0] ?? initialData?.tasks[0]?.id ?? null,
+    initialUrlTaskId ?? initialData?.recommendedTaskIds[0] ?? initialData?.tasks[0]?.id ?? null,
   );
   const [activeTab, setActiveTab] = useState<"queue" | "analytics">("queue");
   const [groupBy, setGroupBy] = useState<"area" | "priority">("area");
@@ -52,13 +59,20 @@ export function App({ initialData }: AppProps) {
         setData(payload);
         setError(null);
         setSelectedTaskId(
-          (current) => selectTaskAfterRefresh(current, payload, scopeFilter, showDone),
+          (current) =>
+            selectTaskAfterRefresh(
+              current,
+              payload,
+              scopeFilter,
+              showDone,
+              urlRequestedTaskId,
+            ),
         );
       })
       .catch((fetchError) => {
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       });
-  }, [scopeFilter, showDone]);
+  }, [scopeFilter, showDone, urlRequestedTaskId]);
 
   useEffect(() => {
     if (initialData) {
@@ -151,16 +165,18 @@ export function App({ initialData }: AppProps) {
     return data ? getDiagnosticMessages(data.diagnostics) : [];
   }, [data]);
 
-  const selectedCandidate = selectedTaskId ? (tasksById.get(selectedTaskId) ?? null) : null;
-  const selectedCandidateIsVisible = visibleQueueTasks.some(
-    (task) => task.id === selectedCandidate?.id,
+  const selectedTask = getVisibleSelectedTask(
+    selectedTaskId,
+    visibleQueueTasks,
+    urlRequestedTaskId,
   );
-  const selectedTask =
-    selectedCandidate && selectedCandidateIsVisible
-      ? selectedCandidate
-      : (visibleQueueTasks[0] ?? null);
   const selectedVisibleTaskId = selectedTask?.id ?? null;
   const queueRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const selectVisibleTask = useCallback((taskId: string) => {
+    setUrlRequestedTaskId(null);
+    setSelectedTaskId(taskId);
+    writeTaskSelectionToUrl(taskId);
+  }, []);
 
   const setQueueRowRef = useCallback((taskId: string, element: HTMLButtonElement | null) => {
     if (element) {
@@ -194,7 +210,7 @@ export function App({ initialData }: AppProps) {
 
       event.preventDefault();
       if (nextSelection.taskId) {
-        setSelectedTaskId(nextSelection.taskId);
+        selectVisibleTask(nextSelection.taskId);
       }
     };
 
@@ -202,7 +218,7 @@ export function App({ initialData }: AppProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedVisibleTaskId, visibleQueueTasks]);
+  }, [selectVisibleTask, selectedVisibleTaskId, visibleQueueTasks]);
 
   if (!data) {
     return (
@@ -325,7 +341,7 @@ export function App({ initialData }: AppProps) {
                               groupBy={groupBy}
                               isSelected={selectedTask?.id === task.id}
                               key={task.id}
-                              onSelect={() => setSelectedTaskId(task.id)}
+                              onSelect={() => selectVisibleTask(task.id)}
                               rank={
                                 section.availability === "ready"
                                   ? queueTasks.indexOf(task) + 1
@@ -759,6 +775,7 @@ export function selectTaskAfterRefresh(
   payload: TaskGraphPayload,
   scopeFilter: string,
   showDone = false,
+  urlRequestedTaskId: string | null = null,
 ): string | null {
   const scopedTasks = payload.tasks.filter((task) => taskMatchesScope(task, scopeFilter));
   const recommendedRank = new Map(
@@ -771,6 +788,9 @@ export function selectTaskAfterRefresh(
   ).flatMap(([, sections]) => sections.flatMap((section) => section.tasks));
 
   if (currentTaskId && visibleTasks.some((task) => task.id === currentTaskId)) {
+    return currentTaskId;
+  }
+  if (currentTaskId && currentTaskId === urlRequestedTaskId) {
     return currentTaskId;
   }
 

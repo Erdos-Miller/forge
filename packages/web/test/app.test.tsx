@@ -9,6 +9,11 @@ import {
   sortQueueTasks,
 } from "../src/App";
 import type { TaskGraphPayload } from "../src/api";
+import {
+  getTaskIdFromSearch,
+  getVisibleSelectedTask,
+  writeTaskSelectionToUrl,
+} from "../src/url-selection";
 
 const payload: TaskGraphPayload = {
   repoRoot: "/repo",
@@ -104,6 +109,45 @@ const payload: TaskGraphPayload = {
   },
 };
 
+function withMockWindow<T>(
+  search: string,
+  action: (mock: { replaceCalls: string[] }) => T,
+): T {
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  const hadWindow = "window" in globalThis;
+  const replaceCalls: string[] = [];
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: {
+        hash: "",
+        href: `http://forge.local/${search}`,
+        pathname: "/",
+        search,
+      },
+      history: {
+        replaceState: (_state: unknown, _title: string, url: string) => {
+          replaceCalls.push(url);
+        },
+      },
+    },
+  });
+
+  try {
+    return action({ replaceCalls });
+  } finally {
+    if (hadWindow) {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: previousWindow,
+      });
+    } else {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  }
+}
+
 describe("App", () => {
   test("renders the queue, filters, and supporting summaries", () => {
     const html = renderToStaticMarkup(<App initialData={payload} />);
@@ -130,6 +174,34 @@ describe("App", () => {
     expect(html).toContain("Execution Plan");
     expect(html).toContain("Summary: build the queue view.");
     expect(html).toContain("<summary>Dependencies (1)</summary>");
+  });
+
+  test("selects a visible task from the URL on initial render", () => {
+    const html = withMockWindow("?task=F-0003", () =>
+      renderToStaticMarkup(<App initialData={payload} />),
+    );
+
+    expect(html).toContain("<h2>Claimed task</h2>");
+    expect(html).toContain("claimed by codex");
+  });
+
+  test("does not fall back to an unrelated task for invalid URL task ids", () => {
+    const html = withMockWindow("?task=F-9999", () =>
+      renderToStaticMarkup(<App initialData={payload} />),
+    );
+
+    expect(html).toContain("No queue row is visible for this filter.");
+    expect(html).not.toContain("<h2>Ready task</h2>");
+  });
+
+  test("keeps URL-requested hidden done tasks out of the detail pane", () => {
+    const html = withMockWindow("?task=F-0001", () =>
+      renderToStaticMarkup(<App initialData={payload} />),
+    );
+
+    expect(html).toContain("No queue row is visible for this filter.");
+    expect(html).not.toContain("Completed.");
+    expect(html).not.toContain("Status is done.");
   });
 
   test("renders Execution Plan expanded before Notes and Additional Details", () => {
@@ -265,9 +337,25 @@ describe("App", () => {
   test("selectTaskAfterRefresh preserves selection and falls back when needed", () => {
     expect(selectTaskAfterRefresh("F-0003", payload, "all")).toBe("F-0003");
     expect(selectTaskAfterRefresh("F-9999", payload, "all")).toBe("F-0002");
+    expect(selectTaskAfterRefresh("F-9999", payload, "all", false, "F-9999")).toBe(
+      "F-9999",
+    );
     expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBeNull();
     expect(selectTaskAfterRefresh("F-9999", payload, "packages/core", true)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBeNull();
+  });
+
+  test("URL helpers parse, preserve, and update task selection", () => {
+    expect(getTaskIdFromSearch("?task=F-0002")).toBe("F-0002");
+    expect(getTaskIdFromSearch("?task=")).toBeNull();
+    expect(getVisibleSelectedTask("F-9999", [payload.tasks[1]], "F-9999")).toBeNull();
+
+    const replaceCalls = withMockWindow("?task=F-0002", ({ replaceCalls }) => {
+      writeTaskSelectionToUrl("F-0003");
+      return replaceCalls;
+    });
+
+    expect(replaceCalls).toEqual(["/?task=F-0003"]);
   });
 
   test("clears detail when hidden done tasks leave the visible queue empty", () => {
