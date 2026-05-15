@@ -41,6 +41,24 @@ close_reason:
 
 - ...
 
+## Execution Plan
+
+Summary: ...
+
+Scope: ...
+
+Approach:
+- ...
+
+Verification:
+- ...
+
+Stop conditions:
+- ...
+
+Human review triggers:
+- ...
+
 ## Dependencies
 
 None.
@@ -82,12 +100,27 @@ Keep the body readable Markdown, but create tasks with the known sections in thi
 1. `Why`
 2. `What success looks like`
 3. `Acceptance Criteria`
-4. `Dependencies`
-5. `Verification`
-6. `Notes`
-7. `History`
+4. `Execution Plan`
+5. `Dependencies`
+6. `Verification`
+7. `Notes`
+8. `History`
 
-The CLI should generate these sections for new tasks. Users may add extra `##` sections after the canonical sections when a task needs more context. Tools should render known sections first and preserve unknown sections rather than rejecting them.
+`Execution Plan` lives in the Markdown body, not frontmatter. It is the durable
+per-task plan an agent or human can update before implementation begins and as
+the work changes. Use this default shape:
+
+- `Summary`: the short implementation intent.
+- `Scope`: the files, packages, or behaviors expected to change.
+- `Approach`: the ordered implementation steps.
+- `Verification`: the checks that should prove the task is complete.
+- `Stop conditions`: blockers or risk signals that should pause execution.
+- `Human review triggers`: judgment calls that need explicit review.
+
+The CLI should generate these sections for new tasks. Users may add extra `##`
+sections after the canonical sections when a task needs more context. Tools
+should render known sections first, preserve existing execution plans, and
+preserve unknown sections rather than rejecting them.
 
 ## Storage Model
 
