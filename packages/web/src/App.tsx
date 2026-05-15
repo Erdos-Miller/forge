@@ -52,13 +52,13 @@ export function App({ initialData }: AppProps) {
         setData(payload);
         setError(null);
         setSelectedTaskId(
-          (current) => selectTaskAfterRefresh(current, payload, scopeFilter),
+          (current) => selectTaskAfterRefresh(current, payload, scopeFilter, showDone),
         );
       })
       .catch((fetchError) => {
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       });
-  }, [scopeFilter]);
+  }, [scopeFilter, showDone]);
 
   useEffect(() => {
     if (initialData) {
@@ -152,10 +152,13 @@ export function App({ initialData }: AppProps) {
   }, [data]);
 
   const selectedCandidate = selectedTaskId ? (tasksById.get(selectedTaskId) ?? null) : null;
+  const selectedCandidateIsVisible = visibleQueueTasks.some(
+    (task) => task.id === selectedCandidate?.id,
+  );
   const selectedTask =
-    selectedCandidate && taskMatchesScope(selectedCandidate, scopeFilter)
+    selectedCandidate && selectedCandidateIsVisible
       ? selectedCandidate
-      : (visibleQueueTasks[0] ?? scopedTasks[0] ?? null);
+      : (visibleQueueTasks[0] ?? null);
   const selectedVisibleTaskId = selectedTask?.id ?? null;
   const queueRowRefs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -562,7 +565,11 @@ function TaskDetail({
   tasksById: Map<string, Task>;
 }) {
   if (!task) {
-    return <aside className="detail muted">No task selected.</aside>;
+    return (
+      <aside className="detail muted">
+        No queue row is visible for this filter.
+      </aside>
+    );
   }
 
   const sections = organizeTaskMarkdown(task.body);
@@ -751,19 +758,29 @@ export function selectTaskAfterRefresh(
   currentTaskId: string | null,
   payload: TaskGraphPayload,
   scopeFilter: string,
+  showDone = false,
 ): string | null {
   const scopedTasks = payload.tasks.filter((task) => taskMatchesScope(task, scopeFilter));
-  if (currentTaskId && scopedTasks.some((task) => task.id === currentTaskId)) {
+  const recommendedRank = new Map(
+    payload.recommendedTaskIds.map((taskId, index) => [taskId, index]),
+  );
+  const visibleTasks = groupQueueTasks(
+    sortQueueTasks(scopedTasks, recommendedRank, showDone),
+    "area",
+    payload.availabilityByTaskId,
+  ).flatMap(([, sections]) => sections.flatMap((section) => section.tasks));
+
+  if (currentTaskId && visibleTasks.some((task) => task.id === currentTaskId)) {
     return currentTaskId;
   }
 
   for (const taskId of payload.recommendedTaskIds) {
-    if (scopedTasks.some((task) => task.id === taskId)) {
+    if (visibleTasks.some((task) => task.id === taskId)) {
       return taskId;
     }
   }
 
-  return scopedTasks[0]?.id ?? null;
+  return visibleTasks[0]?.id ?? null;
 }
 
 export function getKeyboardQueueSelection(

@@ -265,8 +265,49 @@ describe("App", () => {
   test("selectTaskAfterRefresh preserves selection and falls back when needed", () => {
     expect(selectTaskAfterRefresh("F-0003", payload, "all")).toBe("F-0003");
     expect(selectTaskAfterRefresh("F-9999", payload, "all")).toBe("F-0002");
-    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBe("F-0001");
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBeNull();
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core", true)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBeNull();
+  });
+
+  test("clears detail when hidden done tasks leave the visible queue empty", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [payload.tasks[0]],
+          readyTaskIds: [],
+          recommendedTaskIds: [],
+          availabilityByTaskId: { "F-0001": "closed" },
+          blockersByTaskId: { "F-0001": [] },
+        }}
+      />,
+    );
+
+    expect(html).toContain("No tasks match this filter.");
+    expect(html).toContain("No queue row is visible for this filter.");
+    expect(html).not.toContain("Completed.");
+    expect(html).not.toContain("Status is done.");
+    expect(html).not.toContain("packages/core/**");
+  });
+
+  test("refresh selection clears hidden tasks when no visible queue row remains", () => {
+    const doneOnlyPayload = {
+      ...payload,
+      tasks: [payload.tasks[0]],
+      readyTaskIds: [],
+      recommendedTaskIds: [],
+      availabilityByTaskId: { "F-0001": "closed" },
+      blockersByTaskId: { "F-0001": [] },
+    };
+
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBeNull();
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", true)).toBe("F-0001");
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "packages/web", true)).toBeNull();
+  });
+
+  test("falls back to the first visible queue row when selection is hidden", () => {
+    expect(selectTaskAfterRefresh("F-0001", payload, "all", false)).toBe("F-0002");
   });
 
   test("priority grouping renders urgent before high", () => {
