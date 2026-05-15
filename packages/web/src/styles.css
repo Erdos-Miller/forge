@@ -133,6 +133,30 @@ button {
   min-height: 0;
 }
 
+.errorBanner {
+  background: #17100f;
+  border: 1px solid #6d3935;
+  border-radius: 6px;
+  color: #f0c0bd;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.errorBanner strong {
+  color: #ffd8d5;
+}
+
+.errorBanner span,
+.errorBanner ul {
+  margin: 0;
+}
+
+.errorBanner ul {
+  padding-left: 18px;
+}
+
 .appFooter {
   align-items: center;
   border-top: 1px solid #24262a;

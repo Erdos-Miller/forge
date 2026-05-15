@@ -2,8 +2,8 @@
 id: F-0019
 title: Add live web refresh
 kind: task
-status: open
-priority: medium
+status: done
+priority: urgent
 parent: F-0000
 depends_on:
   - F-0013
@@ -13,8 +13,8 @@ scope:
   - packages/web/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T04:53:49.548Z
+closed_at: 2026-05-15T04:53:49.548Z
 close_reason: ""
 ---
 
@@ -49,8 +49,22 @@ Depends on `F-0013` because the web refresh should reuse the same task graph pay
 
 ## Notes
 
+This is a dogfooding friction task. Pick it before lower-friction web polish such as keyboard navigation and execution-plan display, because the board should update while agents change task files.
+
 This is a human-support task, not an agent dependency. Agents should continue using robot CLI commands.
+
+Implemented with a Vite dev-server watcher on the discovered Forge root's `.forge/tasks` directory. The server broadcasts a debounced `forge:tasks-changed` HMR event and the browser refetches `/api/tasks`, preserving the selected task when possible.
+
+Parse/API failures now show as an in-page refresh error without discarding the last good task payload. Graph diagnostics render as an in-page task diagnostics banner.
+
+Verification:
+- `bun test packages/web`
+- `bun run --cwd packages/web build`
+- `bun run quality:check`
+- Live refresh smoke: started the Vite dev server against a temporary Forge repo, edited a task file, and received `forge:tasks-changed` over the Vite HMR websocket.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Reprioritized to urgent because manual browser refresh is active dogfooding friction.
+- Implemented task-file live refresh for the local web board.

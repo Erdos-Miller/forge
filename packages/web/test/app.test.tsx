@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App, groupQueueTasks, sortQueueTasks } from "../src/App";
+import { App, groupQueueTasks, selectTaskAfterRefresh, sortQueueTasks } from "../src/App";
 import type { TaskGraphPayload } from "../src/api";
 
 const payload: TaskGraphPayload = {
@@ -108,6 +108,31 @@ describe("App", () => {
     expect(html).toContain("We need local visibility");
     expect(html).toContain("Build the board.");
     expect(html).toContain("<summary>Dependencies (1)</summary>");
+  });
+
+  test("renders graph diagnostics without replacing the page", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          diagnostics: {
+            ...payload.diagnostics,
+            missingDependencies: [{ taskId: "F-0004", dependencyId: "F-9999" }],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Task diagnostics");
+    expect(html).toContain("F-0004 depends on missing task F-9999");
+    expect(html).toContain("Ready task");
+  });
+
+  test("selectTaskAfterRefresh preserves selection and falls back when needed", () => {
+    expect(selectTaskAfterRefresh("F-0003", payload, "all")).toBe("F-0003");
+    expect(selectTaskAfterRefresh("F-9999", payload, "all")).toBe("F-0002");
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBe("F-0001");
+    expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBeNull();
   });
 
   test("priority grouping renders urgent before high", () => {

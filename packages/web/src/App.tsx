@@ -1,6 +1,6 @@
 import type { Task } from "@forge/core";
 import { marked } from "marked";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TaskGraphPayload } from "./api";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
@@ -35,28 +35,52 @@ export function App({ initialData }: AppProps) {
   const [showDone, setShowDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (initialData) {
-      return;
-    }
-
+  const loadTasks = useCallback(() => {
     fetch("/api/tasks")
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(`request failed: ${response.status}`);
+          const errorPayload = await response.json().catch(() => null);
+          const message =
+            typeof errorPayload?.error === "string"
+              ? errorPayload.error
+              : `request failed: ${response.status}`;
+          throw new Error(message);
         }
         return response.json() as Promise<TaskGraphPayload>;
       })
       .then((payload) => {
         setData(payload);
+        setError(null);
         setSelectedTaskId(
-          (current) => current ?? payload.recommendedTaskIds[0] ?? payload.tasks[0]?.id ?? null,
+          (current) => selectTaskAfterRefresh(current, payload, scopeFilter),
         );
       })
       .catch((fetchError) => {
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       });
-  }, [initialData]);
+  }, [scopeFilter]);
+
+  useEffect(() => {
+    if (initialData) {
+      return;
+    }
+
+    loadTasks();
+  }, [initialData, loadTasks]);
+
+  useEffect(() => {
+    if (initialData || !import.meta.hot) {
+      return;
+    }
+
+    const reloadTasks = () => {
+      loadTasks();
+    };
+    import.meta.hot.on("forge:tasks-changed", reloadTasks);
+    return () => {
+      import.meta.hot?.off("forge:tasks-changed", reloadTasks);
+    };
+  }, [initialData, loadTasks]);
 
   const tasksById = useMemo(() => {
     return new Map((data?.tasks ?? []).map((task) => [task.id, task]));
@@ -117,18 +141,22 @@ export function App({ initialData }: AppProps) {
     return groupQueueTasks(queueTasks, groupBy);
   }, [groupBy, queueTasks]);
 
+  const diagnosticMessages = useMemo(() => {
+    return data ? getDiagnosticMessages(data.diagnostics) : [];
+  }, [data]);
+
   const selectedCandidate = selectedTaskId ? (tasksById.get(selectedTaskId) ?? null) : null;
   const selectedTask =
     selectedCandidate && taskMatchesScope(selectedCandidate, scopeFilter)
       ? selectedCandidate
       : (queueTasks[0] ?? scopedTasks[0] ?? null);
 
-  if (error) {
-    return <main className="shell error">Failed to load tasks: {error}</main>;
-  }
-
   if (!data) {
-    return <main className="shell muted">Loading Forge tasks...</main>;
+    return (
+      <main className={`shell ${error ? "error" : "muted"}`}>
+        {error ? `Failed to load tasks: ${error}` : "Loading Forge tasks..."}
+      </main>
+    );
   }
 
   return (
@@ -165,6 +193,24 @@ export function App({ initialData }: AppProps) {
           </button>
         </nav>
       </header>
+
+      {error ? (
+        <section className="errorBanner">
+          <strong>Refresh failed</strong>
+          <span>{error}</span>
+        </section>
+      ) : null}
+
+      {diagnosticMessages.length > 0 ? (
+        <section className="errorBanner">
+          <strong>Task diagnostics</strong>
+          <ul>
+            {diagnosticMessages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {activeTab === "queue" ? (
         <section className="layout">
@@ -629,6 +675,25 @@ function taskMatchesScope(task: Task, scopeFilter: string) {
   return scopeFilter === "all" || task.scope.some((scope) => getScopeRoot(scope) === scopeFilter);
 }
 
+export function selectTaskAfterRefresh(
+  currentTaskId: string | null,
+  payload: TaskGraphPayload,
+  scopeFilter: string,
+): string | null {
+  const scopedTasks = payload.tasks.filter((task) => taskMatchesScope(task, scopeFilter));
+  if (currentTaskId && scopedTasks.some((task) => task.id === currentTaskId)) {
+    return currentTaskId;
+  }
+
+  for (const taskId of payload.recommendedTaskIds) {
+    if (scopedTasks.some((task) => task.id === taskId)) {
+      return taskId;
+    }
+  }
+
+  return scopedTasks[0]?.id ?? null;
+}
+
 export function sortQueueTasks(
   tasks: Task[],
   recommendedRank: Map<string, number>,
@@ -691,6 +756,21 @@ function PriorityDot({ priority }: { priority: Task["priority"] }) {
       title={`${priority} priority`}
     />
   );
+}
+
+function getDiagnosticMessages(diagnostics: TaskGraphPayload["diagnostics"]) {
+  return [
+    ...diagnostics.missingDependencies.map(
+      (diagnostic) => `${diagnostic.taskId} depends on missing task ${diagnostic.dependencyId}`,
+    ),
+    ...diagnostics.dependencyCycles.map(
+      (diagnostic) => `Dependency cycle: ${diagnostic.taskIds.join(" -> ")}`,
+    ),
+    ...diagnostics.duplicateTaskIds.map(
+      (diagnostic) =>
+        `Duplicate task id ${diagnostic.taskId} in ${diagnostic.sourcePaths.length} files`,
+    ),
+  ];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
