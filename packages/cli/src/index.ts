@@ -1780,6 +1780,7 @@ function formatAgentPrompt(task: Task, guidance: GuidanceBundle, fullGuidance: b
     formatGuidanceText(guidance, fullGuidance),
     "",
     ...formatGuidanceDiagnostics(guidance),
+    formatPromptCommandGuidance(),
   ];
 
   return lines.join("\n");
@@ -1808,7 +1809,36 @@ function formatLoopPrompt(): string {
     "After committing, start the next iteration with `forge prompt next` again.",
     "",
     "Stop when no task is ready, the selected task is ambiguous, required changes exceed scope, verification cannot run, or you need user judgment before continuing. Report the blocker plus the next input needed.",
+    "",
+    formatPromptCommandGuidance(),
   ].join("\n");
+}
+
+function formatPromptCommandGuidance(): string {
+  const lines = [
+    "Command guidance:",
+    "- Prefer structured Forge commands for frontmatter, lifecycle, plan, verification, and other command-owned writes.",
+    "- Inspect dependency state with structured commands before changing dependencies; prefer a dependency write command when one exists.",
+    "- Direct Markdown edits are acceptable for rich task body content that no command owns, but preserve frontmatter and canonical sections.",
+    "",
+    "Current command surface:",
+  ];
+
+  for (const workflow of COMMAND_WORKFLOW_ORDER) {
+    const commands = COMMANDS.filter(
+      (command) => COMMAND_WORKFLOWS[command.name] === workflow,
+    );
+    if (commands.length === 0) {
+      continue;
+    }
+
+    lines.push(`${capitalize(workflow)}:`);
+    for (const command of commands) {
+      lines.push(`- ${command.usage} [${command.classification}]`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 if (import.meta.main) {
