@@ -2,7 +2,7 @@
 id: F-0012
 title: Build ranked queue engine
 kind: task
-status: open
+status: done
 priority: urgent
 parent: F-0000
 depends_on:
@@ -13,8 +13,8 @@ scope:
   - packages/core/**
   - .forge/tasks/**
 created_at: 2026-05-15T00:00:00-05:00
-updated_at: 2026-05-15T00:00:00-05:00
-closed_at: ""
+updated_at: 2026-05-15T04:02:44.877Z
+closed_at: 2026-05-15T04:02:44.877Z
 close_reason: ""
 ---
 
@@ -42,13 +42,15 @@ Depends on `F-0011` because ranking should use the shared task graph engine.
 
 ## Verification
 
-- Run `bun test` in `packages/core`.
-- Confirm queue output is stable across repeated runs on the same fixture.
+- `bun test` passed in `packages/core`.
+- `bun test packages/cli/test/cli.test.ts` passed from the repo root.
+- Stable queue output is covered by the tie-break test running the same fixture in reversed input order.
 
 ## Notes
 
-Do not introduce a heap or cache yet. A deterministic graph pass plus stable sort is enough until perf tests prove otherwise.
+Added `rankReadyTaskQueue` as the reusable queue output and kept `rankReadyTasks` as the compatibility wrapper. Queue entries include rank, task id, task, priority rank, downstream unblock count, blockers, and typed recommendation reasons.
 
 ## History
 
 - Created 2026-05-15T00:00:00-05:00.
+- Claimed and implemented 2026-05-15.

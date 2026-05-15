@@ -81,6 +81,21 @@ export interface TaskGraphAnalysis {
   duplicateTaskIds: DuplicateTaskIdDiagnostic[];
 }
 
+export type RankedQueueReason =
+  | { kind: "priority"; priority: TaskPriority; rank: number }
+  | { kind: "downstream_unblock_count"; count: number }
+  | { kind: "no_blockers" };
+
+export interface RankedQueueEntry {
+  rank: number;
+  task: Task;
+  taskId: string;
+  priorityRank: number;
+  downstreamUnblockCount: number;
+  blockers: string[];
+  reasons: RankedQueueReason[];
+}
+
 export class TaskParseError extends Error {
   readonly sourcePath: string;
 
@@ -456,27 +471,18 @@ export function getReadyTasks(tasks: Task[]): Task[] {
 }
 
 export function rankReadyTasks(tasks: Task[]): Task[] {
+  return rankReadyTaskQueue(tasks).map((entry) => entry.task);
+}
+
+export function rankReadyTaskQueue(tasks: Task[]): RankedQueueEntry[] {
   const analysis = analyzeTasks(tasks);
   const readyTaskIds = new Set(analysis.readyTaskIds);
 
   return tasks
     .filter((task) => readyTaskIds.has(task.id))
-    .sort((left, right) => {
-      const priorityDelta =
-        priorityRank(left.priority) - priorityRank(right.priority);
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-
-      const downstreamDelta =
-        (analysis.downstreamUnblockCountsByTaskId.get(right.id) ?? 0) -
-        (analysis.downstreamUnblockCountsByTaskId.get(left.id) ?? 0);
-      if (downstreamDelta !== 0) {
-        return downstreamDelta;
-      }
-
-      return left.id.localeCompare(right.id);
-    });
+    .map((task) => createRankedQueueEntry(task, analysis))
+    .sort(compareRankedQueueEntries)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
 export function getTaskBlockers(
@@ -813,6 +819,48 @@ function getTaskBlockersFromDiagnostics(
   blockers.push(...(cycleMessagesByTaskId.get(task.id) ?? []));
 
   return blockers;
+}
+
+function createRankedQueueEntry(
+  task: Task,
+  analysis: TaskGraphAnalysis,
+): RankedQueueEntry {
+  const taskPriorityRank = priorityRank(task.priority);
+  const downstreamUnblockCount =
+    analysis.downstreamUnblockCountsByTaskId.get(task.id) ?? 0;
+  const blockers = analysis.blockersByTaskId.get(task.id) ?? [];
+
+  return {
+    rank: 0,
+    task,
+    taskId: task.id,
+    priorityRank: taskPriorityRank,
+    downstreamUnblockCount,
+    blockers,
+    reasons: [
+      { kind: "priority", priority: task.priority, rank: taskPriorityRank },
+      { kind: "downstream_unblock_count", count: downstreamUnblockCount },
+      { kind: "no_blockers" },
+    ],
+  };
+}
+
+function compareRankedQueueEntries(
+  left: RankedQueueEntry,
+  right: RankedQueueEntry,
+): number {
+  const priorityDelta = left.priorityRank - right.priorityRank;
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const downstreamDelta =
+    right.downstreamUnblockCount - left.downstreamUnblockCount;
+  if (downstreamDelta !== 0) {
+    return downstreamDelta;
+  }
+
+  return left.taskId.localeCompare(right.taskId);
 }
 
 function priorityRank(priority: TaskPriority): number {

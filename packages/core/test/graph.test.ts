@@ -5,6 +5,7 @@ import {
   getReadyTasks,
   getTaskBlockers,
   loadTasks,
+  rankReadyTaskQueue,
   rankReadyTasks,
   type Task,
 } from "../src";
@@ -201,5 +202,46 @@ describe("rankReadyTasks", () => {
       "F-0002",
       "F-0004",
     ]);
+  });
+
+  test("returns reusable queue entries with recommendation reasons", () => {
+    const tasks = [
+      task({ id: "F-0002", priority: "high" }),
+      task({ id: "F-0003", status: "blocked", priority: "urgent" }),
+      task({ id: "F-0004", claimed_by: "codex", priority: "urgent" }),
+      task({ id: "F-0005", status: "blocked", depends_on: ["F-0002"] }),
+    ];
+
+    const queue = rankReadyTaskQueue(tasks);
+
+    expect(queue.map((entry) => entry.taskId)).toEqual(["F-0002"]);
+    expect(queue[0]).toMatchObject({
+      rank: 1,
+      priorityRank: 1,
+      downstreamUnblockCount: 1,
+      blockers: [],
+      reasons: [
+        { kind: "priority", priority: "high", rank: 1 },
+        { kind: "downstream_unblock_count", count: 1 },
+        { kind: "no_blockers" },
+      ],
+    });
+  });
+
+  test("breaks ties by stable task id", () => {
+    const tasks = [
+      task({ id: "F-0003", priority: "high" }),
+      task({ id: "F-0001", priority: "high" }),
+      task({ id: "F-0002", priority: "high" }),
+    ];
+
+    expect(rankReadyTaskQueue(tasks).map((entry) => entry.taskId)).toEqual([
+      "F-0001",
+      "F-0002",
+      "F-0003",
+    ]);
+    expect(rankReadyTaskQueue(tasks.slice().reverse()).map((entry) => entry.taskId)).toEqual(
+      ["F-0001", "F-0002", "F-0003"],
+    );
   });
 });
