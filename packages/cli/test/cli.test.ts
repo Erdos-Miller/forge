@@ -245,6 +245,85 @@ describe("forge cli", () => {
     expect(result.stderr).toEqual(["create requires --title <title>"]);
   });
 
+  test("prompt next prints a reusable agent prompt for the next ready task", async () => {
+    const { nestedDir } = await makeRepo();
+    const result = await run(nestedDir, ["prompt", "next"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toHaveLength(1);
+    expect(result.stdout[0]).toContain("Goal: Complete Forge task F-0002 - Open");
+    expect(result.stdout[0]).toContain("Before editing code or docs, claim the task.");
+    expect(result.stdout[0]).toContain("Depends on: F-0001");
+    expect(result.stdout[0]).toContain("- packages/**");
+    expect(result.stdout[0]).toContain("Body stays readable.");
+  });
+
+  test("prompt prints a reusable agent prompt for a specific task", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["prompt", "F-0003"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout[0]).toContain("Goal: Complete Forge task F-0003 - Blocked");
+    expect(result.stdout[0]).toContain("Depends on: F-0002");
+  });
+
+  test("prompt rejects invalid usage", async () => {
+    const { repoRoot } = await makeRepo();
+
+    expect(await run(repoRoot, ["prompt"])).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge prompt <id|next>"],
+    });
+    expect(await run(repoRoot, ["prompt", "next", "--extra"])).toEqual({
+      code: 1,
+      stdout: [],
+      stderr: ["usage: forge prompt <id|next>"],
+    });
+  });
+
+  test("prompt next reports when no task is ready", async () => {
+    const { repoRoot, taskPath } = await makeRepo();
+    await fs.writeFile(
+      taskPath,
+      taskFile({ id: "F-0002", title: "Open", status: "doing", claimed_by: "codex" }),
+    );
+    const result = await run(repoRoot, ["prompt", "next"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toEqual(["no ready tasks"]);
+  });
+
+  test("loop-prompt prints the generic execution loop goal prompt", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["loop-prompt"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toHaveLength(1);
+    expect(result.stdout[0]).toContain(
+      "/goal Work the Forge execution loop until no ready task remains or a stop condition is hit.",
+    );
+    expect(result.stdout[0]).toContain("At the start of each iteration, use `forge prompt next`");
+    expect(result.stdout[0]).toContain("After committing, start the next iteration");
+    expect(result.stdout[0]).toContain("Commit the code and task-file updates together.");
+  });
+
+  test("loop-prompt rejects extra args", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["loop-prompt", "next"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toEqual(["usage: forge loop-prompt"]);
+  });
+
+  test("web validates the port before starting the server", async () => {
+    const { repoRoot } = await makeRepo();
+    const result = await run(repoRoot, ["web", "--port", "nope"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toEqual(["web option --port requires a valid port"]);
+  });
+
   test("unknown task id exits nonzero with a useful message", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["claim", "F-9999", "--by", "codex"]);

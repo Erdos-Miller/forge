@@ -1,0 +1,14 @@
+{
+  "name": "forge-repo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "forge": "bun packages/cli/src/index.ts",
+    "web": "bun packages/cli/src/index.ts web",
+    "test": "bun test packages/core packages/cli packages/web"
+  }
+}

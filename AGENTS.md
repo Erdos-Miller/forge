@@ -14,12 +14,13 @@ One agent may do both roles in a small session, but keep the distinction clear i
 ## Operating Loop
 
 1. Read `.forge/README.md` and `.forge/specs/F-0000-forge-v0.md`.
-2. Pick one ready task: `status: open`, no unfinished `depends_on`, and no `claimed_by`.
+2. Pick the next ready task: `status: open`, no unfinished `depends_on`, and no `claimed_by`.
 3. Claim the task before editing code or docs.
 4. Keep edits inside the task scope.
 5. Update the task body with decisions, blockers, and verification notes.
 6. Mark the task `done` only when its acceptance criteria are satisfied.
 7. Commit task-file updates with the work they describe.
+8. Repeat from step 2 until no task is ready, the next task is ambiguous, the work exceeds scope, verification cannot run, or user judgment is needed.
 
 ## Planning Loop
 

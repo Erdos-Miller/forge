@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
+import path from "node:path";
 import {
   claimTaskFrom,
   completeTaskFrom,
   createTaskFrom,
+  findParsedTaskByIdFrom,
+  findForgeRoot,
   getReadyTasks,
   loadTasksFrom,
+  rankReadyTasks,
   type CreateTaskInput,
   type Task,
   type TaskPriority,
@@ -23,8 +27,11 @@ const USAGE = [
   "  forge list",
   "  forge ready",
   "  forge create <id> --title <title> [options]",
+  "  forge prompt <id|next>",
+  "  forge loop-prompt",
   "  forge claim <id> [--by <name>]",
   "  forge done <id>",
+  "  forge web [--host <host>] [--port <port>] [--dir <path>]",
 ].join("\n");
 
 export async function runCli(
@@ -49,10 +56,16 @@ export async function runCli(
         return await listReadyTasks(cliOptions, rest);
       case "create":
         return await create(cliOptions, rest);
+      case "prompt":
+        return await prompt(cliOptions, rest);
+      case "loop-prompt":
+        return await loopPrompt(cliOptions, rest);
       case "claim":
         return await claim(cliOptions, rest);
       case "done":
         return await done(cliOptions, rest);
+      case "web":
+        return await web(cliOptions, rest);
       case "-h":
       case "--help":
       case undefined:
@@ -104,6 +117,37 @@ async function create(options: CliOptions, args: string[]): Promise<number> {
   return 0;
 }
 
+async function prompt(options: CliOptions, args: string[]): Promise<number> {
+  const [target, ...extra] = args;
+  if (!target || extra.length > 0) {
+    options.stderr("usage: forge prompt <id|next>");
+    return 1;
+  }
+
+  const task =
+    target === "next"
+      ? await findNextPromptTask(options.cwd)
+      : (await findParsedTaskByIdFrom(options.cwd, target)).task;
+
+  if (!task) {
+    options.stderr("no ready tasks");
+    return 1;
+  }
+
+  options.stdout(formatAgentPrompt(task));
+  return 0;
+}
+
+async function loopPrompt(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length > 0) {
+    options.stderr("usage: forge loop-prompt");
+    return 1;
+  }
+
+  options.stdout(formatLoopPrompt());
+  return 0;
+}
+
 async function done(options: CliOptions, args: string[]): Promise<number> {
   const [taskId, ...extra] = args;
   if (!taskId || extra.length > 0) {
@@ -114,6 +158,46 @@ async function done(options: CliOptions, args: string[]): Promise<number> {
   const task = await completeTaskFrom(options.cwd, taskId, options.now);
   options.stdout(`done ${task.id}`);
   return 0;
+}
+
+async function findNextPromptTask(cwd: string): Promise<Task | null> {
+  const tasks = await loadTasksFrom(cwd);
+  return rankReadyTasks(tasks)[0] ?? null;
+}
+
+async function web(options: CliOptions, args: string[]): Promise<number> {
+  const webOptions = parseWebArgs(args, options.cwd);
+  const repoRoot = await findForgeRoot(webOptions.startDir);
+  const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
+  const url = `http://${webOptions.host}:${webOptions.port}/`;
+
+  options.stdout(`serving ${repoRoot}`);
+  options.stdout(url);
+
+  const child = Bun.spawn(
+    [
+      "bun",
+      "run",
+      "dev",
+      "--",
+      "--host",
+      webOptions.host,
+      "--port",
+      String(webOptions.port),
+    ],
+    {
+      cwd: webPackageDir,
+      env: {
+        ...process.env,
+        FORGE_START_DIR: repoRoot,
+      },
+      stderr: "inherit",
+      stdin: "inherit",
+      stdout: "inherit",
+    },
+  );
+
+  return await child.exited;
 }
 
 function parseClaimArgs(
@@ -213,6 +297,48 @@ function parsePriority(value: string): TaskPriority {
   throw new Error("priority must be one of: urgent, high, medium, low");
 }
 
+function parseWebArgs(
+  args: string[],
+  defaultStartDir: string,
+): { host: string; port: number; startDir: string } {
+  const webOptions = {
+    host: "127.0.0.1",
+    port: 5174,
+    startDir: defaultStartDir,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const value = args[index + 1];
+    if (!value) {
+      throw new Error(`${arg} requires a value`);
+    }
+
+    switch (arg) {
+      case "--host":
+        webOptions.host = value;
+        break;
+      case "--port": {
+        const port = Number(value);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error("web option --port requires a valid port");
+        }
+        webOptions.port = port;
+        break;
+      }
+      case "--dir":
+        webOptions.startDir = value;
+        break;
+      default:
+        throw new Error(`unknown web option: ${arg}`);
+    }
+
+    index += 1;
+  }
+
+  return webOptions;
+}
+
 function writeTaskLines(options: CliOptions, tasks: Task[]): void {
   for (const task of tasks) {
     options.stdout(formatTaskLine(task));
@@ -226,6 +352,43 @@ function formatTaskLine(task: Task): string {
   }
   fields.push(task.title);
   return fields.join("\t");
+}
+
+function formatAgentPrompt(task: Task): string {
+  const lines = [
+    `Goal: Complete Forge task ${task.id} - ${task.title}`,
+    "",
+    "Follow the repository's AGENTS.md instructions and the Forge operating loop.",
+    "Before editing code or docs, claim the task. Keep work inside the declared scope, update task notes with decisions and verification, and mark the task done only when acceptance criteria are satisfied.",
+    "",
+    `Task file: ${task.sourcePath}`,
+    `Status: ${task.status}`,
+    `Priority: ${task.priority}`,
+    `Area: ${task.area ?? "-"}`,
+    `Depends on: ${task.depends_on.length ? task.depends_on.join(", ") : "none"}`,
+    "Scope:",
+    ...task.scope.map((scope) => `- ${scope}`),
+    "",
+    "Task body:",
+    task.body.trim(),
+    "",
+  ];
+
+  return lines.join("\n");
+}
+
+function formatLoopPrompt(): string {
+  return [
+    "/goal Work the Forge execution loop until no ready task remains or a stop condition is hit.",
+    "",
+    "At the start of each iteration, use `forge prompt next` to select the current highest-ranked ready task. Claim it before editing. Follow the repository's AGENTS.md instructions and the Forge operating loop.",
+    "",
+    "For each task, keep edits inside the task scope. Update the task notes with decisions, blockers, and verification. Mark the task done only when its acceptance criteria are satisfied and concrete evidence supports completion. Commit the code and task-file updates together.",
+    "",
+    "After committing, start the next iteration with `forge prompt next` again.",
+    "",
+    "Stop when no task is ready, the selected task is ambiguous, required changes exceed scope, verification cannot run, or you need user judgment before continuing. Report the blocker plus the next input needed.",
+  ].join("\n");
 }
 
 if (import.meta.main) {

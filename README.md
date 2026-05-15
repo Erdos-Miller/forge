@@ -68,9 +68,26 @@ directory from the current working directory.
 bun packages/cli/src/index.ts list
 bun packages/cli/src/index.ts ready
 bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --area cli --scope "packages/cli/**"
+bun packages/cli/src/index.ts loop-prompt
+bun packages/cli/src/index.ts prompt next
 bun packages/cli/src/index.ts claim F-0005 --by codex
 bun packages/cli/src/index.ts done F-0005
+bun packages/cli/src/index.ts web
 ```
+
+Use `forge loop-prompt` when starting a Codex Goal that should keep taking the
+next ready task until it hits a real stop condition. Each iteration still handles
+one coherent task at a time. Use `forge prompt next` when you want the concrete
+prompt for the currently highest-ranked ready task.
+
+For a local `forge` command, link the CLI once:
+
+```sh
+cd packages/cli
+bun link
+```
+
+Then run `forge list`, `forge ready`, or `forge web` from any directory inside a repo that has a `.forge` directory.
 
 ## Web Board
 
@@ -79,12 +96,25 @@ same `.forge/tasks` files used by the CLI. The first screen is a recommended
 queue from Forge's ranking engine with a task detail pane beside it.
 
 ```sh
-cd packages/web
-bun install
-bun run dev
+bun run web
 ```
 
-Open the printed local URL, usually `http://localhost:5173/`.
+Open the printed local URL, usually `http://127.0.0.1:5174/`.
+
+To serve another repo or worktree:
+
+```sh
+forge web --dir /path/to/repo --port 5175
+```
+
+To keep a local install up to date, pull the Forge repo and relink if the CLI package path changes:
+
+```sh
+git pull
+bun install
+cd packages/cli
+bun link
+```
 
 ## Current Target
 
