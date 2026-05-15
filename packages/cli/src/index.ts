@@ -235,7 +235,7 @@ export const COMMANDS = [
   },
   {
     name: "set",
-    usage: "forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+    usage: "forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] [--close-reason <text>] --json",
     description: "Update common task metadata.",
     classification: "write",
     supportsJson: true,
@@ -877,7 +877,9 @@ function parseSetArgs(args: string[]):
   | {
       ok: true;
       taskId: string;
-      updates: Partial<Pick<Task, "priority" | "status" | "area" | "scope">>;
+      updates: Partial<
+        Pick<Task, "priority" | "status" | "area" | "scope" | "closed_at" | "close_reason">
+      >;
     }
   | { ok: false; message: string } {
   const [taskId, ...rest] = args;
@@ -885,12 +887,14 @@ function parseSetArgs(args: string[]):
     return {
       ok: false,
       message:
-        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] [--close-reason <text>] --json",
     };
   }
 
   let json = false;
-  const updates: Partial<Pick<Task, "priority" | "status" | "area" | "scope">> = {};
+  const updates: Partial<
+    Pick<Task, "priority" | "status" | "area" | "scope" | "closed_at" | "close_reason">
+  > = {};
   const scopes: string[] = [];
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -943,6 +947,27 @@ function parseSetArgs(args: string[]):
         index += 1;
         break;
       }
+      case "--closed-at": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --closed-at requires a value" };
+        }
+        if (Number.isNaN(Date.parse(value))) {
+          return { ok: false, message: "closed_at must be a parseable timestamp" };
+        }
+        updates.closed_at = value;
+        index += 1;
+        break;
+      }
+      case "--close-reason": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --close-reason requires a value" };
+        }
+        updates.close_reason = value;
+        index += 1;
+        break;
+      }
       default:
         return { ok: false, message: `unknown set option: ${arg}` };
     }
@@ -952,7 +977,7 @@ function parseSetArgs(args: string[]):
     return {
       ok: false,
       message:
-        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] --json",
+        "usage: forge set <id> [--priority <value>] [--status <value>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] [--close-reason <text>] --json",
     };
   }
   if (scopes.length > 0) {

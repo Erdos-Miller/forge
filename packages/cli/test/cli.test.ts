@@ -897,6 +897,29 @@ describe("forge cli", () => {
     expect(contents).toContain("## Extra\n\nKeep this.");
   });
 
+  test("set updates close metadata", async () => {
+    const { nestedDir, taskPath } = await makeRepo();
+
+    const result = await run(nestedDir, [
+      "set",
+      "F-0002",
+      "--closed-at",
+      "2026-05-14T13:00:00Z",
+      "--close-reason",
+      "Historical repair",
+      "--json",
+    ]);
+    const payload = parseStdoutJson(result);
+    const parsed = parseTaskFile(taskPath, await fs.readFile(taskPath, "utf8"));
+
+    expect(result.code).toBe(0);
+    expect(payload.task.closed_at).toBe("2026-05-14T13:00:00.000Z");
+    expect(payload.task.close_reason).toBe("Historical repair");
+    expect(parsed.task.closed_at).toBe("2026-05-14T13:00:00.000Z");
+    expect(parsed.task.close_reason).toBe("Historical repair");
+    expect(parsed.task.body).toBe("\n# Open\n\nBody stays readable.\n");
+  });
+
   test("set rejects invalid values and no-op usage", async () => {
     const { nestedDir } = await makeRepo();
 
@@ -909,6 +932,13 @@ describe("forge cli", () => {
     ]);
     const noFields = await run(nestedDir, ["set", "F-0002", "--json"]);
     const missingJson = await run(nestedDir, ["set", "F-0002", "--area", "web"]);
+    const invalidTimestamp = await run(nestedDir, [
+      "set",
+      "F-0002",
+      "--closed-at",
+      "not-a-date",
+      "--json",
+    ]);
 
     expect(invalidPriority.code).toBe(2);
     expect(parseStderrJson(invalidPriority).error.message).toBe(
@@ -920,6 +950,10 @@ describe("forge cli", () => {
     );
     expect(missingJson.code).toBe(2);
     expect(parseStderrJson(missingJson).error.message).toContain("usage: forge set");
+    expect(invalidTimestamp.code).toBe(2);
+    expect(parseStderrJson(invalidTimestamp).error.message).toBe(
+      "closed_at must be a parseable timestamp",
+    );
   });
 
   test("done updates a task file", async () => {
