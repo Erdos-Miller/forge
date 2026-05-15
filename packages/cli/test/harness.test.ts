@@ -1,14 +1,22 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { parseTaskFile } from "@forge/core";
+import {
+  blockedForgeFixtureTasks,
+  claimedForgeFixtureTasks,
+  createForgeFixtureRepo,
+  doneForgeFixtureTasks,
+  legacyForgeFixtureTasks,
+  scaleForgeFixtureTasks,
+  type ForgeFixtureRepo,
+} from "../../core/test/fixture-repo";
 import { runCli } from "../src";
 
-const tempDirs: string[] = [];
+const fixtureRepos: ForgeFixtureRepo[] = [];
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+  await Promise.all(fixtureRepos.splice(0).map((repo) => repo.cleanup()));
 });
 
 interface RunResult {
@@ -17,20 +25,10 @@ interface RunResult {
   stderr: string[];
 }
 
-interface TaskFixture {
-  id: string;
-  title?: string;
-  status?: "open" | "doing" | "blocked" | "done" | "canceled";
-  priority?: "urgent" | "high" | "medium" | "low";
-  claimed_by?: string;
-  depends_on?: string[];
-}
-
-async function makeRepo(prefix = "forge-harness-test-") {
-  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  tempDirs.push(repoRoot);
-  await fs.mkdir(path.join(repoRoot, ".forge", "tasks"), { recursive: true });
-  return repoRoot;
+async function makeRepo(prefix = "forge-harness-test-"): Promise<ForgeFixtureRepo> {
+  const repo = await createForgeFixtureRepo({ prefix });
+  fixtureRepos.push(repo);
+  return repo;
 }
 
 async function run(cwd: string, args: string[], stdin = ""): Promise<RunResult> {
@@ -53,80 +51,6 @@ function parseStdoutJson(result: RunResult): any {
   return JSON.parse(result.stdout[0]);
 }
 
-async function writeTask(repoRoot: string, fixture: TaskFixture): Promise<string> {
-  const tasksDir = path.join(repoRoot, ".forge", "tasks");
-  const filePath = path.join(tasksDir, `${fixture.id}-${slugify(fixture.title ?? fixture.id)}.md`);
-  await fs.writeFile(filePath, taskFile(fixture));
-  return filePath;
-}
-
-async function writeTasks(
-  repoRoot: string,
-  fixtures: TaskFixture[],
-  batchSize = 200,
-): Promise<void> {
-  for (let index = 0; index < fixtures.length; index += batchSize) {
-    await Promise.all(fixtures.slice(index, index + batchSize).map((fixture) => writeTask(repoRoot, fixture)));
-  }
-}
-
-function taskFile(fixture: TaskFixture): string {
-  const status = fixture.status ?? "open";
-  const dependsOn = fixture.depends_on?.length
-    ? "\n" + fixture.depends_on.map((id) => `  - ${id}`).join("\n")
-    : " []";
-  const closedFields =
-    status === "done" || status === "canceled"
-      ? [
-          "closed_at: 2026-05-15T01:00:00-05:00",
-          `close_reason: ${JSON.stringify("Fixture closed")}`,
-        ]
-      : ["closed_at: \"\"", "close_reason: \"\""];
-
-  return [
-    "---",
-    `id: ${fixture.id}`,
-    `title: ${JSON.stringify(fixture.title ?? fixture.id)}`,
-    "kind: task",
-    `status: ${status}`,
-    `priority: ${fixture.priority ?? "medium"}`,
-    'parent: ""',
-    `depends_on:${dependsOn}`,
-    `claimed_by: ${JSON.stringify(fixture.claimed_by ?? "")}`,
-    "area: harness",
-    "scope:",
-    "  - packages/**",
-    "created_at: 2026-05-15T00:00:00-05:00",
-    "updated_at: 2026-05-15T00:00:00-05:00",
-    ...closedFields,
-    'blocked_reason: ""',
-    'review_reason: ""',
-    "---",
-    "",
-    `# ${fixture.title ?? fixture.id}`,
-    "",
-    "## Notes",
-    "",
-    "Harness fixture.",
-    "",
-  ].join("\n");
-}
-
-function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function fixtures(count: number): TaskFixture[] {
-  return Array.from({ length: count }, (_, index) => {
-    const id = `F-${String(index + 1).padStart(5, "0")}`;
-    return {
-      id,
-      title: `Harness task ${index + 1}`,
-      priority: index % 4 === 0 ? "urgent" : index % 4 === 1 ? "high" : index % 4 === 2 ? "medium" : "low",
-    };
-  });
-}
-
 async function measure(label: string, action: () => Promise<RunResult>) {
   const start = performance.now();
   const result = await action();
@@ -137,7 +61,7 @@ async function measure(label: string, action: () => Promise<RunResult>) {
 
 describe("Forge agent harness scenarios", () => {
   test("runs a full robot workflow against an isolated temp repo", async () => {
-    const repoRoot = await makeRepo();
+    const { repoRoot } = await makeRepo();
 
     const createResult = await run(repoRoot, [
       "create",
@@ -223,8 +147,9 @@ describe("Forge agent harness scenarios", () => {
   });
 
   test("covers graph fixtures for dependency shapes and diagnostics", async () => {
-    const repoRoot = await makeRepo();
-    await writeTasks(repoRoot, [
+    const repo = await makeRepo();
+    const repoRoot = repo.repoRoot;
+    await repo.writeTasks([
       { id: "F-0101", title: "Linear base", status: "done" },
       { id: "F-0102", title: "Linear ready", depends_on: ["F-0101"] },
       { id: "F-0201", title: "Fan in left", status: "done" },
@@ -289,9 +214,26 @@ describe("Forge agent harness scenarios", () => {
     expect(parseStdoutJson(await run(repoRoot, ["blockers", "F-0601", "--json"])).blockers).toEqual([]);
   });
 
+  test("reuses shared fixture shapes for task store edge cases", async () => {
+    const repo = await makeRepo();
+    await repo.writeTasks([
+      ...blockedForgeFixtureTasks(),
+      ...claimedForgeFixtureTasks(),
+      ...doneForgeFixtureTasks(),
+      ...legacyForgeFixtureTasks(),
+    ]);
+
+    const queuePayload = parseStdoutJson(await run(repo.repoRoot, ["queue", "--json"]));
+    expect(queuePayload.tasks.map((task: any) => task.id)).toEqual(["F-0101", "F-0401"]);
+
+    const doctorPayload = parseStdoutJson(await run(repo.nestedDir, ["doctor", "--json"]));
+    expect(doctorPayload.summary).toEqual({ errors: 0, warnings: 0 });
+  });
+
   test("keeps 1k task queue and doctor performance within an explicit budget", async () => {
-    const repoRoot = await makeRepo("forge-harness-1k-");
-    await writeTasks(repoRoot, fixtures(1000));
+    const repo = await makeRepo("forge-harness-1k-");
+    const repoRoot = repo.repoRoot;
+    await repo.writeTasks(scaleForgeFixtureTasks(1000));
 
     const queue = await measure("1k queue", () => run(repoRoot, ["queue", "--json"]));
     expect(queue.result.code).toBe(0);
@@ -305,8 +247,9 @@ describe("Forge agent harness scenarios", () => {
   });
 
   test("reports 10k task queue and doctor measurements with an extreme upper bound", async () => {
-    const repoRoot = await makeRepo("forge-harness-10k-");
-    await writeTasks(repoRoot, fixtures(10000));
+    const repo = await makeRepo("forge-harness-10k-");
+    const repoRoot = repo.repoRoot;
+    await repo.writeTasks(scaleForgeFixtureTasks(10000));
 
     const queue = await measure("10k queue", () => run(repoRoot, ["queue", "--json"]));
     expect(queue.result.code).toBe(0);
