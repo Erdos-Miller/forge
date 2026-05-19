@@ -474,7 +474,7 @@ export function parseWebArgs(
   args: string[],
   defaultStartDir: string,
 ):
-  | { action: "serve"; host: string; port: number; startDir: string }
+  | { action: "serve"; host: string; port: number; startDir: string; demo: boolean }
   | { action: "status"; json: true; startDir: string } {
   if (args[0] === "status") {
     return parseWebStatusArgs(args.slice(1), defaultStartDir);
@@ -485,10 +485,16 @@ export function parseWebArgs(
     host: "127.0.0.1",
     port: 5174,
     startDir: defaultStartDir,
+    demo: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === "--demo") {
+      webOptions.demo = true;
+      continue;
+    }
+
     const value = args[index + 1];
     if (!value) {
       throw new Error(`${arg} requires a value`);
@@ -514,6 +520,10 @@ export function parseWebArgs(
     }
 
     index += 1;
+  }
+
+  if (webOptions.demo && webOptions.startDir !== defaultStartDir) {
+    throw new Error("web option --demo cannot be combined with --dir");
   }
 
   return webOptions;

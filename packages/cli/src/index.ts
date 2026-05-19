@@ -48,6 +48,7 @@ import {
   getTaskCloseoutGuidance,
   inspectTaskStore,
 } from "./doctor";
+import { createDemoForgeRepo, type DemoForgeRepo } from "./demo-repo";
 import { formatAgentPrompt, formatLoopPrompt } from "./prompt-format";
 import {
   formatAgentHelp,
@@ -690,8 +691,8 @@ async function findNextPromptTask(cwd: string): Promise<Task | null> {
 
 async function web(options: CliOptions, args: string[]): Promise<number> {
   const webOptions = parseWebArgs(args, options.cwd);
-  const repoRoot = await findForgeRoot(webOptions.startDir);
   if (webOptions.action === "status") {
+    const repoRoot = await findForgeRoot(webOptions.startDir);
     options.stdout(
       stringifyJson({
         ok: true,
@@ -703,11 +704,15 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
     return 0;
   }
 
+  let demoRepo: DemoForgeRepo | null = null;
+  const repoRoot = webOptions.demo
+    ? (demoRepo = await createDemoForgeRepo()).repoRoot
+    : await findForgeRoot(webOptions.startDir);
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
   const actualPort = await findAvailablePort(webOptions.host, webOptions.port);
   const url = `http://${webOptions.host}:${actualPort}/`;
 
-  options.stdout(`serving ${repoRoot}`);
+  options.stdout(`${webOptions.demo ? "serving demo" : "serving"} ${repoRoot}`);
   options.stdout(url);
 
   const child = Bun.spawn(
@@ -752,6 +757,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
     process.off("SIGINT", stopChild);
     process.off("SIGTERM", stopChild);
     await removeWebSession(repoRoot, child.pid);
+    await demoRepo?.cleanup();
   }
 }
 

@@ -240,11 +240,18 @@ export const COMMANDS = [
   },
   {
     name: "web",
-    usage: "forge web [--host <host>] [--port <port>] [--dir <path>] | forge web status --json",
+    usage:
+      "forge web [--host <host>] [--port <port>] [--dir <path>] [--demo] | " +
+      "forge web status --json",
     description: "Serve the local web viewer or report the active web session.",
     classification: "serve",
     supportsJson: false,
-    examples: ["forge web", "forge web --dir /path/to/repo --port 5175", "forge web status --json"],
+    examples: [
+      "forge web",
+      "forge web --demo",
+      "forge web --dir /path/to/repo --port 5175",
+      "forge web status --json",
+    ],
     agentPurpose: "Open or discover a human review surface for the task graph.",
   },
 ] satisfies CommandMetadata[];
