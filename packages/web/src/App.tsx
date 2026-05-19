@@ -2,6 +2,7 @@ import type { Task, TaskAvailability } from "@forge/core";
 import { marked } from "marked";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskGraphPayload } from "./api";
+import { shouldShowDoneInQueue } from "./queue-visibility";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
 import {
@@ -139,6 +140,10 @@ export function App({ initialData }: AppProps) {
     return scopedTasks.filter((task) => task.status === "done" || task.status === "canceled");
   }, [scopedTasks]);
 
+  const effectiveShowDone = useMemo(() => {
+    return shouldShowDoneInQueue(scopedTasks, showDone);
+  }, [scopedTasks, showDone]);
+
   const recentDoneTasks = useMemo(() => {
     return doneTasks.slice(-4).reverse();
   }, [doneTasks]);
@@ -148,8 +153,8 @@ export function App({ initialData }: AppProps) {
   }, [data]);
 
   const queueTasks = useMemo(() => {
-    return sortQueueTasks(scopedTasks, recommendedRank, showDone);
-  }, [recommendedRank, scopedTasks, showDone]);
+    return sortQueueTasks(scopedTasks, recommendedRank, effectiveShowDone);
+  }, [effectiveShowDone, recommendedRank, scopedTasks]);
 
   const groupedQueueTasks = useMemo(() => {
     return groupQueueTasks(queueTasks, groupBy, data?.availabilityByTaskId ?? {});
@@ -292,7 +297,7 @@ export function App({ initialData }: AppProps) {
               <div className="panelControls">
                 <label className="showDoneToggle">
                   <input
-                    checked={showDone}
+                    checked={effectiveShowDone} disabled={effectiveShowDone && !showDone}
                     onChange={(event) => setShowDone(event.target.checked)}
                     type="checkbox"
                   />
@@ -778,11 +783,12 @@ export function selectTaskAfterRefresh(
   urlRequestedTaskId: string | null = null,
 ): string | null {
   const scopedTasks = payload.tasks.filter((task) => taskMatchesScope(task, scopeFilter));
+  const effectiveShowDone = shouldShowDoneInQueue(scopedTasks, showDone);
   const recommendedRank = new Map(
     payload.recommendedTaskIds.map((taskId, index) => [taskId, index]),
   );
   const visibleTasks = groupQueueTasks(
-    sortQueueTasks(scopedTasks, recommendedRank, showDone),
+    sortQueueTasks(scopedTasks, recommendedRank, effectiveShowDone),
     "area",
     payload.availabilityByTaskId,
   ).flatMap(([, sections]) => sections.flatMap((section) => section.tasks));

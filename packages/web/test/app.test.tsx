@@ -176,6 +176,27 @@ describe("App", () => {
     expect(html).toContain("<summary>Dependencies (1)</summary>");
   });
 
+  test("shows completed tasks when the selected scope has no unfinished work", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          tasks: [payload.tasks[0]],
+          readyTaskIds: [],
+          recommendedTaskIds: [],
+          availabilityByTaskId: { "F-0001": "closed" },
+          blockersByTaskId: { "F-0001": [] },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Done task");
+    expect(html).toContain("Completed.");
+    expect(html).toContain("Status is done.");
+    expect(html).not.toContain("No tasks match this filter.");
+    expect(html).not.toContain("No queue row is visible for this filter.");
+  });
+
   test("selects a visible task from the URL on initial render", () => {
     const html = withMockWindow("?task=F-0003", () =>
       renderToStaticMarkup(<App initialData={payload} />),
@@ -340,7 +361,7 @@ describe("App", () => {
     expect(selectTaskAfterRefresh("F-9999", payload, "all", false, "F-9999")).toBe(
       "F-9999",
     );
-    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBeNull();
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-9999", payload, "packages/core", true)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBeNull();
   });
@@ -358,7 +379,7 @@ describe("App", () => {
     expect(replaceCalls).toEqual(["/?task=F-0003"]);
   });
 
-  test("clears detail when hidden done tasks leave the visible queue empty", () => {
+  test("keeps detail visible when only done tasks match the filter", () => {
     const html = renderToStaticMarkup(
       <App
         initialData={{
@@ -372,14 +393,14 @@ describe("App", () => {
       />,
     );
 
-    expect(html).toContain("No tasks match this filter.");
-    expect(html).toContain("No queue row is visible for this filter.");
-    expect(html).not.toContain("Completed.");
-    expect(html).not.toContain("Status is done.");
-    expect(html).not.toContain("packages/core/**");
+    expect(html).not.toContain("No tasks match this filter.");
+    expect(html).not.toContain("No queue row is visible for this filter.");
+    expect(html).toContain("Completed.");
+    expect(html).toContain("Status is done.");
+    expect(html).toContain("packages/core/**");
   });
 
-  test("refresh selection clears hidden tasks when no visible queue row remains", () => {
+  test("refresh selection keeps done tasks visible when no unfinished tasks match", () => {
     const doneOnlyPayload = {
       ...payload,
       tasks: [payload.tasks[0]],
@@ -389,7 +410,7 @@ describe("App", () => {
       blockersByTaskId: { "F-0001": [] },
     };
 
-    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBeNull();
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", true)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "packages/web", true)).toBeNull();
   });
