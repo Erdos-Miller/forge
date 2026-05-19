@@ -1,8 +1,8 @@
 import react from "@vitejs/plugin-react";
-import { findForgeRoot } from "@forge/core";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defineConfig, normalizePath } from "vite";
+import { findForgeRoot } from "../core/src/index.ts";
 import { getTaskGraphPayload } from "./src/api";
 
 export default defineConfig({

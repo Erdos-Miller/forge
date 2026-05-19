@@ -6,7 +6,7 @@ import {
   type Task,
   type TaskGraphAnalysis,
   type TaskAvailability,
-} from "@forge/core";
+} from "../../core/src/index.ts";
 
 export interface TaskGraphPayload {
   repoRoot: string;
