@@ -1,0 +1,74 @@
+---
+id: F-0068
+title: "Formalize expected task Markdown fields"
+kind: task
+status: open
+priority: high
+area: "core"
+parent: "F-0000"
+depends_on: []
+claimed_by: ""
+scope:
+  - ".forge/**"
+  - "packages/core/**"
+  - "packages/web/**"
+  - "packages/cli/**"
+created_at: 2026-05-20T15:37:01.176Z
+updated_at: 2026-05-20T15:38:09.618Z
+---
+# Formalize expected task Markdown fields
+
+## Why
+
+Forge needs a standard task brief shape without moving rich prose into frontmatter or turning the CLI into a Markdown CMS.
+
+## What success looks like
+
+Forge documents and internally recognizes Why, What success looks like, Acceptance Criteria, Verification, and Notes as expected Markdown task fields.
+
+## Acceptance Criteria
+
+- Document the five expected task fields as Markdown sections: Why, What success looks like, Acceptance Criteria, Verification, and Notes.
+- Clarify that missing expected fields are warnings, not task parse errors.
+- Clarify that direct Markdown edits remain valid for rich task body changes.
+- Keep Execution Plan, Dependencies, and History as supported sections, but not part of the minimal expected brief.
+- Section parsing remains tolerant of unknown extra sections.
+
+## Execution Plan
+
+Summary: Make the expected task brief fields an explicit Markdown-section convention.
+
+Scope: Task format docs, section parsing helpers if needed, and any tests that encode canonical section order.
+
+Approach:
+- Rename the concept from loose canonical sections to expected task fields where appropriate.
+- Document Why, What success looks like, Acceptance Criteria, Verification, and Notes as the minimal expected brief.
+- Keep Execution Plan, Dependencies, and History as supported sections without making them part of the minimal brief.
+- Confirm section parsing and rendering continue to tolerate unknown sections.
+
+Verification:
+- bun test packages/core/test/task-files.test.ts packages/web/test/sections.test.ts
+- bun run quality:check
+
+Stop conditions:
+- Stop if making the wording precise would imply a hard schema migration.
+
+Human review triggers:
+- Ask for review if the expected field names need to change.
+
+## Dependencies
+
+None.
+
+## Verification
+
+- bun test packages/core/test/task-files.test.ts packages/web/test/sections.test.ts
+- bun run quality:check
+
+## Notes
+
+This task establishes the convention before create, doctor, prompt, or web behavior depend on it.
+
+## History
+
+- Created 2026-05-20T15:37:01.176Z.
