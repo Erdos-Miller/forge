@@ -2,6 +2,19 @@
 
 `.forge` contains the repo-local source of truth for Forge work.
 
+## User Store Contract
+
+User repositories should only need this minimal tracked Forge store:
+
+- `.forge/tasks/` for canonical Markdown task files.
+- `.forge/projects.yml` for optional explicit Project navigation.
+- `.forge/archive/` for optional completed or retired task files.
+- `.forge/local/` for ignored machine-local runtime state.
+
+`.forge/README.md`, `.forge/harness-engineering.md`, and `.forge/decisions/`
+are Forge repo development docs and historical records, not files Forge should
+require in arbitrary user repos.
+
 ## Task Format
 
 Tasks live in `.forge/tasks/*.md`.
@@ -120,18 +133,20 @@ cuts across that hierarchy as edit-boundary metadata.
 
 ## Project Configuration
 
-Forge's preferred term is Project. Existing tools still use `.forge/scopes.yml`
-and `forge scopes ...` commands as the compatibility surface until the Project
-command names are added.
+Forge's preferred term is Project. The user store contract names
+`.forge/projects.yml`. Existing tools may still read `.forge/scopes.yml` and
+support `forge scopes ...` commands as the compatibility surface until the
+Project migration is complete.
 
-`.forge/scopes.yml` is an optional repo-local configuration file for explicit
+`.forge/projects.yml` is the optional repo-local configuration file for explicit
 web Projects. Projects are user-facing slices of work inside a Worktree. They
 are separate from task frontmatter `scope`, which remains edit-boundary data for
 agents.
 
-When `.forge/scopes.yml` exists, configured Projects take precedence over the
-web UI's inferred fallback navigation. Repos without the file continue to use
-fallback inference until explicit Project config is added.
+When `.forge/projects.yml` or the legacy `.forge/scopes.yml` exists, configured
+Projects take precedence over the web UI's inferred fallback navigation. Repos
+without either file continue to use fallback inference until explicit Project
+config is added.
 
 Use this preferred shape:
 
@@ -149,9 +164,9 @@ projects:
       - packages/cli/**
 ```
 
-Legacy files that use `scopes:` are still supported and are normalized to
-Projects by Forge. New writes use `projects:` inside `.forge/scopes.yml` so the
-file can migrate without introducing a second config file.
+Legacy files that use `.forge/scopes.yml` or a `scopes:` root key are still
+supported and are normalized to Projects by Forge. New user-facing docs should
+describe `.forge/projects.yml` as the contract.
 
 Fields:
 
@@ -214,7 +229,7 @@ forge projects remove web --json
 ```
 
 Use `forge projects infer --json` to suggest candidate Projects from existing
-task edit-boundary globs without writing `.forge/scopes.yml`.
+task edit-boundary globs without writing config.
 
 Legacy `forge scopes ...` commands remain compatible for existing agent
 workflows.
@@ -325,10 +340,11 @@ library task may require API compatibility notes.
 
 ## Decision Records
 
-Use `.forge/decisions/NNNN-short-title.md` for durable product or architecture
-decisions that future tasks must preserve. Decision records are for shared
-semantics, product behavior, architecture boundaries, and agent workflow rules
-that outlive one task.
+Forge's own repo has historical `.forge/decisions/NNNN-short-title.md` records
+for durable product or architecture decisions that future tasks must preserve.
+Those records are internal Forge development docs, not part of the user store
+contract. User repos can keep durable decisions in normal repo docs, task
+Markdown, or `AGENTS.md`.
 
 Use task `Notes` for local implementation evidence, verification results,
 blockers, and task-specific decisions. If a note establishes a cross-cutting
@@ -403,8 +419,9 @@ A task is ready when:
 Forge keeps internal developer and agent checks as package scripts, not as
 customer-facing `forge` CLI commands.
 
-See `.forge/harness-engineering.md` for the concise doctrine behind these
-checks and when to add a new fixture, harness, doctor warning, or smoke test.
+Forge's own repo keeps concise harness doctrine in
+`.forge/harness-engineering.md`. User repos do not need this file unless they
+choose to create similar project-local documentation.
 
 - `bun run harness:cli` runs the focused CLI workflow harness.
 - `bun run harness:web` runs the current web harness checks.

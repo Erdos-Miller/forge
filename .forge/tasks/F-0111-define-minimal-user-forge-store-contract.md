@@ -2,19 +2,23 @@
 id: F-0111
 title: "Define minimal user Forge store contract"
 kind: task
-status: blocked
+status: done
 priority: urgent
 area: "docs"
 parent: "F-0000"
 depends_on: []
-claimed_by: "codex"
+claimed_by: ""
 scope:
   - ".forge/**"
   - "README.md"
   - "AGENTS.md"
+  - "packages/cli/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T20:49:10.024Z
-blocked_reason: "Acceptance requires updating generated prompt references in packages/cli/src/prompt-format.ts and prompt tests, but this task scope only allows .forge/**, README.md, and AGENTS.md. Expand scope or move prompt changes to a follow-up before implementation."
+updated_at: 2026-05-21T21:08:41.556Z
+blocked_reason: ""
+closed_at: 2026-05-21T21:08:41.556Z
+close_reason: ""
+review_reason: ""
 ---
 # Define minimal user Forge store contract
 
@@ -70,6 +74,16 @@ None.
 ## Notes
 
 This task defines the boundary only. Migration and file movement belong to follow-up tasks.
+
+Implemented the minimal user store contract boundary:
+- Documented `.forge/tasks/`, `.forge/projects.yml`, optional `.forge/archive/`, and ignored `.forge/local/` as the user store contract.
+- Clarified that Forge repo docs like `.forge/README.md`, `.forge/harness-engineering.md`, and `.forge/decisions/` are internal/historical, not required user repo files.
+- Removed generated prompt references that told arbitrary repos to use `.forge/harness-engineering.md` or `.forge/decisions/`.
+- Removed stale hidden repo-guidance instructions from `AGENTS.md`.
+
+Verification:
+- `bun test packages/cli/test/prompt-guidance.test.ts`
+- `bun run harness:cli`
 
 ## History
 

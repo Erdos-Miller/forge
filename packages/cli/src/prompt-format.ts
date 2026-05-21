@@ -17,7 +17,7 @@ export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
       "edit scope, update task notes with decisions and verification, and mark the " +
       "task done only when acceptance criteria are satisfied.",
     "If the work changes conventions, architecture, or public semantics, record the " +
-      "decision in task Notes or a durable `.forge/decisions/` record.",
+      "decision in task Notes or durable repo documentation.",
     "If dirty worktree state affects whether to continue, run " +
       "`forge worktree-status --json`: continue on `non_blocking`, pause on `review`, " +
       "and stop on `blocking`.",
@@ -53,7 +53,7 @@ export function formatLoopPrompt(personalGuidance = ""): string {
       "its acceptance criteria are satisfied and concrete evidence supports " +
       "completion. Commit the code and task-file updates together.",
     "When a task changes conventions, architecture, or public semantics, capture " +
-      "the durable decision in task Notes or `.forge/decisions/` before closeout.",
+      "the durable decision in task Notes or durable repo documentation before closeout.",
     "When the worktree is dirty, classify it with `forge worktree-status --json` " +
       "before deciding whether to continue or stop: continue on `non_blocking`, " +
       "pause on `review`, and stop on `blocking`.",
@@ -151,8 +151,8 @@ function formatPromptCommandGuidance(): string {
       "prefer a dependency write command when one exists.",
     "- Direct Markdown edits are acceptable for rich task body content that no command " +
       "owns, but preserve frontmatter and canonical sections.",
-    "- Use `.forge/harness-engineering.md` when deciding whether a failure needs " +
-      "a fixture, harness, doctor warning, or smoke test.",
+    "- Use repo-local testing or harness guidance, when present, to decide " +
+      "whether a failure needs a fixture, harness, doctor warning, or smoke test.",
     "- For web UI, Vite server, or `/api/tasks` changes, run `bun run harness:web`.",
     "- For CLI workflow, command, prompt, or robot JSON changes, run `bun run harness:cli`.",
     "- For broad behavior, graph, task-store, or cross-surface changes, run " +

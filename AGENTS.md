@@ -2,10 +2,6 @@
 
 Forge is built from its own task files. Treat `.forge/tasks/*.md` as the coordination surface.
 
-When guidance routing is available, use `.forge/guidance.yml` and matching
-`.forge/guidance/*.md` files for repo or project context. Personal
-`.forge/local/user.md` guidance is local-only and should be applied last.
-
 ## Roles
 
 Forge currently targets a two-agent workflow.
@@ -47,8 +43,9 @@ One agent may do both roles in a small session, but keep the distinction clear i
 - If a task needs shared files or broad architecture decisions, pause and document the decision in the task before implementing.
 - Keep task files readable as Markdown documents, not just machine records.
 - Flag tasks for review in the notes when judgment is needed before continuing.
-- Put app-specific review rules in routed repo guidance. Keep Forge's generic
-  task schema focused on common lifecycle state.
+- Put app-specific review rules in normal repo docs, task Markdown, or
+  `AGENTS.md`. Keep Forge's generic task schema focused on common lifecycle
+  state.
 
 ## Dirty Worktree Policy
 

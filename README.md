@@ -24,15 +24,29 @@ The core idea is simple: work is stored as plain Markdown files in git. The CLI 
 
 ```text
 .forge/
-  README.md
-  specs/
-    F-0000-forge-v0.md
   tasks/
     F-0001-define-task-format.md
     F-0002-build-task-parser.md
+  projects.yml
+  archive/
+  local/
 ```
 
 Each task is a Markdown document with YAML frontmatter. The Markdown body should remain useful even if Forge tooling does not exist.
+
+## User Store Contract
+
+User repos should only need a small `.forge` store:
+
+- `.forge/tasks/` for canonical Markdown task files.
+- `.forge/projects.yml` for optional explicit Project navigation.
+- `.forge/archive/` for optional completed or retired task files.
+- `.forge/local/` for ignored machine-local runtime state.
+
+Files such as `.forge/README.md`, `.forge/harness-engineering.md`, and
+`.forge/decisions/` are not part of the user store contract. Forge's own repo
+may keep development docs, historical decisions, and harness notes where they
+fit the codebase, including normal repo docs and `AGENTS.md`.
 
 ## Repo Hygiene
 
@@ -57,9 +71,10 @@ Forge does not currently route committed project guidance. Keep durable work
 context in task Markdown and repository agent instructions such as `AGENTS.md`.
 Personal guidance is intentionally separate from repo task state.
 
-Durable product and architecture choices live in `.forge/decisions/`. Task
+In Forge's own repo, durable product and architecture choices may live in
+normal repo docs, `AGENTS.md`, or historical `.forge/decisions/` records. Task
 `Notes` are for implementation evidence, verification, blockers, and local task
-decisions; promote cross-cutting rules into a decision record.
+decisions.
 
 Workspace discovery can be tuned with an optional `forge.workspace.yml` file at
 the directory passed to `forge web --dir`. Ignore paths are relative to that
@@ -83,7 +98,7 @@ discovery:
 6. Commit the code and task update together.
 
 If a task changes conventions, architecture, or public semantics, record the
-decision in task `Notes` or promote it to `.forge/decisions/` before closeout.
+decision in task `Notes` or durable repo documentation before closeout.
 
 Forge should build itself by following this loop from the beginning.
 
@@ -150,8 +165,9 @@ Inside a Worktree, a Project is an explicit user-facing slice of work. It is
 separate from Area, which is a task category such as `web` or `docs`, and from
 the task frontmatter `scope` globs that agents use as edit boundaries.
 
-Repos can optionally define explicit Projects in `.forge/scopes.yml`. The file
-and current CLI commands still use `scope` naming for compatibility:
+Repos can optionally define explicit Projects in `.forge/projects.yml`. Current
+compatibility commands may still read or write `.forge/scopes.yml` until the
+Project migration is complete:
 
 ```yaml
 version: 1
