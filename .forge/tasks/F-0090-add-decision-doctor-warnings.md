@@ -2,7 +2,7 @@
 id: F-0090
 title: "Add decision doctor warnings"
 kind: task
-status: open
+status: done
 priority: medium
 area: "cli"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:48:00.236Z
+closed_at: 2026-05-21T18:48:00.236Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add decision doctor warnings
 
@@ -70,6 +74,12 @@ Tracked in frontmatter: F-0089.
 ## Notes
 
 Decision warnings should help agents preserve intent, not create a hard process gate.
+
+- Added advisory `decision_capture_missing` and `decision_capture_missing_resolution` doctor warnings.
+- The broad-surface heuristic requires explicit CLI, web, and core package scopes; catch-all `packages/**` is intentionally ignored because it was noisy in harness fixtures.
+- Existing Forge graph now reports one real broad-task warning for F-0096, which spans CLI, web, and core and has no decision capture yet.
+- Added focused decision doctor tests for broad warnings, narrow non-warnings, closed suppression, linked decision records, and resolved review/stop-condition notes.
+- Verification: `bun test packages/cli/test/decision-doctor.test.ts`, `bun run harness:cli`, `bun run quality:check`.
 
 ## History
 

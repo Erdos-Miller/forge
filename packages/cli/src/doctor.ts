@@ -110,6 +110,7 @@ function getFrontmatterDoctorDiagnostics(
   diagnostics.push(...getCompletionTimestampDoctorDiagnostics(parsed.task));
   diagnostics.push(...getExecutionPlanDoctorDiagnostics(parsed.task));
   diagnostics.push(...getTaskBriefDoctorDiagnostics(parsed.task));
+  diagnostics.push(...getDecisionCaptureDoctorDiagnostics(parsed.task));
 
   return diagnostics;
 }
@@ -251,6 +252,77 @@ function getTaskBriefDiagnostic(
     sourcePath: task.sourcePath,
     repairHint: `Fill in ## ${sectionTitle} with concrete task context.`,
   };
+}
+
+function getDecisionCaptureDoctorDiagnostics(task: Task): DoctorDiagnostic[] {
+  if (task.status === "done" || task.status === "canceled" || hasDecisionCapture(task.body)) {
+    return [];
+  }
+
+  const diagnostics: DoctorDiagnostic[] = [];
+  if (touchesBroadContractSurfaces(task)) {
+    diagnostics.push(getDecisionCaptureDiagnostic(task, "decision_capture_missing"));
+  }
+  if (hasResolvedReviewOrStopCondition(task.body)) {
+    diagnostics.push(getDecisionCaptureDiagnostic(task, "decision_capture_missing_resolution"));
+  }
+  return diagnostics;
+}
+
+function getDecisionCaptureDiagnostic(task: Task, code: string): DoctorDiagnostic {
+  return {
+    code,
+    severity: "warning",
+    message: `task ${task.id} appears to need decision capture`,
+    taskId: task.id,
+    sourcePath: task.sourcePath,
+    repairHint:
+      "Record the decision in ## Notes, or add/link a durable `.forge/decisions/` record.",
+  };
+}
+
+function touchesBroadContractSurfaces(task: Task): boolean {
+  const surfaces = new Set<string>();
+  addContractSurface(surfaces, task.area);
+  for (const scope of task.scope) {
+    addContractSurfacesFromScope(surfaces, scope);
+  }
+  return ["cli", "web", "core"].every((surface) => surfaces.has(surface));
+}
+
+function addContractSurfacesFromScope(surfaces: Set<string>, scope: string): void {
+  const normalized = scope.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const surface of ["cli", "web", "core"]) {
+    if (scopeTouchesPath(normalized, `packages/${surface}`)) {
+      surfaces.add(surface);
+    }
+  }
+}
+
+function addContractSurface(surfaces: Set<string>, value: string | undefined): void {
+  if (value === "cli" || value === "web" || value === "core") {
+    surfaces.add(value);
+  }
+}
+
+function scopeTouchesPath(scope: string, contractPath: string): boolean {
+  const prefix = getScopePathPrefix(scope);
+  return isSameOrChildPath(contractPath, prefix);
+}
+
+function hasDecisionCapture(body: string): boolean {
+  return (
+    body.includes(".forge/decisions/") ||
+    /(^|\n)\s*(Decision|Decision record|Decision outcome):/i.test(body)
+  );
+}
+
+function hasResolvedReviewOrStopCondition(body: string): boolean {
+  const notes = findSection(parseMarkdownSections(body), "Notes");
+  if (!notes) {
+    return false;
+  }
+  return /(^|\n)\s*(Review|Human review|Stop condition|Stop) resolved:/i.test(notes.body);
 }
 
 function getMeaningfulSectionLines(body: string): string[] {
