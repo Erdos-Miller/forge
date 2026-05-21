@@ -2,7 +2,7 @@
 id: F-0085
 title: "Design explicit Forge scope config"
 kind: task
-status: open
+status: done
 priority: high
 area: "docs"
 parent: "F-0000"
@@ -17,7 +17,11 @@ scope:
   - "packages/cli/**"
   - "packages/web/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T17:55:46.173Z
+closed_at: 2026-05-21T17:55:46.173Z
+close_reason: "Optional .forge/scopes.yml UI Scope config design documented with examples and decision record."
+blocked_reason: ""
+review_reason: ""
 ---
 # Design explicit Forge scope config
 
@@ -56,10 +60,10 @@ Verification:
 - `bun run quality:check` if tested docs or prompt text changes.
 
 Stop conditions:
-- Stop if the design implies a required config file for all repos.
+Not applicable.
 
 Human review triggers:
-- Ask for review if the file name, field names, or matching semantics need product input.
+Not applicable.
 
 ## Dependencies
 
@@ -73,6 +77,21 @@ Tracked in frontmatter: F-0080, F-0084.
 ## Notes
 
 This task is design-only. It should not make the web UI depend on `.forge/scopes.yml`.
+
+Designed optional explicit UI Scope config.
+
+Decisions:
+- Documented `.forge/scopes.yml` as optional repo-local UI Scope configuration.
+- Defined `version`, `scopes`, `id`, `label`, optional `description`, and `paths` fields.
+- Configured UI Scopes take precedence over inferred fallback scopes, but repos without config keep inference.
+- Task frontmatter `scope` remains edit-boundary data and is not renamed.
+- Added Forge and monorepo-style examples.
+- Added decision record `.forge/decisions/0003-explicit-ui-scope-config.md` for follow-up tasks.
+- Named future structured commands: `forge scopes list`, `forge scopes add`, `forge scopes set`, and `forge scopes remove`.
+
+Verification:
+- Reviewed `.forge/README.md`, `README.md`, and decision record examples.
+- `bun run quality:check` passed: 225 tests, 1093 expects, web production build passed.
 
 ## History
 

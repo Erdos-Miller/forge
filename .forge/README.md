@@ -97,6 +97,88 @@ None.
 - `blocked_reason`: optional human-readable reason the task is blocked.
 - `review_reason`: optional human-readable reason the task needs review.
 
+## UI Scope Configuration
+
+`.forge/scopes.yml` is an optional repo-local configuration file for explicit
+web UI Scopes. UI Scopes are user-facing slices of work inside a Worktree. They
+are separate from task frontmatter `scope`, which remains edit-boundary data for
+agents.
+
+When `.forge/scopes.yml` exists, configured UI Scopes take precedence over the
+web UI's inferred fallback scopes. Repos without the file continue to use
+fallback inference.
+
+Use this shape:
+
+```yaml
+version: 1
+scopes:
+  - id: web
+    label: Web
+    description: Web app and browser-facing task surfaces.
+    paths:
+      - packages/web/**
+  - id: cli
+    label: CLI
+    paths:
+      - packages/cli/**
+```
+
+Fields:
+
+- `id`: stable machine id for URLs, CLI output, and future structured tools.
+- `label`: human-readable selector label.
+- `description`: optional context for humans and agents.
+- `paths`: task edit-boundary globs that belong to the UI Scope.
+
+A task may belong to multiple configured UI Scopes when its frontmatter `scope`
+globs overlap multiple entries. Tasks that do not match configured paths should
+fall back to inferred scopes such as `Other`.
+
+Example for Forge itself:
+
+```yaml
+version: 1
+scopes:
+  - id: web
+    label: Web
+    paths: ["packages/web/**"]
+  - id: cli
+    label: CLI
+    paths: ["packages/cli/**"]
+  - id: core
+    label: Core
+    paths: ["packages/core/**"]
+  - id: planning
+    label: Planning
+    paths: [".forge/**", "README.md", "AGENTS.md"]
+```
+
+Example for a monorepo-style project:
+
+```yaml
+version: 1
+scopes:
+  - id: toolhub-wells
+    label: ToolHub Wells
+    paths:
+      - product/toolhub/src/app/**/wells/**
+      - product/toolhub/docs/wells/**
+  - id: shared-ui
+    label: Shared UI
+    paths:
+      - lib/typescript/ui/**
+  - id: charting
+    label: Charting
+    paths:
+      - lib/typescript/fluxchart/**
+```
+
+Agents should maintain this file through structured commands once available:
+`forge scopes list`, `forge scopes add`, `forge scopes set`, and
+`forge scopes remove`. Direct edits are acceptable until those commands exist,
+but future implementation tasks should prefer the structured tools.
+
 ## Expected Task Markdown Fields
 
 Keep the body readable Markdown. Forge expects every well-formed task brief to

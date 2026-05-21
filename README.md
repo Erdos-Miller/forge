@@ -127,6 +127,26 @@ worktree, or any directory that owns a `.forge` store. The UI Scope filter is a
 user-facing slice of work inside the selected Worktree; it is separate from the
 task frontmatter `scope` globs that agents use as edit boundaries.
 
+Repos can optionally define explicit UI Scopes in `.forge/scopes.yml`:
+
+```yaml
+version: 1
+scopes:
+  - id: web
+    label: Web
+    paths:
+      - packages/web/**
+  - id: planning
+    label: Planning
+    paths:
+      - .forge/**
+      - README.md
+```
+
+Configured UI Scopes are intended to take precedence over inferred fallback
+scopes once the config is wired into tooling. The task frontmatter `scope` field
+remains the edit-boundary data for agents.
+
 To keep a local install up to date, pull the Forge repo and relink if the CLI package path changes:
 
 ```sh
