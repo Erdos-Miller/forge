@@ -30,6 +30,22 @@ const TASK_PRIORITIES = new Set<TaskPriority>([
 
 const TASK_KINDS = new Set<TaskKind>(["task", "spec"]);
 
+export const EXPECTED_TASK_MARKDOWN_FIELDS = [
+  "Why",
+  "What success looks like",
+  "Acceptance Criteria",
+  "Verification",
+  "Notes",
+] as const;
+
+export const SUPPORTED_TASK_MARKDOWN_SECTIONS = [
+  ...EXPECTED_TASK_MARKDOWN_FIELDS.slice(0, 3),
+  "Execution Plan",
+  "Dependencies",
+  ...EXPECTED_TASK_MARKDOWN_FIELDS.slice(3),
+  "History",
+] as const;
+
 export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
   let currentDir = path.resolve(startDir);
 

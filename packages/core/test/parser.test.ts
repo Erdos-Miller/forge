@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
+  EXPECTED_TASK_MARKDOWN_FIELDS,
   TaskParseError,
   createTaskFileContents,
   loadTasks,
@@ -21,7 +22,7 @@ describe("loadTasks", () => {
 });
 
 describe("parseTaskFile", () => {
-  test("creates task files with canonical markdown sections", () => {
+  test("creates task files with expected markdown fields", () => {
     const contents = createTaskFileContents(
       {
         id: "F-9998",
@@ -31,7 +32,7 @@ describe("parseTaskFile", () => {
         scope: ["packages/cli/**"],
         why: "Task creation should be consistent.",
         success: "A generated task is ready to edit.",
-        acceptance: ["It has canonical sections."],
+        acceptance: ["It has expected fields."],
         verification: ["bun test"],
       },
       new Date("2026-05-14T12:00:00Z"),
@@ -44,10 +45,9 @@ describe("parseTaskFile", () => {
     expect(parsed.task.priority).toBe("high");
     expect(parsed.task.area).toBe("cli");
     expect(parsed.task.scope).toEqual(["packages/cli/**"]);
-    expect(parsed.task.body).toContain("## Why");
-    expect(parsed.task.body).toContain("## What success looks like");
-    expect(parsed.task.body).toContain("## Acceptance Criteria");
-    expect(parsed.task.body).toContain("## Verification");
+    for (const field of EXPECTED_TASK_MARKDOWN_FIELDS) {
+      expect(parsed.task.body).toContain(`## ${field}`);
+    }
   });
 
   test("parses frontmatter and preserves the markdown body", () => {

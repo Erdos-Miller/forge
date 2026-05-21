@@ -2,7 +2,7 @@
 id: F-0068
 title: "Formalize expected task Markdown fields"
 kind: task
-status: open
+status: done
 priority: high
 area: "core"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/web/**"
   - "packages/cli/**"
 created_at: 2026-05-20T15:37:01.176Z
-updated_at: 2026-05-20T15:38:09.618Z
+updated_at: 2026-05-21T14:55:33.789Z
+closed_at: 2026-05-21T14:55:33.789Z
+close_reason: "Expected Markdown task fields documented and recognized; focused tests and quality check passed."
+blocked_reason: ""
+review_reason: ""
 ---
 # Formalize expected task Markdown fields
 
@@ -68,6 +72,22 @@ None.
 ## Notes
 
 This task establishes the convention before create, doctor, prompt, or web behavior depend on it.
+
+Implemented expected task Markdown field convention.
+
+Decisions:
+- Added core constants for the expected task brief fields and supported task Markdown sections.
+- Updated `.forge/README.md` to describe expected fields as Markdown-section conventions, not frontmatter schema or parse requirements.
+- Kept `Execution Plan`, `Dependencies`, and `History` as supported sections outside the minimal expected brief.
+- Confirmed unknown sections remain tolerated and renderable through existing parser/web tests.
+
+Verification:
+- `bun test packages/core/test/parser.test.ts packages/core/test/write.test.ts packages/web/test/sections.test.ts` passed: 30 tests, 0 failures.
+- `bun run quality:check` passed: 191 tests, 0 failures, web production build passed.
+
+Closeout review resolution:
+- Expected field names stayed exactly as specified in the task acceptance criteria: Why, What success looks like, Acceptance Criteria, Verification, and Notes.
+- No hard schema migration was introduced; missing fields remain a future doctor warning, not a parse error.
 
 ## History
 

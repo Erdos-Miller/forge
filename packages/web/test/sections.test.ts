@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { organizeTaskMarkdown } from "../src/sections";
 
 describe("organizeTaskMarkdown", () => {
-  test("maps canonical sections into the display order", () => {
+  test("maps expected fields and supported sections into the display order", () => {
     const sections = organizeTaskMarkdown(
       [
         "# Example",

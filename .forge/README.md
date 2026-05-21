@@ -95,18 +95,26 @@ None.
 - `blocked_reason`: optional human-readable reason the task is blocked.
 - `review_reason`: optional human-readable reason the task needs review.
 
-## Canonical Markdown Sections
+## Expected Task Markdown Fields
 
-Keep the body readable Markdown, but create tasks with the known sections in this order:
+Keep the body readable Markdown. Forge expects every well-formed task brief to
+have these Markdown sections:
 
 1. `Why`
 2. `What success looks like`
 3. `Acceptance Criteria`
-4. `Execution Plan`
-5. `Dependencies`
-6. `Verification`
-7. `Notes`
-8. `History`
+4. `Verification`
+5. `Notes`
+
+These are expected fields, not frontmatter schema. Missing fields should be
+reported as quality warnings by tools, not task parse errors. Direct Markdown
+edits are valid for rich task body changes as long as frontmatter stays intact.
+
+Forge also supports these standard sections when the task needs them:
+
+- `Execution Plan`
+- `Dependencies`
+- `History`
 
 `Execution Plan` lives in the Markdown body, not frontmatter. It is the durable
 per-task plan an agent or human can update before implementation begins and as
@@ -119,10 +127,10 @@ the work changes. Use this default shape:
 - `Stop conditions`: blockers or risk signals that should pause execution.
 - `Human review triggers`: judgment calls that need explicit review.
 
-The CLI should generate these sections for new tasks. Users may add extra `##`
-sections after the canonical sections when a task needs more context. Tools
-should render known sections first, preserve existing execution plans, and
-preserve unknown sections rather than rejecting them.
+The CLI should generate expected fields for new tasks. Users may add extra `##`
+sections when a task needs more context. Tools should render known sections
+first, preserve existing execution plans, and preserve unknown sections rather
+than rejecting them.
 
 ## Check-In Convention
 
