@@ -737,6 +737,15 @@ button {
   background: transparent;
 }
 
+.supportingSections {
+  border-top: 1px solid #202226;
+  margin-top: 4px;
+}
+
+.supportingSections .taskSection h3 {
+  color: #9aa0a8;
+}
+
 .taskSection.verify code {
   font-size: 13px;
 }

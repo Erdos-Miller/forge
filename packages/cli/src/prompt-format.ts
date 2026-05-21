@@ -4,6 +4,7 @@ import {
   COMMAND_WORKFLOWS,
   COMMAND_WORKFLOW_ORDER,
 } from "./command-metadata";
+import { parseMarkdownSections } from "./robot";
 import { formatPersonalGuidancePrompt } from "./user-guidance";
 
 export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
@@ -24,8 +25,7 @@ export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
     "Scope:",
     ...task.scope.map((scope) => `- ${scope}`),
     "",
-    "Task body:",
-    task.body.trim(),
+    formatTaskContent(task.body),
     "",
     ...(personalGuidanceBlock ? [personalGuidanceBlock, ""] : []),
     formatPromptCommandGuidance(),
@@ -57,6 +57,79 @@ export function formatLoopPrompt(personalGuidance = ""): string {
     ...(personalGuidanceBlock ? [personalGuidanceBlock, ""] : []),
     formatPromptCommandGuidance(),
   ].join("\n");
+}
+
+function formatTaskContent(body: string): string {
+  const sections = parseMarkdownSections(body).map((section, index) => ({ ...section, index }));
+  if (sections.length === 0) {
+    const content = stripLeadingTitle(body).trim();
+    return ["Task content:", content || "(empty)"].join("\n");
+  }
+
+  const used = new Set<number>();
+  const why = selectSection(sections, used, ["why", "problem", "context"]);
+  const success = selectSection(sections, used, ["what success looks like", "goal", "outcome"]);
+  const acceptance = selectSection(sections, used, ["acceptance criteria", "acceptance"]);
+  const verification = selectSection(sections, used, ["verification", "verify"]);
+  const notes = selectAllSections(sections, used, ["notes"]);
+  const supporting = sections.filter((section) => !used.has(section.index));
+  const lines = ["Task brief:"];
+
+  appendSection(lines, "Why", why);
+  appendSection(lines, "What success looks like", success);
+  appendSection(lines, "Acceptance Criteria", acceptance);
+  appendSection(lines, "Verification", verification);
+  for (const note of notes) {
+    appendSection(lines, note.title, note);
+  }
+
+  if (supporting.length > 0) {
+    lines.push("", "Supporting task details:");
+    for (const section of supporting) {
+      appendSection(lines, section.title, section);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function appendSection(
+  lines: string[],
+  title: string,
+  section: { body: string } | undefined,
+) {
+  if (!section) {
+    return;
+  }
+  lines.push("", `## ${title}`, "", section.body.trim());
+}
+
+function selectSection(
+  sections: Array<{ title: string; body: string; index: number }>,
+  used: Set<number>,
+  titles: string[],
+) {
+  const section = sections.find((candidate) => {
+    return !used.has(candidate.index) && titles.includes(normalizeTitle(candidate.title));
+  });
+  if (section) {
+    used.add(section.index);
+  }
+  return section;
+}
+
+function selectAllSections(
+  sections: Array<{ title: string; body: string; index: number }>,
+  used: Set<number>,
+  titles: string[],
+) {
+  return sections.filter((section) => {
+    if (used.has(section.index) || !titles.includes(normalizeTitle(section.title))) {
+      return false;
+    }
+    used.add(section.index);
+    return true;
+  });
 }
 
 function formatPromptCommandGuidance(): string {
@@ -96,4 +169,16 @@ function formatPromptCommandGuidance(): string {
 }
 function capitalize(value: string): string {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+}
+
+function normalizeTitle(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s/]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripLeadingTitle(body: string) {
+  return body.replace(/^\s*# .*(?:\r?\n){1,2}/, "");
 }

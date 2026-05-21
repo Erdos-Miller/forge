@@ -568,19 +568,21 @@ function TaskDetail({
         <TaskSection section={sections.why} title="Why" variant="lead" />
         <TaskSection section={sections.success} title="What success looks like" />
         <TaskSection section={sections.acceptance} title="Acceptance Criteria" variant="list" />
-        <TaskSection section={sections.executionPlan} title="Execution Plan" />
         {sections.notes.map((section) => (
           <TaskSection key={section.index} section={section} title={section.title} />
         ))}
         <CollapsedTaskSection section={sections.verification} title="Verification" />
-        <DependencyDetails
-          dependencySection={sections.dependencies}
-          dependsOn={task.depends_on}
-          tasksById={tasksById}
-        />
-        <SectionDetails title="Implementation Notes" sections={sections.implementationNotes} />
-        <SectionDetails title="History" sections={sections.history} />
-        <SectionDetails title="Additional Details" sections={sections.additional} />
+        <div className="supportingSections">
+          <TaskSection section={sections.executionPlan} title="Execution Plan" />
+          <DependencyDetails
+            dependencySection={sections.dependencies}
+            dependsOn={task.depends_on}
+            tasksById={tasksById}
+          />
+          <SectionDetails title="Implementation Notes" sections={sections.implementationNotes} />
+          <SectionDetails title="History" sections={sections.history} />
+          <SectionDetails title="Additional Details" sections={sections.additional} />
+        </div>
         {sections.fallbackBody ? (
           <section
             className="markdown taskSection"

@@ -315,7 +315,7 @@ describe("App", () => {
     expect(html).not.toContain("Status is done.");
   });
 
-  test("renders Execution Plan expanded before Notes and Additional Details", () => {
+  test("renders the expected brief before supporting details", () => {
     const html = renderToStaticMarkup(
       <App
         initialData={{
@@ -338,6 +338,10 @@ describe("App", () => {
                 "",
                 "Visible note.",
                 "",
+                "## Verification",
+                "",
+                "- bun test",
+                "",
                 "## Extra Review Notes",
                 "",
                 "Unknown section.",
@@ -355,8 +359,9 @@ describe("App", () => {
 
     expect(html).toContain('<section class="markdown taskSection normal"><h3>Execution Plan</h3>');
     expect(html.indexOf("Acceptance Criteria")).toBeLessThan(html.indexOf("Execution Plan"));
-    expect(html.indexOf("Execution Plan")).toBeLessThan(html.indexOf("Notes"));
-    expect(html.indexOf("Notes")).toBeLessThan(html.indexOf("Additional Details"));
+    expect(html.indexOf("Notes")).toBeLessThan(html.indexOf("Verification"));
+    expect(html.indexOf("Verification")).toBeLessThan(html.indexOf("Execution Plan"));
+    expect(html.indexOf("Execution Plan")).toBeLessThan(html.indexOf("Additional Details"));
     expect(html).toContain("Unknown section.");
   });
 

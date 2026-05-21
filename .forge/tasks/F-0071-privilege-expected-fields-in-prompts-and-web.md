@@ -2,7 +2,7 @@
 id: F-0071
 title: "Privilege expected fields in prompts and web"
 kind: task
-status: open
+status: done
 priority: medium
 area: "web"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-20T15:37:30.151Z
-updated_at: 2026-05-20T15:38:09.733Z
+updated_at: 2026-05-21T15:56:21.640Z
+closed_at: 2026-05-21T15:56:21.640Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Privilege expected fields in prompts and web
 
@@ -68,6 +72,16 @@ Tracked in frontmatter: F-0068.
 ## Notes
 
 This task should preserve the current readable-card direction while aligning it with the expected field convention.
+
+Decision: `forge prompt` now formats task Markdown into a primary Task brief and a separate Supporting task details block. Why, What success looks like, Acceptance Criteria, Verification, and Notes render first; Execution Plan, Dependencies, History, and unknown sections remain visible afterward. Command guidance stays outside the task content.
+
+Decision: The web detail view keeps the same readable-card layout, but moves Notes and collapsed Verification into the primary brief before Execution Plan and demotes Execution Plan, Dependencies, History, implementation notes, and unknown sections into supporting details.
+
+Verification:
+- bun test packages/cli/test/prompt-guidance.test.ts packages/web/test/sections.test.ts packages/web/test/app.test.tsx: 33 pass, 194 expect() calls.
+- bun run harness:cli: 7 pass, 89 expect() calls.
+- bun run harness:web: 41 pass, 163 expect() calls.
+- bun run quality:check: 205 pass, 1016 expect() calls, web production build passed.
 
 ## History
 

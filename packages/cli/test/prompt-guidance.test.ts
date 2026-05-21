@@ -10,7 +10,7 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true })));
 });
 
-async function makeRepo(): Promise<{ repoRoot: string }> {
+async function makeRepo(body = ""): Promise<{ repoRoot: string }> {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-prompt-guidance-test-"));
   tempDirs.push(repoRoot);
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
@@ -35,6 +35,7 @@ async function makeRepo(): Promise<{ repoRoot: string }> {
       "",
       "# Open",
       "",
+      body,
     ].join("\n"),
   );
   return { repoRoot };
@@ -73,6 +74,57 @@ describe("prompt command guidance", () => {
     for (const command of COMMANDS) {
       expect(output).toContain(command.usage);
     }
+  });
+
+  test("prompt renders expected fields before supporting task details", async () => {
+    const { repoRoot } = await makeRepo(
+      [
+        "## Dependencies",
+        "",
+        "Tracked in frontmatter.",
+        "",
+        "## Verification",
+        "",
+        "- bun test",
+        "",
+        "## Why",
+        "",
+        "Explain the reason.",
+        "",
+        "## What success looks like",
+        "",
+        "The outcome is obvious.",
+        "",
+        "## Acceptance Criteria",
+        "",
+        "- Expected fields are first.",
+        "",
+        "## Notes",
+        "",
+        "Keep this visible.",
+        "",
+        "## Extra",
+        "",
+        "Still visible.",
+      ].join("\n"),
+    );
+    const output = await run(repoRoot, ["prompt", "next"]);
+
+    expect(output).toContain("Task brief:");
+    expect(output).toContain("Supporting task details:");
+    expect(output.indexOf("## Why")).toBeLessThan(output.indexOf("## What success looks like"));
+    expect(output.indexOf("## What success looks like")).toBeLessThan(
+      output.indexOf("## Acceptance Criteria"),
+    );
+    expect(output.indexOf("## Acceptance Criteria")).toBeLessThan(
+      output.indexOf("## Verification"),
+    );
+    expect(output.indexOf("## Verification")).toBeLessThan(output.indexOf("## Notes"));
+    expect(output.indexOf("## Notes")).toBeLessThan(output.indexOf("Supporting task details:"));
+    expect(output.indexOf("Supporting task details:")).toBeLessThan(
+      output.indexOf("## Dependencies"),
+    );
+    expect(output.indexOf("## Extra")).toBeLessThan(output.indexOf("Command guidance:"));
   });
 
   test("loop-prompt includes generated command guidance from metadata", async () => {
