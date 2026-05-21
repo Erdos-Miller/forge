@@ -111,7 +111,8 @@ export const COMMANDS = [
     classification: "read",
     supportsJson: true,
     examples: ["forge worktree-status --json", "forge worktree-status --json --task F-0001"],
-    agentPurpose: "Decide whether dirty files block the current claimed task.",
+    agentPurpose:
+      "Classify dirty files: continue on non_blocking, pause on review, stop on blocking.",
   },
   {
     name: "scopes",

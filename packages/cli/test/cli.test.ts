@@ -245,6 +245,8 @@ describe("forge cli", () => {
     expect(result.code).toBe(0);
     expect(text).toContain("Inspect:\n- forge commands --json [read]");
     expect(text).toContain("- forge user-guidance [read]");
+    expect(text).toContain("- forge worktree-status --json [--task <id>] [read]");
+    expect(text).toContain("continue on non_blocking, pause on review, stop on blocking");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title>");
     expect(text).toContain("[--why <text>] [--success <text>]");
@@ -1276,6 +1278,10 @@ describe("forge cli", () => {
     expect(result.stdout[0]).toContain("At the start of each iteration, use `forge prompt next`");
     expect(result.stdout[0]).toContain("After committing, start the next iteration");
     expect(result.stdout[0]).toContain("Commit the code and task-file updates together.");
+    expect(result.stdout[0]).toContain("forge worktree-status --json");
+    expect(result.stdout[0]).toContain("continue on `non_blocking`");
+    expect(result.stdout[0]).toContain("pause on `review`");
+    expect(result.stdout[0]).toContain("stop on `blocking`");
   });
 
   test("loop-prompt rejects extra args", async () => {

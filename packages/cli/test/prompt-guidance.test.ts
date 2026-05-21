@@ -67,6 +67,10 @@ describe("prompt command guidance", () => {
     expect(output).toContain("Command guidance:");
     expect(output).toContain("Prefer structured Forge commands");
     expect(output).toContain("Direct Markdown edits are acceptable");
+    expect(output).toContain("forge worktree-status --json");
+    expect(output).toContain("continue on `non_blocking`");
+    expect(output).toContain("pause on `review`");
+    expect(output).toContain("stop on `blocking`");
     expect(output).toContain(".forge/harness-engineering.md");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");
@@ -132,6 +136,10 @@ describe("prompt command guidance", () => {
     const output = await run(repoRoot, ["loop-prompt"]);
 
     expect(output).toContain("Command guidance:");
+    expect(output).toContain("classify it with `forge worktree-status --json`");
+    expect(output).toContain("continue on `non_blocking`");
+    expect(output).toContain("pause on `review`");
+    expect(output).toContain("stop on `blocking`");
     expect(output).toContain(".forge/harness-engineering.md");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");
