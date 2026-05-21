@@ -61,6 +61,10 @@ import {
   toRobotTaskSummary,
 } from "./robot";
 import {
+  PERSONAL_GUIDANCE_DISPLAY_PATH,
+  readPersonalGuidance,
+} from "./user-guidance";
+import {
   discoverWebSession,
   removeWebSession,
   writeWebSession,
@@ -95,6 +99,7 @@ const COMMAND_HANDLERS = {
   next,
   show,
   blockers,
+  "user-guidance": userGuidance,
   deps,
   doctor,
   closeout,
@@ -258,6 +263,22 @@ async function queue(options: CliOptions, args: string[]): Promise<number> {
       diagnostics: toRobotDiagnostics(analysis),
     }),
   );
+  return 0;
+}
+
+async function userGuidance(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length > 0) {
+    options.stderr("usage: forge user-guidance");
+    return 1;
+  }
+
+  const guidance = await readPersonalGuidance(options.env);
+  const contents = guidance.contents.trim();
+  if (guidance.exists && contents) {
+    options.stdout(contents);
+  } else {
+    options.stdout(`No personal guidance found at ${PERSONAL_GUIDANCE_DISPLAY_PATH}.`);
+  }
   return 0;
 }
 
@@ -569,7 +590,8 @@ async function prompt(options: CliOptions, args: string[]): Promise<number> {
     return 1;
   }
 
-  options.stdout(formatAgentPrompt(task));
+  const guidance = await readPersonalGuidance(options.env);
+  options.stdout(formatAgentPrompt(task, guidance.contents));
   return 0;
 }
 
@@ -606,7 +628,8 @@ async function loopPrompt(options: CliOptions, args: string[]): Promise<number> 
     return 1;
   }
 
-  options.stdout(formatLoopPrompt());
+  const guidance = await readPersonalGuidance(options.env);
+  options.stdout(formatLoopPrompt(guidance.contents));
   return 0;
 }
 

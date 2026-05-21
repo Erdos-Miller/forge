@@ -96,6 +96,15 @@ export const COMMANDS = [
     agentPurpose: "Explain why a task is not ready.",
   },
   {
+    name: "user-guidance",
+    usage: "forge user-guidance",
+    description: "Print personal user guidance when configured.",
+    classification: "read",
+    supportsJson: false,
+    examples: ["forge user-guidance"],
+    agentPurpose: "Inspect personal guidance stored outside repo task state.",
+  },
+  {
     name: "deps",
     usage:
       "forge deps <id> --json | " +
@@ -263,6 +272,7 @@ export const COMMAND_WORKFLOWS = {
   next: "claim",
   show: "inspect",
   blockers: "inspect",
+  "user-guidance": "inspect",
   deps: "mutate",
   doctor: "verify",
   closeout: "close",

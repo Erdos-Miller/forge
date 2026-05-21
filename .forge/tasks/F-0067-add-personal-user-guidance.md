@@ -2,7 +2,7 @@
 id: F-0067
 title: "Add personal user guidance"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "README.md"
   - ".forge/**"
 created_at: 2026-05-20T15:36:51.078Z
-updated_at: 2026-05-20T15:38:09.581Z
+updated_at: 2026-05-21T15:39:45.410Z
+closed_at: 2026-05-21T15:39:45.410Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add personal user guidance
 
@@ -70,6 +74,18 @@ Tracked in frontmatter: F-0066.
 ## Notes
 
 Depends on routed guidance removal so personal guidance is the only guidance path left in prompts.
+
+Implemented personal user guidance outside repo task state. Forge now reads `~/.config/forge/guidance.md` via the user's home directory, exposes it through `forge user-guidance`, and includes it in `forge prompt` and `forge loop-prompt` under a `Personal user guidance:` heading only when the file exists and has content.
+
+Decisions:
+- Missing personal guidance is not an error; `forge user-guidance` prints a concise missing message, while generated prompts omit the section entirely.
+- Tests inject a temp `HOME` and do not touch the real home directory.
+- No repo-local or project-local guidance routing was added.
+
+Verification:
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/prompt-guidance.test.ts`: 60 pass, 442 expect() calls.
+- `bun run harness:cli`: 7 pass, 89 expect() calls.
+- `bun run quality:check`: 199 pass, 981 expect() calls, web production build passed.
 
 ## History
 

@@ -40,10 +40,15 @@ async function makeRepo(): Promise<{ repoRoot: string }> {
   return { repoRoot };
 }
 
-async function run(cwd: string, args: string[]): Promise<string> {
+async function run(
+  cwd: string,
+  args: string[],
+  env: Record<string, string | undefined> = {},
+): Promise<string> {
   const stdout: string[] = [];
   const code = await runCli(args, {
     cwd,
+    env: { ...process.env, ...env },
     stdout: (message) => stdout.push(message),
     stderr: () => {},
   });
@@ -82,5 +87,35 @@ describe("prompt command guidance", () => {
     for (const command of COMMANDS) {
       expect(output).toContain(command.usage);
     }
+  });
+
+  test("prompts include personal user guidance when configured", async () => {
+    const { repoRoot } = await makeRepo();
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "forge-prompt-user-guidance-"));
+    tempDirs.push(home);
+    await fs.mkdir(path.join(home, ".config", "forge"), { recursive: true });
+    await fs.writeFile(
+      path.join(home, ".config", "forge", "guidance.md"),
+      "Use short verification notes.\n",
+    );
+
+    const taskPrompt = await run(repoRoot, ["prompt", "next"], { HOME: home });
+    const loopPrompt = await run(repoRoot, ["loop-prompt"], { HOME: home });
+
+    expect(taskPrompt).toContain("Personal user guidance:");
+    expect(taskPrompt).toContain("Use short verification notes.");
+    expect(loopPrompt).toContain("Personal user guidance:");
+    expect(loopPrompt).toContain("Use short verification notes.");
+  });
+
+  test("prompts omit missing personal user guidance", async () => {
+    const { repoRoot } = await makeRepo();
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "forge-prompt-empty-guidance-"));
+    tempDirs.push(home);
+
+    const output = await run(repoRoot, ["prompt", "next"], { HOME: home });
+
+    expect(output).not.toContain("Personal user guidance:");
+    expect(output).not.toContain("No personal guidance found");
   });
 });

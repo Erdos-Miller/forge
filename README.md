@@ -74,6 +74,7 @@ bun packages/cli/src/index.ts ready
 bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --acceptance "The task has observable acceptance criteria." --verification "bun run harness:cli" --notes "Keep rich task context in Markdown." --area cli --scope "packages/cli/**"
 bun packages/cli/src/index.ts loop-prompt
 bun packages/cli/src/index.ts prompt next
+bun packages/cli/src/index.ts user-guidance
 bun packages/cli/src/index.ts claim F-0005 --by codex
 bun packages/cli/src/index.ts done F-0005
 bun packages/cli/src/index.ts web
@@ -83,6 +84,11 @@ Use `forge loop-prompt` when starting a Codex Goal that should keep taking the
 next ready task until it hits a real stop condition. Each iteration still handles
 one coherent task at a time. Use `forge prompt next` when you want the concrete
 prompt for the currently highest-ranked ready task.
+
+Personal guidance lives outside the repo at `~/.config/forge/guidance.md`. When
+that file exists, Forge includes it in `forge prompt` and `forge loop-prompt`
+under a clearly labeled personal user guidance heading. Inspect it with
+`forge user-guidance`.
 
 For a local `forge` command, link the CLI once:
 

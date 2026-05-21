@@ -4,8 +4,10 @@ import {
   COMMAND_WORKFLOWS,
   COMMAND_WORKFLOW_ORDER,
 } from "./command-metadata";
+import { formatPersonalGuidancePrompt } from "./user-guidance";
 
-export function formatAgentPrompt(task: Task): string {
+export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
+  const personalGuidanceBlock = formatPersonalGuidancePrompt(personalGuidance);
   const lines = [
     `Goal: Complete Forge task ${task.id} - ${task.title}`,
     "",
@@ -25,13 +27,15 @@ export function formatAgentPrompt(task: Task): string {
     "Task body:",
     task.body.trim(),
     "",
+    ...(personalGuidanceBlock ? [personalGuidanceBlock, ""] : []),
     formatPromptCommandGuidance(),
   ];
 
   return lines.join("\n");
 }
 
-export function formatLoopPrompt(): string {
+export function formatLoopPrompt(personalGuidance = ""): string {
+  const personalGuidanceBlock = formatPersonalGuidancePrompt(personalGuidance);
   return [
     "/goal Work the Forge execution loop until no ready task remains or a stop condition is hit.",
     "",
@@ -48,8 +52,9 @@ export function formatLoopPrompt(): string {
     "",
     "Stop when no task is ready, the selected task is ambiguous, required changes " +
       "exceed scope, verification cannot run, or you need user judgment before " +
-      "continuing. Report the blocker plus the next input needed.",
+    "continuing. Report the blocker plus the next input needed.",
     "",
+    ...(personalGuidanceBlock ? [personalGuidanceBlock, ""] : []),
     formatPromptCommandGuidance(),
   ].join("\n");
 }

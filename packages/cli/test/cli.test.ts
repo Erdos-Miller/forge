@@ -133,6 +133,7 @@ describe("forge cli", () => {
       "next",
       "show",
       "blockers",
+      "user-guidance",
       "deps",
       "doctor",
       "closeout",
@@ -215,6 +216,7 @@ describe("forge cli", () => {
 
     expect(result.code).toBe(0);
     expect(text).toContain("Inspect:\n- forge commands --json [read]");
+    expect(text).toContain("- forge user-guidance [read]");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title>");
     expect(text).toContain("[--why <text>] [--success <text>]");
@@ -231,6 +233,35 @@ describe("forge cli", () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toEqual(["usage: forge help --agent"]);
+  });
+
+  test("user-guidance reads personal guidance outside the repo", async () => {
+    const { repoRoot } = await makeRepo();
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "forge-user-guidance-home-"));
+    tempDirs.push(home);
+    await fs.mkdir(path.join(home, ".config", "forge"), { recursive: true });
+    await fs.writeFile(
+      path.join(home, ".config", "forge", "guidance.md"),
+      "Prefer concise task notes.\n",
+    );
+
+    const result = await run(repoRoot, ["user-guidance"], "", { env: { HOME: home } });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual(["Prefer concise task notes."]);
+  });
+
+  test("user-guidance reports missing personal guidance without error", async () => {
+    const { repoRoot } = await makeRepo();
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "forge-empty-guidance-home-"));
+    tempDirs.push(home);
+
+    const result = await run(repoRoot, ["user-guidance"], "", { env: { HOME: home } });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toEqual([
+      "No personal guidance found at ~/.config/forge/guidance.md.",
+    ]);
   });
 
   test("list prints active tasks by default", async () => {
