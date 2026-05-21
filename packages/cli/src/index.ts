@@ -467,11 +467,13 @@ async function writeScopeConfigPayload(
       config: {
         exists: result.exists,
         sourcePath: result.sourcePath,
+        projects: result.config.projects,
         scopes: result.config.scopes,
       },
       resolved: {
-        source: result.config.scopes.length > 0 ? "configured" : "inferred",
-        scopes: result.config.scopes.length > 0 ? result.config.scopes : inferred,
+        source: result.config.projects.length > 0 ? "configured" : "inferred",
+        projects: result.config.projects.length > 0 ? result.config.projects : inferred,
+        scopes: result.config.projects.length > 0 ? result.config.projects : inferred,
       },
     }),
   );

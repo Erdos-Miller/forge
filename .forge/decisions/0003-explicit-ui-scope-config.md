@@ -11,13 +11,13 @@ for agents.
 
 Forge's preferred concept is Project: an explicit user-facing slice of work
 inside a Worktree. The existing optional `.forge/scopes.yml` file remains the
-compatibility config for explicit Projects until follow-up CLI and web work
-renames the surface. The file is repo-local, committed, and advisory: repos
-without it keep using inferred fallback navigation.
+compatibility config file for explicit Projects until follow-up CLI and web work
+renames the command surface. The file is repo-local, committed, and advisory:
+repos without it keep using inferred fallback navigation.
 
 ```yaml
 version: 1
-scopes:
+projects:
   - id: web
     label: Web
     paths:
@@ -27,6 +27,12 @@ scopes:
     paths:
       - packages/cli/**
 ```
+
+Legacy `.forge/scopes.yml` files using `scopes:` remain valid. Forge normalizes
+both `projects:` and `scopes:` entries to resolved Projects and exposes `scopes`
+as a compatibility alias for existing callers. New structured writes use
+`projects:` in the same file rather than introducing `.forge/projects.yml`, so a
+repo has one Project-navigation config source during the migration.
 
 Fields:
 
@@ -58,9 +64,9 @@ the intended change yet.
 
 F-0086 adds structured CLI tools for `.forge/scopes.yml`; F-0087 should validate
 the file in `forge doctor`; F-0088 wires configured entries into the web
-selector while preserving inferred fallback behavior. Follow-up Project tasks
-should add project-facing compatibility and UI language without breaking legacy
-`.forge/scopes.yml` users.
+selector while preserving inferred fallback behavior. F-0103 adds the
+project-facing compatibility layer: prefer `projects:`, preserve legacy
+`scopes:`, and keep task frontmatter `scope` unchanged.
 
 ## Related Tasks
 

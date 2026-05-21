@@ -122,14 +122,19 @@ function buildAggregateGraph(data: AppData, roots: WorkspaceGraph[]): TaskGraphP
 }
 
 function getAggregateScopeConfig(roots: WorkspaceGraph[]): ResolvedScopeConfigPayload {
-  const scopes = roots.flatMap((root) =>
-    root.graph.scopeConfig.scopes.map((scope) => toAggregateScope(root, scope)),
+  const projects = roots.flatMap((root) =>
+    getConfiguredProjects(root.graph.scopeConfig).map((scope) => toAggregateScope(root, scope)),
   );
   const hasConfiguredScopes = roots.some((root) => root.graph.scopeConfig.source === "configured");
   return {
     source: hasConfiguredScopes ? "configured" : "inferred",
-    scopes,
+    projects,
+    scopes: projects,
   };
+}
+
+function getConfiguredProjects(scopeConfig: ResolvedScopeConfigPayload): ScopeFilterPayload[] {
+  return scopeConfig.projects ?? scopeConfig.scopes;
 }
 
 function toAggregateScope(root: WorkspaceGraph, scope: ScopeFilterPayload): ScopeFilterPayload {

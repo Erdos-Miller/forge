@@ -115,7 +115,7 @@ export function App({ initialData }: AppProps) {
 
   const scopeOptions = useMemo(() => {
     if (currentData?.scopeConfig.source === "configured") {
-      return currentData.scopeConfig.scopes;
+      return currentData.scopeConfig.projects ?? currentData.scopeConfig.scopes;
     }
     return [];
   }, [currentData]);
@@ -812,7 +812,9 @@ function getEffectiveProjectFilter(
   if (scopeFilter === "all") {
     return "all";
   }
-  return payload.scopeConfig.scopes.some((scope) => scope.id === scopeFilter)
+  return (payload.scopeConfig.projects ?? payload.scopeConfig.scopes).some(
+    (scope) => scope.id === scopeFilter,
+  )
     ? scopeFilter
     : "all";
 }

@@ -8,7 +8,7 @@ import {
   rankReadyTasks,
   readScopeConfig,
   type DiscoveredForgeRoot,
-  type ScopeConfigEntry,
+  type ProjectConfigEntry,
   type Task,
   type TaskGraphAnalysis,
   type TaskAvailability,
@@ -24,12 +24,13 @@ import { inferScopeLabel, OTHER_SCOPE } from "./scopes";
 
 const execFileAsync = promisify(execFile);
 
-export interface ScopeFilterPayload extends ScopeConfigEntry {
+export interface ScopeFilterPayload extends ProjectConfigEntry {
   rootId?: string;
 }
 
 export interface ResolvedScopeConfigPayload {
   source: "configured" | "inferred";
+  projects?: ScopeFilterPayload[];
   scopes: ScopeFilterPayload[];
 }
 
@@ -346,7 +347,7 @@ function emptyTaskGraphPayload(repoRoot: string): TaskGraphPayload {
     availabilityByTaskId: {},
     blockersByTaskId: {},
     coordinationByTaskId: {},
-    scopeConfig: { source: "inferred", scopes: [] },
+    scopeConfig: { source: "inferred", projects: [], scopes: [] },
     diagnostics: {
       missingDependencies: [],
       dependencyCycles: [],
@@ -361,7 +362,7 @@ async function getResolvedScopeConfig(
 ): Promise<ResolvedScopeConfigPayload> {
   const result = await readScopeConfig(repoRoot);
   if (result.exists) {
-    return { source: "configured", scopes: result.config.scopes };
+    return toResolvedScopeConfig("configured", result.config.projects);
   }
   return getInferredScopeConfig(tasks);
 }
@@ -375,16 +376,23 @@ function getInferredScopeConfig(tasks: Task[]): ResolvedScopeConfigPayload {
       pathsByLabel.get(label)?.add(scopePath);
     }
   }
-  return {
-    source: "inferred",
-    scopes: Array.from(pathsByLabel.entries())
+  return toResolvedScopeConfig(
+    "inferred",
+    Array.from(pathsByLabel.entries())
       .sort(([left], [right]) => sortInferredScopeLabels(left, right))
       .map(([label, paths]) => ({
         id: label,
         label,
         paths: Array.from(paths).sort((left, right) => left.localeCompare(right)),
       })),
-  };
+  );
+}
+
+function toResolvedScopeConfig(
+  source: ResolvedScopeConfigPayload["source"],
+  projects: ScopeFilterPayload[],
+): ResolvedScopeConfigPayload {
+  return { source, projects, scopes: projects };
 }
 
 function sortInferredScopeLabels(left: string, right: string) {

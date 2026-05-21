@@ -133,11 +133,11 @@ When `.forge/scopes.yml` exists, configured Projects take precedence over the
 web UI's inferred fallback navigation. Repos without the file continue to use
 fallback inference until explicit Project config is added.
 
-Use this shape:
+Use this preferred shape:
 
 ```yaml
 version: 1
-scopes:
+projects:
   - id: web
     label: Web
     description: Web app and browser-facing task surfaces.
@@ -148,6 +148,10 @@ scopes:
     paths:
       - packages/cli/**
 ```
+
+Legacy files that use `scopes:` are still supported and are normalized to
+Projects by Forge. New writes use `projects:` inside `.forge/scopes.yml` so the
+file can migrate without introducing a second config file.
 
 Fields:
 
@@ -164,7 +168,7 @@ Example for Forge itself:
 
 ```yaml
 version: 1
-scopes:
+projects:
   - id: web
     label: Web
     paths: ["packages/web/**"]
@@ -183,7 +187,7 @@ Example for a monorepo-style project:
 
 ```yaml
 version: 1
-scopes:
+projects:
   - id: toolhub-wells
     label: ToolHub Wells
     paths:

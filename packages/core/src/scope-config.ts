@@ -3,17 +3,22 @@ import path from "node:path";
 import { loadTasks } from "./task-files.ts";
 import { TaskWriteError, type Task } from "./types.ts";
 
-export interface ScopeConfigEntry {
+export interface ProjectConfigEntry {
   id: string;
   label: string;
   description?: string;
   paths: string[];
 }
 
-export interface ScopeConfig {
+export type ScopeConfigEntry = ProjectConfigEntry;
+
+export interface ProjectConfig {
   version: 1;
-  scopes: ScopeConfigEntry[];
+  projects: ProjectConfigEntry[];
+  scopes: ProjectConfigEntry[];
 }
+
+export type ScopeConfig = ProjectConfig;
 
 export interface ScopeConfigReadResult {
   exists: boolean;
@@ -37,7 +42,7 @@ export async function readScopeConfig(repoRoot: string): Promise<ScopeConfigRead
     return { exists: true, sourcePath, config };
   } catch (error) {
     if ((error as { code?: string }).code === "ENOENT") {
-      return { exists: false, sourcePath, config: { version: 1, scopes: [] } };
+      return { exists: false, sourcePath, config: createProjectConfig([]) };
     }
     throw error;
   }
@@ -51,14 +56,14 @@ export async function addScopeConfigEntry(
   assertValidScopeId(input.id);
   assertNonEmpty(input.label, "label");
   assertNonEmptyPaths(input.paths);
-  if (result.config.scopes.some((scope) => scope.id === input.id)) {
+  if (result.config.projects.some((project) => project.id === input.id)) {
     throw new TaskWriteError(`scope id already exists: ${input.id}`);
   }
 
-  const config = {
-    version: 1 as const,
-    scopes: [...result.config.scopes, { id: input.id, label: input.label, paths: input.paths }],
-  };
+  const config = createProjectConfig([
+    ...result.config.projects,
+    { id: input.id, label: input.label, paths: input.paths },
+  ]);
   validateScopeConfig(config, result.sourcePath);
   await writeScopeConfig(result.sourcePath, config);
   return { exists: true, sourcePath: result.sourcePath, config };
@@ -72,12 +77,13 @@ export async function updateScopeConfigEntry(
   const result = await readScopeConfig(repoRoot);
   assertValidScopeId(id);
   assertNonEmptyPaths(paths);
-  const scope = result.config.scopes.find((candidate) => candidate.id === id);
-  if (!scope) {
+  const project = result.config.projects.find((candidate) => candidate.id === id);
+  if (!project) {
     throw new TaskWriteError(`scope id not found: ${id}`);
   }
 
-  scope.paths = Array.from(new Set([...scope.paths, ...paths]));
+  project.paths = Array.from(new Set([...project.paths, ...paths]));
+  result.config.scopes = result.config.projects;
   validateScopeConfig(result.config, result.sourcePath);
   await writeScopeConfig(result.sourcePath, result.config);
   return { exists: true, sourcePath: result.sourcePath, config: result.config };
@@ -117,18 +123,24 @@ export function parseScopeConfig(contents: string, sourcePath = scopeConfigRelat
     throw new TaskWriteError(`${sourcePath}: scopes.yml version must be 1`);
   }
 
-  const scopes: ScopeConfigEntry[] = [];
-  let current: ScopeConfigEntry | null = null;
+  const projects: ProjectConfigEntry[] = [];
+  let current: ProjectConfigEntry | null = null;
   let readingPaths = false;
+  let readingEntries = false;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line || line === "scopes:" || line.startsWith("#") || line.startsWith("version:")) {
+    if (!line || line.startsWith("#") || line.startsWith("version:")) {
       continue;
     }
-    if (line.startsWith("- id:")) {
+    if (line === "projects:" || line === "scopes:") {
+      readingEntries = true;
+      readingPaths = false;
+      continue;
+    }
+    if (readingEntries && line.startsWith("- id:")) {
       current = { id: unquoteYamlValue(afterColon(line)), label: "", paths: [] };
-      scopes.push(current);
+      projects.push(current);
       readingPaths = false;
       continue;
     }
@@ -150,7 +162,7 @@ export function parseScopeConfig(contents: string, sourcePath = scopeConfigRelat
     }
   }
 
-  const config = { version: 1 as const, scopes };
+  const config = createProjectConfig(projects);
   validateScopeConfig(config, sourcePath);
   return config;
 }
@@ -186,7 +198,7 @@ function validateScopeConfig(config: ScopeConfig, sourcePath: string): void {
   const ids = new Set<string>();
   const paths = new Set<string>();
 
-  for (const scope of config.scopes) {
+  for (const scope of config.projects) {
     assertValidScopeId(scope.id, sourcePath);
     assertNonEmpty(scope.label, "label", sourcePath);
     assertNonEmptyPaths(scope.paths, sourcePath);
@@ -212,8 +224,8 @@ async function writeScopeConfig(sourcePath: string, config: ScopeConfig): Promis
 function formatScopeConfig(config: ScopeConfig): string {
   return [
     "version: 1",
-    "scopes:",
-    ...config.scopes.flatMap(formatScopeConfigEntry),
+    "projects:",
+    ...config.projects.flatMap(formatScopeConfigEntry),
     "",
   ].join("\n");
 }
@@ -304,4 +316,8 @@ function isFileLike(part: string) {
 
 export function getScopeConfigPath(repoRoot: string): string {
   return path.join(repoRoot, scopeConfigRelativePath);
+}
+
+function createProjectConfig(projects: ProjectConfigEntry[]): ProjectConfig {
+  return { version: 1, projects, scopes: projects };
 }

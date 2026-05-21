@@ -22,7 +22,9 @@ export function taskMatchesScope(
   if (scopeFilter === "all") {
     return true;
   }
-  const configuredScope = scopeConfig?.scopes.find((scope) => scope.id === scopeFilter);
+  const configuredScope = getConfiguredProjects(scopeConfig).find(
+    (scope) => scope.id === scopeFilter,
+  );
   if (configuredScope) {
     return taskMatchesConfiguredScope(task, configuredScope);
   }
@@ -109,6 +111,12 @@ function taskMatchesConfiguredScope(
   return task.scope.some((taskScope) =>
     configuredScope.paths.some((scopePath) => scopePathsOverlap(scopePath, taskScope)),
   );
+}
+
+function getConfiguredProjects(
+  scopeConfig: ResolvedScopeConfigPayload | undefined,
+): ResolvedScopeConfigPayload["scopes"] {
+  return scopeConfig?.projects ?? scopeConfig?.scopes ?? [];
 }
 
 function scopePathsOverlap(left: string, right: string): boolean {

@@ -135,6 +135,7 @@ describe("getTaskGraphPayload", () => {
     ]);
     expect(payload.scopeConfig).toEqual({
       source: "inferred",
+      projects: [{ id: "packages", label: "packages", paths: ["packages/**"] }],
       scopes: [{ id: "packages", label: "packages", paths: ["packages/**"] }],
     });
     expect(payload.diagnostics.missingDependencies).toEqual([]);
@@ -159,8 +160,32 @@ describe("getTaskGraphPayload", () => {
 
     expect(payload.scopeConfig).toEqual({
       source: "configured",
+      projects: [{ id: "app", label: "Application", paths: ["packages/**"] }],
       scopes: [{ id: "app", label: "Application", paths: ["packages/**"] }],
     });
+  });
+
+  test("loads preferred project config into the task graph payload", async () => {
+    const { repoRoot } = await makeRepo();
+    await writeScopeConfig(
+      repoRoot,
+      [
+        "version: 1",
+        "projects:",
+        "  - id: app",
+        '    label: "Application"',
+        "    paths:",
+        '      - "packages/**"',
+        "",
+      ].join("\n"),
+    );
+
+    const payload = await getTaskGraphPayload(repoRoot);
+
+    expect(payload.scopeConfig.projects).toEqual([
+      { id: "app", label: "Application", paths: ["packages/**"] },
+    ]);
+    expect(payload.scopeConfig.scopes).toEqual(payload.scopeConfig.projects);
   });
 
   test("includes worktree coordination state for dirty scoped files", async () => {
@@ -394,10 +419,12 @@ describe("getWorkspaceTaskGraphPayload", () => {
     expect(payload.workspace.roots.map((root) => root.graph?.scopeConfig)).toEqual([
       {
         source: "configured",
+        projects: [{ id: "server", label: "Server", paths: ["packages/**"] }],
         scopes: [{ id: "server", label: "Server", paths: ["packages/**"] }],
       },
       {
         source: "configured",
+        projects: [{ id: "client", label: "Client", paths: ["packages/**"] }],
         scopes: [{ id: "client", label: "Client", paths: ["packages/**"] }],
       },
     ]);

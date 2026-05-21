@@ -25,6 +25,13 @@ describe("scope config commands", () => {
       config: { exists: false, scopes: [] },
       resolved: {
         source: "inferred",
+        projects: expect.arrayContaining([
+          expect.objectContaining({
+            id: "packages-web",
+            label: "packages/web",
+            paths: ["packages/web/**"],
+          }),
+        ]),
         scopes: expect.arrayContaining([
           expect.objectContaining({
             id: "packages-web",
@@ -58,8 +65,32 @@ describe("scope config commands", () => {
     ]);
     expect(payload.resolved).toEqual({
       source: "configured",
+      projects: [{ id: "web", label: "Web", paths: ["packages/web/**"] }],
       scopes: [{ id: "web", label: "Web", paths: ["packages/web/**"] }],
     });
+  });
+
+  test("reads preferred projects config and exposes legacy scope aliases", async () => {
+    const repo = await makeRepo();
+    await fs.writeFile(
+      path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      [
+        "version: 1",
+        "projects:",
+        "  - id: docs",
+        "    label: Docs",
+        "    paths: [\"docs/**\"]",
+        "",
+      ].join("\n"),
+    );
+
+    const payload = await runJson(repo.repoRoot, ["scopes", "--json"]);
+
+    expect(payload.config.projects).toEqual([
+      { id: "docs", label: "Docs", paths: ["docs/**"] },
+    ]);
+    expect(payload.config.scopes).toEqual(payload.config.projects);
+    expect(payload.resolved.projects).toEqual(payload.resolved.scopes);
   });
 
   test("infers candidate scopes without writing config", async () => {
@@ -108,7 +139,7 @@ describe("scope config commands", () => {
       "packages/web/test/**",
     ]);
     expect(await fs.readFile(path.join(repo.repoRoot, ".forge", "scopes.yml"), "utf8"))
-      .toContain('label: "Web"\n    paths:\n      - "packages/web/**"');
+      .toContain('projects:\n  - id: web\n    label: "Web"\n    paths:\n      - "packages/web/**"');
   });
 
   test("rejects invalid ids and duplicate paths", async () => {
