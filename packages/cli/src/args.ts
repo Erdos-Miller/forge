@@ -366,38 +366,64 @@ export type ScopesArgs =
   | { ok: true; action: "update"; id: string; paths: string[] }
   | { ok: false; message: string };
 
+export type ProjectsArgs =
+  | ScopesArgs
+  | { ok: true; action: "remove"; id: string };
+
 export const SCOPES_USAGE =
   "usage: forge scopes --json | " +
   "forge scopes infer --json | " +
   "forge scopes add <id> --label <label> --path <glob> --json | " +
   "forge scopes update <id> --path <glob> --json";
 
+export const PROJECTS_USAGE =
+  "usage: forge projects --json | " +
+  "forge projects infer --json | " +
+  "forge projects add <id> --label <label> --path <glob> --json | " +
+  "forge projects update <id> --path <glob> --json | " +
+  "forge projects remove <id> --json";
+
 export function parseScopesArgs(args: string[]): ScopesArgs {
+  return parseConfigArgs(args, SCOPES_USAGE, false) as ScopesArgs;
+}
+
+export function parseProjectsArgs(args: string[]): ProjectsArgs {
+  return parseConfigArgs(args, PROJECTS_USAGE, true);
+}
+
+function parseConfigArgs(
+  args: string[],
+  usage: string,
+  allowRemove: boolean,
+): ProjectsArgs {
   if (args.length === 1 && args[0] === "--json") {
     return { ok: true, action: "show" };
   }
   if (args.length === 2 && args[0] === "infer" && args[1] === "--json") {
     return { ok: true, action: "infer" };
   }
+  if (allowRemove && args.length === 3 && args[0] === "remove" && args[2] === "--json") {
+    return { ok: true, action: "remove", id: args[1] };
+  }
 
   const [action, id, ...rest] = args;
   if ((action !== "add" && action !== "update") || !id) {
-    return { ok: false, message: SCOPES_USAGE };
+    return { ok: false, message: usage };
   }
 
   const label = getRepeatedOption(rest, "--label")[0] ?? "";
   const paths = getRepeatedOption(rest, "--path");
   if (!rest.includes("--json")) {
-    return { ok: false, message: SCOPES_USAGE };
+    return { ok: false, message: usage };
   }
   if (action === "add") {
     if (!label || paths.length === 0) {
-      return { ok: false, message: SCOPES_USAGE };
+      return { ok: false, message: usage };
     }
     return { ok: true, action, id, label, paths };
   }
   if (label || paths.length === 0) {
-    return { ok: false, message: SCOPES_USAGE };
+    return { ok: false, message: usage };
   }
   return { ok: true, action, id, paths };
 }

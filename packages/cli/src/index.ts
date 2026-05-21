@@ -19,6 +19,7 @@ import {
   rankReadyTasks,
   readScopeConfig,
   requestTaskReviewFrom,
+  removeScopeConfigEntry,
   removeTaskDependencyFrom,
   updateScopeConfigEntry,
   unblockTaskFrom,
@@ -41,6 +42,7 @@ import {
   parseIdJsonArgs,
   parseReadyArgs,
   parseNextArgs,
+  parseProjectsArgs,
   parseReasonCommandArgs,
   parseScopesArgs,
   parseSetArgs,
@@ -116,6 +118,7 @@ const COMMAND_HANDLERS = {
   blockers,
   "user-guidance": userGuidance,
   "worktree-status": worktreeStatus,
+  projects,
   scopes,
   deps,
   doctor,
@@ -408,7 +411,18 @@ async function worktreeStatus(options: CliOptions, args: string[]): Promise<numb
 }
 
 async function scopes(options: CliOptions, args: string[]): Promise<number> {
-  const parsed = parseScopesArgs(args);
+  return scopeConfigCommand(options, parseScopesArgs(args), "scopes");
+}
+
+async function projects(options: CliOptions, args: string[]): Promise<number> {
+  return scopeConfigCommand(options, parseProjectsArgs(args), "projects");
+}
+
+async function scopeConfigCommand(
+  options: CliOptions,
+  parsed: ReturnType<typeof parseProjectsArgs>,
+  commandName: "projects" | "scopes",
+): Promise<number> {
   if (!parsed.ok) {
     return writeJsonUsageError(options, parsed.message);
   }
@@ -416,12 +430,14 @@ async function scopes(options: CliOptions, args: string[]): Promise<number> {
   const repoRoot = await findForgeRoot(options.cwd);
   try {
     if (parsed.action === "infer") {
+      const projects = await inferScopeConfigEntries(repoRoot);
       options.stdout(
         stringifyJson({
           ok: true,
           version: 1,
           repoRoot,
-          scopes: await inferScopeConfigEntries(repoRoot),
+          projects,
+          scopes: projects,
         }),
       );
       return 0;
@@ -447,9 +463,17 @@ async function scopes(options: CliOptions, args: string[]): Promise<number> {
       );
     }
 
+    if (parsed.action === "remove") {
+      return writeScopeConfigPayload(
+        options,
+        repoRoot,
+        await removeScopeConfigEntry(repoRoot, parsed.id),
+      );
+    }
+
     return writeScopeConfigPayload(options, repoRoot, await readScopeConfig(repoRoot));
   } catch (error) {
-    return writeScopeConfigError(options, error);
+    return writeScopeConfigError(options, error, commandName);
   }
 }
 
@@ -920,14 +944,18 @@ function writeDependencyEditError(options: CliOptions, error: unknown): number {
   return 1;
 }
 
-function writeScopeConfigError(options: CliOptions, error: unknown): number {
+function writeScopeConfigError(
+  options: CliOptions,
+  error: unknown,
+  commandName: "projects" | "scopes" = "scopes",
+): number {
   const message = error instanceof Error ? error.message : String(error);
   options.stderr(
     stringifyJson({
       ok: false,
       version: 1,
       error: {
-        code: "scope_config_error",
+        code: `${commandName}_config_error`,
         message,
         details: null,
       },

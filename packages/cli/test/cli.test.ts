@@ -161,6 +161,7 @@ describe("forge cli", () => {
       "blockers",
       "user-guidance",
       "worktree-status",
+      "projects",
       "scopes",
       "deps",
       "doctor",
@@ -250,7 +251,8 @@ describe("forge cli", () => {
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title>");
     expect(text).toContain("[--why <text>] [--success <text>]");
-    expect(text).toContain("Mutate:\n- forge scopes --json");
+    expect(text).toContain("Mutate:\n- forge projects --json");
+    expect(text).toContain("- forge scopes --json");
     expect(text).toContain("- forge deps <id> --json");
     expect(text).toContain("- forge note <id> --stdin [write]");
     expect(text).toContain("Verify:\n- forge doctor --json [read]");

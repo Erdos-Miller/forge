@@ -89,6 +89,23 @@ export async function updateScopeConfigEntry(
   return { exists: true, sourcePath: result.sourcePath, config: result.config };
 }
 
+export async function removeScopeConfigEntry(
+  repoRoot: string,
+  id: string,
+): Promise<ScopeConfigReadResult> {
+  const result = await readScopeConfig(repoRoot);
+  assertValidScopeId(id);
+  const projects = result.config.projects.filter((candidate) => candidate.id !== id);
+  if (projects.length === result.config.projects.length) {
+    throw new TaskWriteError(`scope id not found: ${id}`);
+  }
+
+  const config = createProjectConfig(projects);
+  validateScopeConfig(config, result.sourcePath);
+  await writeScopeConfig(result.sourcePath, config);
+  return { exists: true, sourcePath: result.sourcePath, config };
+}
+
 export async function inferScopeConfigEntries(repoRoot: string): Promise<ScopeConfigEntry[]> {
   return inferScopeConfigEntriesFromTasks(await loadTasks(repoRoot));
 }

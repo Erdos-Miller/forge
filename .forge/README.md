@@ -206,14 +206,18 @@ projects:
 Agents should maintain this file through structured commands:
 
 ```sh
-forge scopes --json
-forge scopes infer --json
-forge scopes add web --label "Web" --path "packages/web/**" --json
-forge scopes update web --path "packages/web/test/**" --json
+forge projects --json
+forge projects infer --json
+forge projects add web --label "Web" --path "packages/web/**" --json
+forge projects update web --path "packages/web/test/**" --json
+forge projects remove web --json
 ```
 
-Use `forge scopes infer --json` to suggest candidate Projects from existing
+Use `forge projects infer --json` to suggest candidate Projects from existing
 task edit-boundary globs without writing `.forge/scopes.yml`.
+
+Legacy `forge scopes ...` commands remain compatible for existing agent
+workflows.
 
 ## Expected Task Markdown Fields
 

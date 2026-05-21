@@ -46,10 +46,11 @@ belong to every configured Project whose `paths` overlap its frontmatter `scope`
 globs. Task frontmatter `scope` remains edit-boundary data and is not renamed.
 
 Agents should maintain `.forge/scopes.yml` through structured commands:
-`forge scopes --json`, `forge scopes infer --json`, `forge scopes add`, and
-`forge scopes update` until Project-named commands exist. Direct edits remain
-acceptable for planning only when the structured command surface cannot express
-the intended change yet.
+`forge projects --json`, `forge projects infer --json`, `forge projects add`,
+`forge projects update`, and `forge projects remove`. Legacy `forge scopes ...`
+commands remain compatible while existing agent workflows migrate. Direct edits
+remain acceptable for planning only when the structured command surface cannot
+express the intended change yet.
 
 ## Alternatives
 
@@ -66,7 +67,9 @@ F-0086 adds structured CLI tools for `.forge/scopes.yml`; F-0087 should validate
 the file in `forge doctor`; F-0088 wires configured entries into the web
 selector while preserving inferred fallback behavior. F-0103 adds the
 project-facing compatibility layer: prefer `projects:`, preserve legacy
-`scopes:`, and keep task frontmatter `scope` unchanged.
+`scopes:`, and keep task frontmatter `scope` unchanged. F-0104 adds the
+preferred `forge projects ...` command surface while keeping `forge scopes ...`
+documented as compatible legacy commands.
 
 ## Related Tasks
 

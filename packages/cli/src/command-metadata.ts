@@ -115,12 +115,31 @@ export const COMMANDS = [
       "Classify dirty files: continue on non_blocking, pause on review, stop on blocking.",
   },
   {
+    name: "projects",
+    usage:
+      "forge projects --json | forge projects infer --json | " +
+      "forge projects add <id> --label <label> --path <glob> --json | " +
+      "forge projects update <id> --path <glob> --json | " +
+      "forge projects remove <id> --json",
+    description: "Inspect or maintain Project configuration.",
+    classification: "write",
+    supportsJson: true,
+    examples: [
+      "forge projects --json",
+      "forge projects infer --json",
+      'forge projects add web --label "Web" --path "packages/web/**" --json',
+      'forge projects update web --path "packages/web/test/**" --json',
+      "forge projects remove web --json",
+    ],
+    agentPurpose: "Maintain Project config without hand-editing YAML.",
+  },
+  {
     name: "scopes",
     usage:
       "forge scopes --json | forge scopes infer --json | " +
       "forge scopes add <id> --label <label> --path <glob> --json | " +
       "forge scopes update <id> --path <glob> --json",
-    description: "Inspect or maintain Project compatibility configuration.",
+    description: "Legacy-compatible alias for Project configuration.",
     classification: "write",
     supportsJson: true,
     examples: [
@@ -129,7 +148,7 @@ export const COMMANDS = [
       'forge scopes add web --label "Web" --path "packages/web/**" --json',
       'forge scopes update web --path "packages/web/test/**" --json',
     ],
-    agentPurpose: "Maintain .forge/scopes.yml Project config without hand-editing YAML.",
+    agentPurpose: "Use compatible legacy scope commands when Project commands are unavailable.",
   },
   {
     name: "deps",
@@ -301,6 +320,7 @@ export const COMMAND_WORKFLOWS = {
   blockers: "inspect",
   "user-guidance": "inspect",
   "worktree-status": "inspect",
+  projects: "mutate",
   scopes: "mutate",
   deps: "mutate",
   doctor: "verify",
