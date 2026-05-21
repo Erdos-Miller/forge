@@ -64,12 +64,35 @@ describe("discoverForgeRootsDownward", () => {
     const workspace = await makeWorkspace([
       { name: "app", tasks: minimalForgeFixtureTasks() },
     ]);
-    await workspace.writeIgnoredRoot(["node_modules", "ignored"], [
-      { id: "F-9001", title: "Ignored dependency root" },
-    ]);
-    await workspace.writeIgnoredRoot(["dist", "ignored"], [
-      { id: "F-9002", title: "Ignored build root" },
-    ]);
+    const ignoredDirs = [
+      ".cache",
+      ".hidden-project",
+      ".mypy_cache",
+      ".next",
+      ".parcel-cache",
+      ".pytest_cache",
+      ".ruff_cache",
+      ".svelte-kit",
+      ".turbo",
+      ".venv",
+      ".vite",
+      "build",
+      "coverage",
+      "dist",
+      "generated",
+      "node_modules",
+      "out",
+      "target",
+      "tmp",
+      "vendor",
+    ];
+    await Promise.all(
+      ignoredDirs.map((dirName, index) =>
+        workspace.writeIgnoredRoot([dirName, "ignored"], [
+          { id: `F-${9000 + index}`, title: `Ignored ${dirName} root` },
+        ]),
+      ),
+    );
 
     const roots = await discoverForgeRootsDownward(workspace.workspaceRoot);
 

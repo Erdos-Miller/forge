@@ -54,13 +54,25 @@ export interface DiscoveredForgeRoot {
 }
 
 const WORKSPACE_DISCOVERY_IGNORED_DIRS = new Set([
+  ".cache",
   ".git",
+  ".mypy_cache",
   ".next",
+  ".parcel-cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".svelte-kit",
+  ".turbo",
+  ".venv",
+  ".vite",
   "build",
   "coverage",
   "dist",
+  "generated",
   "node_modules",
   "out",
+  "tmp",
+  "vendor",
   "target",
 ]);
 const DEFAULT_WORKSPACE_DISCOVERY_CONCURRENCY = 32;
@@ -125,9 +137,16 @@ async function inspectForgeRootDirectory(
   }
 
   return entries
-    .filter((entry) => entry.isDirectory() && !WORKSPACE_DISCOVERY_IGNORED_DIRS.has(entry.name))
+    .filter(shouldTraverseWorkspaceDirectory)
     .map((entry) => path.join(currentDir, entry.name))
     .sort();
+}
+
+function shouldTraverseWorkspaceDirectory(entry: Dirent): boolean {
+  if (!entry.isDirectory() || WORKSPACE_DISCOVERY_IGNORED_DIRS.has(entry.name)) {
+    return false;
+  }
+  return !entry.name.startsWith(".");
 }
 
 async function readWorkspaceDirectory(
