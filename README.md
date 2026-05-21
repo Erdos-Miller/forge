@@ -144,8 +144,17 @@ scopes:
 ```
 
 Configured UI Scopes are intended to take precedence over inferred fallback
-scopes once the config is wired into tooling. The task frontmatter `scope` field
-remains the edit-boundary data for agents.
+scopes once the config is wired into the web UI. The task frontmatter `scope`
+field remains the edit-boundary data for agents.
+
+Maintain scope config with structured commands:
+
+```sh
+forge scopes --json
+forge scopes infer --json
+forge scopes add web --label "Web" --path "packages/web/**" --json
+forge scopes update web --path "packages/web/test/**" --json
+```
 
 To keep a local install up to date, pull the Forge repo and relink if the CLI package path changes:
 

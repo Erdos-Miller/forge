@@ -8,19 +8,24 @@ import {
   claimTaskFrom,
   completeTaskFrom,
   discoverForgeRootsDownward,
+  addScopeConfigEntry,
   createTaskFrom,
   findParsedTaskByIdFrom,
   findForgeRoot,
+  inferScopeConfigEntries,
   getReadyTasks,
   loadTasksFrom,
   rankReadyTaskQueue,
   rankReadyTasks,
+  readScopeConfig,
   requestTaskReviewFrom,
   removeTaskDependencyFrom,
+  updateScopeConfigEntry,
   unblockTaskFrom,
   upsertTaskExecutionPlanFrom,
   type CreateTaskInput,
   type DiscoveredForgeRoot,
+  type ScopeConfigReadResult,
   type Task,
   type TaskPriority,
   type TaskStatus,
@@ -37,6 +42,7 @@ import {
   parseReadyArgs,
   parseNextArgs,
   parseReasonCommandArgs,
+  parseScopesArgs,
   parseSetArgs,
   parseTaskListArgs,
   parseWebArgs,
@@ -107,6 +113,7 @@ const COMMAND_HANDLERS = {
   blockers,
   "user-guidance": userGuidance,
   "worktree-status": worktreeStatus,
+  scopes,
   deps,
   doctor,
   closeout,
@@ -393,6 +400,77 @@ async function worktreeStatus(options: CliOptions, args: string[]): Promise<numb
     stringifyJson(
       await getWorktreeStatusPayload({ repoRoot, tasks, taskId: parsed.taskId }),
     ),
+  );
+  return 0;
+}
+
+async function scopes(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseScopesArgs(args);
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  try {
+    if (parsed.action === "infer") {
+      options.stdout(
+        stringifyJson({
+          ok: true,
+          version: 1,
+          repoRoot,
+          scopes: await inferScopeConfigEntries(repoRoot),
+        }),
+      );
+      return 0;
+    }
+
+    if (parsed.action === "add") {
+      return writeScopeConfigPayload(
+        options,
+        repoRoot,
+        await addScopeConfigEntry(repoRoot, {
+          id: parsed.id,
+          label: parsed.label,
+          paths: parsed.paths,
+        }),
+      );
+    }
+
+    if (parsed.action === "update") {
+      return writeScopeConfigPayload(
+        options,
+        repoRoot,
+        await updateScopeConfigEntry(repoRoot, parsed.id, parsed.paths),
+      );
+    }
+
+    return writeScopeConfigPayload(options, repoRoot, await readScopeConfig(repoRoot));
+  } catch (error) {
+    return writeScopeConfigError(options, error);
+  }
+}
+
+async function writeScopeConfigPayload(
+  options: CliOptions,
+  repoRoot: string,
+  result: ScopeConfigReadResult,
+): Promise<number> {
+  const inferred = await inferScopeConfigEntries(repoRoot);
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      repoRoot,
+      config: {
+        exists: result.exists,
+        sourcePath: result.sourcePath,
+        scopes: result.config.scopes,
+      },
+      resolved: {
+        source: result.config.scopes.length > 0 ? "configured" : "inferred",
+        scopes: result.config.scopes.length > 0 ? result.config.scopes : inferred,
+      },
+    }),
   );
   return 0;
 }
@@ -825,6 +903,22 @@ function writeDependencyEditError(options: CliOptions, error: unknown): number {
       version: 1,
       error: {
         code: "dependency_edit_failed",
+        message,
+        details: null,
+      },
+    }),
+  );
+  return 1;
+}
+
+function writeScopeConfigError(options: CliOptions, error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  options.stderr(
+    stringifyJson({
+      ok: false,
+      version: 1,
+      error: {
+        code: "scope_config_error",
         message,
         details: null,
       },

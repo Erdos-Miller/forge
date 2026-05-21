@@ -38,10 +38,10 @@ belong to every configured UI Scope whose `paths` overlap its frontmatter
 `scope` globs. Task frontmatter `scope` remains edit-boundary data and is not
 renamed.
 
-Future tools should maintain `.forge/scopes.yml` through structured commands
-such as `forge scopes list`, `forge scopes add`, `forge scopes set`, and
-`forge scopes remove`. Until those tools exist, direct edits are acceptable for
-planning, but agents should prefer the structured commands once available.
+Agents should maintain `.forge/scopes.yml` through structured commands:
+`forge scopes --json`, `forge scopes infer --json`, `forge scopes add`, and
+`forge scopes update`. Direct edits remain acceptable for planning only when the
+structured command surface cannot express the intended change yet.
 
 ## Alternatives
 
@@ -54,9 +54,9 @@ planning, but agents should prefer the structured commands once available.
 
 ## Consequences
 
-F-0086 should add structured CLI tools for `.forge/scopes.yml`; F-0087 should
-validate the file in `forge doctor`; F-0088 should wire configured UI Scopes
-into the web selector while preserving inferred fallback behavior.
+F-0086 adds structured CLI tools for `.forge/scopes.yml`; F-0087 should validate
+the file in `forge doctor`; F-0088 should wire configured UI Scopes into the web
+selector while preserving inferred fallback behavior.
 
 ## Related Tasks
 

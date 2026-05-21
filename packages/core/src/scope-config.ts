@@ -1,0 +1,307 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { loadTasks } from "./task-files.ts";
+import { TaskWriteError, type Task } from "./types.ts";
+
+export interface ScopeConfigEntry {
+  id: string;
+  label: string;
+  description?: string;
+  paths: string[];
+}
+
+export interface ScopeConfig {
+  version: 1;
+  scopes: ScopeConfigEntry[];
+}
+
+export interface ScopeConfigReadResult {
+  exists: boolean;
+  sourcePath: string;
+  config: ScopeConfig;
+}
+
+export interface ScopeConfigAddInput {
+  id: string;
+  label: string;
+  paths: string[];
+}
+
+const scopeConfigRelativePath = path.join(".forge", "scopes.yml");
+const scopeIdPattern = /^[a-z][a-z0-9-]*$/;
+
+export async function readScopeConfig(repoRoot: string): Promise<ScopeConfigReadResult> {
+  const sourcePath = getScopeConfigPath(repoRoot);
+  try {
+    const config = parseScopeConfig(await fs.readFile(sourcePath, "utf8"), sourcePath);
+    return { exists: true, sourcePath, config };
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return { exists: false, sourcePath, config: { version: 1, scopes: [] } };
+    }
+    throw error;
+  }
+}
+
+export async function addScopeConfigEntry(
+  repoRoot: string,
+  input: ScopeConfigAddInput,
+): Promise<ScopeConfigReadResult> {
+  const result = await readScopeConfig(repoRoot);
+  assertValidScopeId(input.id);
+  assertNonEmpty(input.label, "label");
+  assertNonEmptyPaths(input.paths);
+  if (result.config.scopes.some((scope) => scope.id === input.id)) {
+    throw new TaskWriteError(`scope id already exists: ${input.id}`);
+  }
+
+  const config = {
+    version: 1 as const,
+    scopes: [...result.config.scopes, { id: input.id, label: input.label, paths: input.paths }],
+  };
+  validateScopeConfig(config, result.sourcePath);
+  await writeScopeConfig(result.sourcePath, config);
+  return { exists: true, sourcePath: result.sourcePath, config };
+}
+
+export async function updateScopeConfigEntry(
+  repoRoot: string,
+  id: string,
+  paths: string[],
+): Promise<ScopeConfigReadResult> {
+  const result = await readScopeConfig(repoRoot);
+  assertValidScopeId(id);
+  assertNonEmptyPaths(paths);
+  const scope = result.config.scopes.find((candidate) => candidate.id === id);
+  if (!scope) {
+    throw new TaskWriteError(`scope id not found: ${id}`);
+  }
+
+  scope.paths = Array.from(new Set([...scope.paths, ...paths]));
+  validateScopeConfig(result.config, result.sourcePath);
+  await writeScopeConfig(result.sourcePath, result.config);
+  return { exists: true, sourcePath: result.sourcePath, config: result.config };
+}
+
+export async function inferScopeConfigEntries(repoRoot: string): Promise<ScopeConfigEntry[]> {
+  return inferScopeConfigEntriesFromTasks(await loadTasks(repoRoot));
+}
+
+export function inferScopeConfigEntriesFromTasks(tasks: Task[]): ScopeConfigEntry[] {
+  const pathsByLabel = new Map<string, Set<string>>();
+
+  for (const task of tasks) {
+    for (const scopePath of task.scope) {
+      const label = inferScopeLabel(scopePath);
+      if (!label) {
+        continue;
+      }
+      pathsByLabel.set(label, pathsByLabel.get(label) ?? new Set());
+      pathsByLabel.get(label)?.add(scopePath);
+    }
+  }
+
+  return Array.from(pathsByLabel.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([label, paths]) => ({
+      id: slugifyScopeId(label),
+      label,
+      paths: Array.from(paths).sort((left, right) => left.localeCompare(right)),
+    }));
+}
+
+export function parseScopeConfig(contents: string, sourcePath = scopeConfigRelativePath): ScopeConfig {
+  const lines = contents.split(/\r?\n/);
+  const versionLine = lines.find((line) => line.trim().startsWith("version:"));
+  if (!versionLine || versionLine.split(":").slice(1).join(":").trim() !== "1") {
+    throw new TaskWriteError(`${sourcePath}: scopes.yml version must be 1`);
+  }
+
+  const scopes: ScopeConfigEntry[] = [];
+  let current: ScopeConfigEntry | null = null;
+  let readingPaths = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line === "scopes:" || line.startsWith("#") || line.startsWith("version:")) {
+      continue;
+    }
+    if (line.startsWith("- id:")) {
+      current = { id: unquoteYamlValue(afterColon(line)), label: "", paths: [] };
+      scopes.push(current);
+      readingPaths = false;
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    if (line.startsWith("label:")) {
+      current.label = unquoteYamlValue(afterColon(line));
+      readingPaths = false;
+    } else if (line.startsWith("description:")) {
+      current.description = unquoteYamlValue(afterColon(line));
+      readingPaths = false;
+    } else if (line.startsWith("paths:")) {
+      const value = afterColon(line);
+      current.paths = value ? parseInlineStringArray(value) : current.paths;
+      readingPaths = !value;
+    } else if (readingPaths && line.startsWith("- ")) {
+      current.paths.push(unquoteYamlValue(line.slice(2).trim()));
+    }
+  }
+
+  const config = { version: 1 as const, scopes };
+  validateScopeConfig(config, sourcePath);
+  return config;
+}
+
+function inferScopeLabel(scope: string): string | null {
+  const parts = normalizeScopeParts(scope);
+  if (parts.length === 0) {
+    return null;
+  }
+  const [first, second, third] = parts;
+  if (first === "packages" && second) {
+    return joinScopeParts(first, second);
+  }
+  if (first === "apps" && second) {
+    return joinScopeParts(first, second);
+  }
+  if (first === "lib" && second && third) {
+    return joinScopeParts(first, second, third);
+  }
+  if (first === "product" && second) {
+    return joinScopeParts(first, second);
+  }
+  if (first.startsWith(".")) {
+    return first;
+  }
+  if (["docs", "scripts", "src", "test", "tests"].includes(first)) {
+    return first;
+  }
+  return null;
+}
+
+function validateScopeConfig(config: ScopeConfig, sourcePath: string): void {
+  const ids = new Set<string>();
+  const paths = new Set<string>();
+
+  for (const scope of config.scopes) {
+    assertValidScopeId(scope.id, sourcePath);
+    assertNonEmpty(scope.label, "label", sourcePath);
+    assertNonEmptyPaths(scope.paths, sourcePath);
+    if (ids.has(scope.id)) {
+      throw new TaskWriteError(`${sourcePath}: duplicate scope id ${scope.id}`);
+    }
+    ids.add(scope.id);
+
+    for (const scopePath of scope.paths) {
+      if (paths.has(scopePath)) {
+        throw new TaskWriteError(`${sourcePath}: duplicate scope path ${scopePath}`);
+      }
+      paths.add(scopePath);
+    }
+  }
+}
+
+async function writeScopeConfig(sourcePath: string, config: ScopeConfig): Promise<void> {
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await fs.writeFile(sourcePath, formatScopeConfig(config));
+}
+
+function formatScopeConfig(config: ScopeConfig): string {
+  return [
+    "version: 1",
+    "scopes:",
+    ...config.scopes.flatMap(formatScopeConfigEntry),
+    "",
+  ].join("\n");
+}
+
+function formatScopeConfigEntry(scope: ScopeConfigEntry): string[] {
+  return [
+    `  - id: ${scope.id}`,
+    `    label: ${quoteYamlString(scope.label)}`,
+    ...(scope.description ? [`    description: ${quoteYamlString(scope.description)}`] : []),
+    "    paths:",
+    ...scope.paths.map((scopePath) => `      - ${quoteYamlString(scopePath)}`),
+  ];
+}
+
+function normalizeScopeParts(scope: string): string[] {
+  return scope
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .filter((part) => part !== "." && part !== "**")
+    .filter((part) => !part.includes("*"))
+    .filter((part) => !isFileLike(part));
+}
+
+function parseInlineStringArray(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return [unquoteYamlValue(trimmed)];
+  }
+  const inner = trimmed.slice(1, -1).trim();
+  if (!inner) {
+    return [];
+  }
+  return inner.split(",").map((item) => unquoteYamlValue(item.trim()));
+}
+
+function assertValidScopeId(id: string, sourcePath = scopeConfigRelativePath): void {
+  if (!scopeIdPattern.test(id)) {
+    throw new TaskWriteError(`${sourcePath}: invalid scope id ${id}`);
+  }
+}
+
+function assertNonEmpty(value: string, field: string, sourcePath = scopeConfigRelativePath): void {
+  if (!value.trim()) {
+    throw new TaskWriteError(`${sourcePath}: scope ${field} must not be empty`);
+  }
+}
+
+function assertNonEmptyPaths(paths: string[], sourcePath = scopeConfigRelativePath): void {
+  if (paths.length === 0 || paths.some((scopePath) => !scopePath.trim())) {
+    throw new TaskWriteError(`${sourcePath}: scope paths must not be empty`);
+  }
+}
+
+function quoteYamlString(value: string) {
+  return JSON.stringify(value);
+}
+
+function unquoteYamlValue(value: string) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function afterColon(line: string) {
+  return line.split(":").slice(1).join(":").trim();
+}
+
+function slugifyScopeId(label: string) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function joinScopeParts(...parts: string[]) {
+  return parts.join("/");
+}
+
+function isFileLike(part: string) {
+  return /^[^.].*\.[a-z0-9]+$/i.test(part);
+}
+
+export function getScopeConfigPath(repoRoot: string): string {
+  return path.join(repoRoot, scopeConfigRelativePath);
+}

@@ -174,10 +174,17 @@ scopes:
       - lib/typescript/fluxchart/**
 ```
 
-Agents should maintain this file through structured commands once available:
-`forge scopes list`, `forge scopes add`, `forge scopes set`, and
-`forge scopes remove`. Direct edits are acceptable until those commands exist,
-but future implementation tasks should prefer the structured tools.
+Agents should maintain this file through structured commands:
+
+```sh
+forge scopes --json
+forge scopes infer --json
+forge scopes add web --label "Web" --path "packages/web/**" --json
+forge scopes update web --path "packages/web/test/**" --json
+```
+
+Use `forge scopes infer --json` to suggest candidate UI Scopes from existing
+task edit-boundary globs without writing `.forge/scopes.yml`.
 
 ## Expected Task Markdown Fields
 

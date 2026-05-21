@@ -114,6 +114,23 @@ export const COMMANDS = [
     agentPurpose: "Decide whether dirty files block the current claimed task.",
   },
   {
+    name: "scopes",
+    usage:
+      "forge scopes --json | forge scopes infer --json | " +
+      "forge scopes add <id> --label <label> --path <glob> --json | " +
+      "forge scopes update <id> --path <glob> --json",
+    description: "Inspect or maintain UI Scope configuration.",
+    classification: "write",
+    supportsJson: true,
+    examples: [
+      "forge scopes --json",
+      "forge scopes infer --json",
+      'forge scopes add web --label "Web" --path "packages/web/**" --json',
+      'forge scopes update web --path "packages/web/test/**" --json',
+    ],
+    agentPurpose: "Maintain .forge/scopes.yml without hand-editing YAML.",
+  },
+  {
     name: "deps",
     usage:
       "forge deps <id> --json | " +
@@ -283,6 +300,7 @@ export const COMMAND_WORKFLOWS = {
   blockers: "inspect",
   "user-guidance": "inspect",
   "worktree-status": "inspect",
+  scopes: "mutate",
   deps: "mutate",
   doctor: "verify",
   closeout: "close",

@@ -359,6 +359,65 @@ export const CREATE_USAGE =
 export const WORKTREE_STATUS_USAGE =
   "usage: forge worktree-status --json [--task <id>]";
 
+export type ScopesArgs =
+  | { ok: true; action: "show" }
+  | { ok: true; action: "infer" }
+  | { ok: true; action: "add"; id: string; label: string; paths: string[] }
+  | { ok: true; action: "update"; id: string; paths: string[] }
+  | { ok: false; message: string };
+
+export const SCOPES_USAGE =
+  "usage: forge scopes --json | " +
+  "forge scopes infer --json | " +
+  "forge scopes add <id> --label <label> --path <glob> --json | " +
+  "forge scopes update <id> --path <glob> --json";
+
+export function parseScopesArgs(args: string[]): ScopesArgs {
+  if (args.length === 1 && args[0] === "--json") {
+    return { ok: true, action: "show" };
+  }
+  if (args.length === 2 && args[0] === "infer" && args[1] === "--json") {
+    return { ok: true, action: "infer" };
+  }
+
+  const [action, id, ...rest] = args;
+  if ((action !== "add" && action !== "update") || !id) {
+    return { ok: false, message: SCOPES_USAGE };
+  }
+
+  const label = getRepeatedOption(rest, "--label")[0] ?? "";
+  const paths = getRepeatedOption(rest, "--path");
+  if (!rest.includes("--json")) {
+    return { ok: false, message: SCOPES_USAGE };
+  }
+  if (action === "add") {
+    if (!label || paths.length === 0) {
+      return { ok: false, message: SCOPES_USAGE };
+    }
+    return { ok: true, action, id, label, paths };
+  }
+  if (label || paths.length === 0) {
+    return { ok: false, message: SCOPES_USAGE };
+  }
+  return { ok: true, action, id, paths };
+}
+
+function getRepeatedOption(args: string[], option: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== option) {
+      continue;
+    }
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) {
+      return [];
+    }
+    values.push(value);
+    index += 1;
+  }
+  return values;
+}
+
 function parsePriority(value: string): TaskPriority {
   if (value === "urgent" || value === "high" || value === "medium" || value === "low") {
     return value;

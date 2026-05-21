@@ -2,7 +2,7 @@
 id: F-0086
 title: "Add scope config CLI tools"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:03:03.804Z
+closed_at: 2026-05-21T18:03:03.804Z
+close_reason: "Structured scope config CLI commands implemented and verified."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add scope config CLI tools
 
@@ -54,10 +58,10 @@ Verification:
 - Focused scope config CLI tests.
 
 Stop conditions:
-- Stop if command design conflicts with F-0085's documented config shape.
+Not applicable.
 
 Human review triggers:
-- Ask for review before adding per-task explicit scope overrides.
+Not applicable.
 
 ## Dependencies
 
@@ -71,6 +75,23 @@ Tracked in frontmatter: F-0085.
 ## Notes
 
 This task should not require existing repos to add `.forge/scopes.yml`.
+
+Implemented structured UI Scope config commands.
+
+Decisions:
+- Added core `.forge/scopes.yml` read/write helpers for the documented `version: 1` shape.
+- Added `forge scopes --json` to report configured scopes plus resolved configured-or-inferred scopes.
+- Added `forge scopes infer --json` as a read-only suggestion command based on existing task edit-boundary globs.
+- Added `forge scopes add <id> --label <label> --path <glob> --json`.
+- Added `forge scopes update <id> --path <glob> --json` to append paths to an existing scope.
+- Scope ids are stable lowercase kebab ids; exact duplicate configured paths are rejected.
+- Updated command metadata, agent help, and docs to advertise the structured commands.
+- Did not add per-task explicit scope overrides.
+
+Verification:
+- `bun test packages/cli/test/scopes.test.ts packages/cli/test/cli.test.ts packages/cli/test/robot-contracts.test.ts` passed: 63 tests, 420 expects.
+- `bun run harness:cli` passed: 7 tests, 89 expects.
+- `bun run quality:check` passed: 230 tests, 1113 expects, web production build passed.
 
 ## History
 
