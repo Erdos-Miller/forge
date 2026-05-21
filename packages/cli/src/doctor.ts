@@ -428,6 +428,7 @@ export async function getScopeConfigDoctorDiagnostics(
   diagnostics.push(...getProjectConfigConflictDiagnostics(result));
   diagnostics.push(...(await getLegacyProjectConfigDiagnostics(result.sourcePath)));
   diagnostics.push(...getEmptyProjectConfigDiagnostics(result.sourcePath, projects));
+  diagnostics.push(...getTaskProjectDiagnostics(result.sourcePath, projects, activeTasks));
   diagnostics.push(...getUnmatchedTaskDiagnostics(result.sourcePath, projects, activeTasks));
   diagnostics.push(...getUnusedProjectDiagnostics(result.sourcePath, projects, activeTasks));
   diagnostics.push(...getUnusedProjectPathDiagnostics(result.sourcePath, projects, activeTasks));
@@ -523,6 +524,7 @@ function getUnmatchedTaskDiagnostics(
     return [];
   }
   const unmatchedTaskIds = tasks
+    .filter((task) => !task.project)
     .filter((task) => !taskMatchesConfiguredScope(task, projects))
     .map((task) => task.id)
     .sort();
@@ -543,18 +545,98 @@ function getUnmatchedTaskDiagnostics(
   ];
 }
 
+function getTaskProjectDiagnostics(
+  sourcePath: string,
+  projects: ScopeConfigEntry[],
+  tasks: Task[],
+): DoctorDiagnostic[] {
+  if (projects.length === 0) {
+    return [];
+  }
+
+  const projectIds = new Set(projects.map((project) => project.id));
+  return tasks.flatMap((task) => {
+    if (!task.project) {
+      return getMissingTaskProjectDiagnostics(sourcePath, projects, task);
+    }
+    if (!projectIds.has(task.project)) {
+      return [getUnknownTaskProjectDiagnostic(sourcePath, task)];
+    }
+    const project = projects.find((candidate) => candidate.id === task.project);
+    if (project && !taskMatchesProject(task, project)) {
+      return [getTaskProjectScopeDriftDiagnostic(sourcePath, task, project)];
+    }
+    return [];
+  });
+}
+
+function getMissingTaskProjectDiagnostics(
+  sourcePath: string,
+  projects: ScopeConfigEntry[],
+  task: Task,
+): DoctorDiagnostic[] {
+  const matches = getTaskProjectMatches(task, projects);
+  if (matches.length !== 1) {
+    return [];
+  }
+  const project = matches[0];
+  return [
+    {
+      code: "task_project_missing",
+      severity: "warning",
+      message: `task ${task.id} has no project and clearly matches Project ${project.id}`,
+      taskId: task.id,
+      sourcePath: task.sourcePath,
+      projectId: project.id,
+      repairHint:
+        `Run forge set ${task.id} --project ${project.id} --json, or review ` +
+        "`forge projects migrate --dry-run --json`.",
+    },
+  ];
+}
+
+function getUnknownTaskProjectDiagnostic(
+  sourcePath: string,
+  task: Task,
+): DoctorDiagnostic {
+  return {
+    code: "task_project_unknown",
+    severity: "warning",
+    message: `task ${task.id} references unknown Project ${task.project}`,
+    taskId: task.id,
+    sourcePath: task.sourcePath,
+    projectId: task.project,
+    repairHint:
+      `Update task ${task.id} with forge set, or add Project ${task.project} ` +
+      "with forge projects add.",
+  };
+}
+
+function getTaskProjectScopeDriftDiagnostic(
+  sourcePath: string,
+  task: Task,
+  project: ScopeConfigEntry,
+): DoctorDiagnostic {
+  return {
+    code: "task_project_scope_drift",
+    severity: "warning",
+    message: `task ${task.id} project ${project.id} does not match its edit scope`,
+    taskId: task.id,
+    sourcePath: task.sourcePath,
+    projectId: project.id,
+    repairHint:
+      `Update task ${task.id} scope or project so it matches configured Project ` +
+      `${project.id}.`,
+  };
+}
+
 function getUnusedProjectDiagnostics(
   sourcePath: string,
   projects: ScopeConfigEntry[],
   tasks: Task[],
 ): DoctorDiagnostic[] {
-  const taskScopes = tasks.flatMap((task) => task.scope);
   return projects
-    .filter((project) =>
-      project.paths.every(
-        (projectPath) => !taskScopes.some((taskScope) => scopePathsOverlap(projectPath, taskScope)),
-      ),
-    )
+    .filter((project) => !tasks.some((task) => taskReferencesProject(task, project)))
     .map((project) => ({
       code: "project_config_unused_project",
       severity: "warning" as const,
@@ -620,6 +702,20 @@ function taskMatchesConfiguredScope(task: Task, scopes: ScopeConfigEntry[]): boo
       scope.paths.some((configuredPath) => scopePathsOverlap(configuredPath, taskScope)),
     ),
   );
+}
+
+function taskReferencesProject(task: Task, project: ScopeConfigEntry): boolean {
+  return task.project === project.id || taskMatchesProject(task, project);
+}
+
+function taskMatchesProject(task: Task, project: ScopeConfigEntry): boolean {
+  return project.paths.some((configuredPath) =>
+    task.scope.some((taskScope) => scopePathsOverlap(configuredPath, taskScope)),
+  );
+}
+
+function getTaskProjectMatches(task: Task, projects: ScopeConfigEntry[]): ScopeConfigEntry[] {
+  return projects.filter((project) => taskMatchesProject(task, project));
 }
 
 function findOverlappingScopePath(

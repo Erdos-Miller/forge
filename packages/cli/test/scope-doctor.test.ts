@@ -24,7 +24,11 @@ describe("project config doctor diagnostics", () => {
   });
 
   test("does not warn for healthy configured Projects", async () => {
-    const repo = await makeRepo();
+    const repo = await makeRepoWithTasks([
+      { id: "F-0001", title: "Web", project: "web", scope: ["packages/web/**"] },
+      { id: "F-0002", title: "CLI", project: "cli", scope: ["packages/cli/**"] },
+      { id: "F-0003", title: "Docs", project: "docs", scope: ["docs/**"] },
+    ]);
     await writeProjectConfig(repo.repoRoot, [
       scopeConfigEntry("web", "Web", ["packages/web/**"]),
       scopeConfigEntry("cli", "CLI", ["packages/cli/**"]),
@@ -35,6 +39,38 @@ describe("project config doctor diagnostics", () => {
 
     expect(payload.summary).toEqual({ errors: 0, warnings: 0 });
     expect(payload.diagnostics).toEqual([]);
+  });
+
+  test("warns for missing, unknown, and drifted task Project links", async () => {
+    const repo = await makeRepoWithTasks([
+      { id: "F-0001", title: "Missing", scope: ["packages/web/**"] },
+      { id: "F-0002", title: "Unknown", project: "mobile", scope: ["packages/web/**"] },
+      { id: "F-0003", title: "Drifted", project: "cli", scope: ["docs/**"] },
+      { id: "F-0004", title: "Clean", project: "docs", scope: ["docs/**"] },
+    ]);
+    await writeProjectConfig(repo.repoRoot, [
+      scopeConfigEntry("web", "Web", ["packages/web/**"]),
+      scopeConfigEntry("cli", "CLI", ["packages/cli/**"]),
+      scopeConfigEntry("docs", "Docs", ["docs/**"]),
+    ]);
+
+    const payload = await runDoctor(repo.repoRoot);
+
+    expect(findDiagnostic(payload, "task_project_missing")).toMatchObject({
+      severity: "warning",
+      taskId: "F-0001",
+      projectId: "web",
+    });
+    expect(findDiagnostic(payload, "task_project_unknown")).toMatchObject({
+      severity: "warning",
+      taskId: "F-0002",
+      projectId: "mobile",
+    });
+    expect(findDiagnostic(payload, "task_project_scope_drift")).toMatchObject({
+      severity: "warning",
+      taskId: "F-0003",
+      projectId: "cli",
+    });
   });
 
   test("warns when many active tasks do not match configured scopes", async () => {
@@ -187,14 +223,20 @@ describe("project config doctor diagnostics", () => {
 });
 
 async function makeRepo(): Promise<ForgeFixtureRepo> {
+  return makeRepoWithTasks([
+    { id: "F-0001", title: "Web", scope: ["packages/web/**"] },
+    { id: "F-0002", title: "CLI", scope: ["packages/cli/**"] },
+    { id: "F-0003", title: "Docs", scope: ["docs/**"] },
+    { id: "F-0004", title: "Done", status: "done", scope: ["legacy/**"] },
+  ]);
+}
+
+async function makeRepoWithTasks(
+  tasks: Parameters<typeof createForgeFixtureRepo>[0]["tasks"],
+): Promise<ForgeFixtureRepo> {
   const repo = await createForgeFixtureRepo({
     prefix: "forge-scope-doctor-",
-    tasks: [
-      { id: "F-0001", title: "Web", scope: ["packages/web/**"] },
-      { id: "F-0002", title: "CLI", scope: ["packages/cli/**"] },
-      { id: "F-0003", title: "Docs", scope: ["docs/**"] },
-      { id: "F-0004", title: "Done", status: "done", scope: ["legacy/**"] },
-    ],
+    tasks,
   });
   fixtureRepos.push(repo);
   return repo;

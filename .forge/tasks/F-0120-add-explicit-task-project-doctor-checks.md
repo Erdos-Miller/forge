@@ -2,7 +2,7 @@
 id: F-0120
 title: "Add explicit task Project doctor checks"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:45:36.792Z
+closed_at: 2026-05-21T21:45:36.792Z
+close_reason: "Added explicit task Project doctor checks and verified CLI harness."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add explicit task Project doctor checks
 
@@ -72,6 +76,22 @@ Tracked in frontmatter: F-0112, F-0113.
 ## Notes
 
 This task supersedes the path-overlap-only doctor direction if F-0107 lands first.
+
+Added explicit task Project doctor diagnostics:
+
+- Warns when a task references an unknown `project`.
+- Warns when a task has no `project` and its scope clearly matches exactly one configured Project.
+- Warns when a task `project` exists but the task scope does not overlap that Project's configured paths.
+- Keeps stale Project and legacy `.forge/scopes.yml` diagnostics.
+- Updated stale Project detection to count explicit task `project` references, not only path overlap.
+
+Verification:
+
+- `bun test packages/cli/test/scope-doctor.test.ts`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/project-migration.test.ts packages/cli/test/projects.test.ts packages/cli/test/decision-doctor.test.ts packages/cli/test/closeout.test.ts`
+- `bun run harness:cli`
+- `forge doctor --json` reports only expected dirty-worktree warnings for F-0120 before commit.
 
 ## History
 
