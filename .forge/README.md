@@ -339,25 +339,16 @@ instructions such as `AGENTS.md`, not in Forge's generic task schema. For
 example, a web app may require a browser screenshot before closeout, while a
 library task may require API compatibility notes.
 
-## Decision Records
+## Durable Context
 
-Forge's own repo has historical `.forge/decisions/NNNN-short-title.md` records
-for durable product or architecture decisions that future tasks must preserve.
-Those records are internal Forge development docs, not part of the user store
-contract. User repos can keep durable decisions in normal repo docs, task
-Markdown, or `AGENTS.md`.
+Forge does not require or manage decision records. Keep task-local evidence,
+verification results, blockers, and task-specific decisions in task `Notes`.
 
-Use task `Notes` for local implementation evidence, verification results,
-blockers, and task-specific decisions. If a note establishes a cross-cutting
-rule, promote it into a decision record and link the related task ids.
-
-Decision records should stay short and use this shape:
-
-- `Context`: the problem or ambiguity.
-- `Decision`: the chosen rule or convention.
-- `Alternatives`: serious options that were not chosen.
-- `Consequences`: follow-up work, tradeoffs, or compatibility notes.
-- `Related tasks`: task ids that introduced or depend on the decision.
+When a choice needs to outlive one task, put the durable explanation in normal
+repo documentation or agent instructions such as `AGENTS.md`, then link or
+summarize that context from the relevant task. Forge's own historical
+`.forge/decisions/` files may remain for compatibility, but they are not part
+of the workflow contract.
 
 ## Dirty Worktree Coordination
 

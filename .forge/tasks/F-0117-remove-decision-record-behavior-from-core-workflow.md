@@ -2,7 +2,7 @@
 id: F-0117
 title: "Remove decision-record behavior from core workflow"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "README.md"
   - "AGENTS.md"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:40:03.520Z
+closed_at: 2026-05-21T21:40:03.520Z
+close_reason: "Removed decision-record workflow behavior and verified CLI harness."
+blocked_reason: ""
+review_reason: ""
 ---
 # Remove decision-record behavior from core workflow
 
@@ -70,6 +74,21 @@ Tracked in frontmatter: F-0111.
 ## Notes
 
 This removes product behavior, not historical files.
+
+Removed decision-record product behavior:
+
+- Removed `decision_capture_*` doctor diagnostics.
+- Removed closeout `decision_capture` advisory text that referenced `.forge/decisions`.
+- Updated docs to say Forge does not require or manage decision records.
+- Kept historical `.forge/decisions` files untouched.
+- Kept task Notes as the place for task-local evidence, blockers, verification, and decisions.
+
+Verification:
+
+- `bun test packages/cli/test/decision-doctor.test.ts packages/cli/test/closeout.test.ts packages/cli/test/prompt-guidance.test.ts`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun run harness:cli`
+- `forge doctor --json` reports only expected dirty-worktree warnings for F-0117 before commit.
 
 ## History
 

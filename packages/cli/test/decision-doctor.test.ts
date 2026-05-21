@@ -11,8 +11,8 @@ afterEach(async () => {
   await Promise.all(fixtureRepos.splice(0).map((repo) => repo.cleanup()));
 });
 
-describe("decision capture doctor diagnostics", () => {
-  test("warns for broad active contract-surface tasks without decision capture", async () => {
+describe("doctor decision-record behavior", () => {
+  test("does not warn for broad contract-surface tasks without decision records", async () => {
     const repo = await makeRepo([
       {
         id: "F-0001",
@@ -22,61 +22,11 @@ describe("decision capture doctor diagnostics", () => {
     ]);
 
     const payload = await runDoctor(repo.repoRoot);
-    const diagnostic = findDiagnostic(payload, "decision_capture_missing");
 
-    expect(diagnostic).toMatchObject({
-      severity: "warning",
-      taskId: "F-0001",
-    });
-    expect(diagnostic.sourcePath).toContain("F-0001");
-    expect(diagnostic.repairHint).toContain(".forge/decisions/");
+    expect(findDecisionDiagnostics(payload)).toEqual([]);
   });
 
-  test("does not warn for narrow tasks", async () => {
-    const repo = await makeRepo([
-      { id: "F-0001", title: "Narrow task", scope: ["packages/web/**"] },
-    ]);
-
-    const payload = await runDoctor(repo.repoRoot);
-
-    expect(findDiagnostics(payload, "decision_capture_missing")).toEqual([]);
-  });
-
-  test("suppresses closed historical tasks", async () => {
-    const repo = await makeRepo([
-      {
-        id: "F-0001",
-        title: "Closed broad task",
-        status: "done",
-        scope: ["packages/cli/**", "packages/web/**", "packages/core/**"],
-      },
-    ]);
-
-    const payload = await runDoctor(repo.repoRoot);
-
-    expect(findDiagnostics(payload, "decision_capture_missing")).toEqual([]);
-  });
-
-  test("suppresses broad tasks that link a durable decision record", async () => {
-    const repo = await makeRepo([
-      {
-        id: "F-0001",
-        title: "Documented broad task",
-        scope: ["packages/cli/**", "packages/web/**", "packages/core/**"],
-        body: [
-          fixtureBody("Documented broad task"),
-          "Decision record: .forge/decisions/0001-workspace-terminology.md",
-          "",
-        ].join("\n"),
-      },
-    ]);
-
-    const payload = await runDoctor(repo.repoRoot);
-
-    expect(findDiagnostics(payload, "decision_capture_missing")).toEqual([]);
-  });
-
-  test("warns for resolved review or stop-condition notes without decision outcome", async () => {
+  test("does not require decision outcomes for resolved review notes", async () => {
     const repo = await makeRepo([
       {
         id: "F-0001",
@@ -99,13 +49,8 @@ describe("decision capture doctor diagnostics", () => {
     ]);
 
     const payload = await runDoctor(repo.repoRoot);
-    const diagnostic = findDiagnostic(payload, "decision_capture_missing_resolution");
 
-    expect(diagnostic).toMatchObject({
-      severity: "warning",
-      taskId: "F-0001",
-    });
-    expect(diagnostic.repairHint).toContain("## Notes");
+    expect(findDecisionDiagnostics(payload)).toEqual([]);
   });
 });
 
@@ -151,12 +96,8 @@ async function runDoctor(repoRoot: string): Promise<any> {
   return JSON.parse(stdout[0]);
 }
 
-function findDiagnostic(payload: any, code: string) {
-  const diagnostic = findDiagnostics(payload, code)[0];
-  expect(diagnostic).toBeDefined();
-  return diagnostic;
-}
-
-function findDiagnostics(payload: any, code: string) {
-  return payload.diagnostics.filter((candidate: any) => candidate.code === code);
+function findDecisionDiagnostics(payload: any) {
+  return payload.diagnostics.filter((candidate: any) =>
+    candidate.code.startsWith("decision_capture"),
+  );
 }

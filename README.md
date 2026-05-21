@@ -71,10 +71,11 @@ Forge does not currently route committed project guidance. Keep durable work
 context in task Markdown and repository agent instructions such as `AGENTS.md`.
 Personal guidance is intentionally separate from repo task state.
 
-In Forge's own repo, durable product and architecture choices may live in
-normal repo docs, `AGENTS.md`, or historical `.forge/decisions/` records. Task
-`Notes` are for implementation evidence, verification, blockers, and local task
-decisions.
+Durable product and architecture choices should live in normal repo docs or
+`AGENTS.md`. Task `Notes` are for implementation evidence, verification,
+blockers, and local task decisions. Forge's own historical `.forge/decisions/`
+files may remain, but Forge does not require or create them as part of the
+workflow.
 
 Workspace discovery can be tuned with an optional `forge.workspace.yml` file at
 the directory passed to `forge web --dir`. Ignore paths are relative to that
