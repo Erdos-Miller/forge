@@ -348,7 +348,7 @@ export function App({ initialData }: AppProps) {
               <div className="panelControls">
                 <label className="showDoneToggle">
                   <input
-                    checked={effectiveShowDone} disabled={effectiveShowDone && !showDone}
+                    checked={showDone}
                     onChange={(event) => setShowDone(event.target.checked)}
                     type="checkbox"
                   />
@@ -415,7 +415,7 @@ export function App({ initialData }: AppProps) {
                   </section>
                 ))
               ) : (
-                <p className="empty">No tasks match this filter.</p>
+                <p className="empty">{getEmptyQueueMessage(scopedTasks, showDone)}</p>
               )}
             </div>
 
@@ -835,6 +835,13 @@ export function getKeyboardQueueSelection(
   const safeIndex = currentIndex === -1 ? 0 : currentIndex;
   const nextIndex = getKeyboardQueueIndex(safeIndex, tasks.length, key);
   return { handled: true, taskId: tasks[nextIndex].id };
+}
+
+function getEmptyQueueMessage(tasks: Task[], showDone: boolean): string {
+  if (!showDone && tasks.some((task) => task.status === "done" || task.status === "canceled")) {
+    return "No unfinished tasks match this filter.";
+  }
+  return "No tasks match this filter.";
 }
 
 function getKeyboardQueueIndex(currentIndex: number, taskCount: number, key: string) {

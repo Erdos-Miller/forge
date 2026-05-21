@@ -287,7 +287,7 @@ describe("App", () => {
     expect(html).toContain("<summary>Dependencies (1)</summary>");
   });
 
-  test("shows completed tasks when the selected scope has no unfinished work", () => {
+  test("defaults all-done queues to hidden completed rows", () => {
     const html = renderToStaticMarkup(
       <App
         initialData={{
@@ -301,11 +301,13 @@ describe("App", () => {
       />,
     );
 
-    expect(html).toContain("Done task");
-    expect(html).toContain("Completed.");
-    expect(html).toContain("Status is done.");
+    expect(html).toContain("No unfinished tasks match this filter.");
+    expect(html).toContain("No queue row is visible for this filter.");
+    expect(html).toContain('type="checkbox"');
+    expect(html).not.toContain("disabled");
     expect(html).not.toContain("No tasks match this filter.");
-    expect(html).not.toContain("No queue row is visible for this filter.");
+    expect(html).not.toContain("Completed.");
+    expect(html).not.toContain("Status is done.");
   });
 
   test("selects a visible task from the URL on initial render", () => {
@@ -802,7 +804,7 @@ describe("App", () => {
     expect(replaceCalls).toEqual(["/?task=F-0003", "/?task=F-0003&repo=web"]);
   });
 
-  test("keeps detail visible when only done tasks match the filter", () => {
+  test("clears detail when hide-done leaves no visible queue rows", () => {
     const html = renderToStaticMarkup(
       <App
         initialData={{
@@ -816,14 +818,14 @@ describe("App", () => {
       />,
     );
 
+    expect(html).toContain("No unfinished tasks match this filter.");
+    expect(html).toContain("No queue row is visible for this filter.");
     expect(html).not.toContain("No tasks match this filter.");
-    expect(html).not.toContain("No queue row is visible for this filter.");
-    expect(html).toContain("Completed.");
-    expect(html).toContain("Status is done.");
-    expect(html).toContain("packages/core/**");
+    expect(html).not.toContain("Completed.");
+    expect(html).not.toContain("Status is done.");
   });
 
-  test("refresh selection keeps done tasks visible when no unfinished tasks match", () => {
+  test("refresh selection follows the user-controlled Show done setting", () => {
     const doneOnlyPayload = {
       ...payload,
       tasks: [payload.tasks[0]],
@@ -833,7 +835,11 @@ describe("App", () => {
       blockersByTaskId: { "F-0001": [] },
     };
 
-    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBe("F-0001");
+    expect(sortQueueTasks(doneOnlyPayload.tasks, new Map(), false)).toEqual([]);
+    expect(sortQueueTasks(doneOnlyPayload.tasks, new Map(), true).map((task) => task.id)).toEqual([
+      "F-0001",
+    ]);
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBeNull();
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", true)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "packages/web", true)).toBe("F-0001");
   });

@@ -2,7 +2,7 @@
 id: F-0109
 title: "Make all-done queue fallback user-controllable"
 kind: task
-status: open
+status: done
 priority: high
 area: "web"
 parent: "F-0000"
@@ -12,7 +12,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:38:12.827Z
+closed_at: 2026-05-21T20:38:12.827Z
+close_reason: "Made Show done user-controllable and added the all-done empty state."
+blocked_reason: ""
+review_reason: ""
 ---
 # Make all-done queue fallback user-controllable
 
@@ -68,6 +72,25 @@ None.
 ## Notes
 
 This task is independent and should be prioritized before the larger Project migration.
+
+Implemented user-controllable Show done behavior.
+
+Changes:
+- Removed the all-done fallback that coerced `showDone=false` into showing closed tasks.
+- The Show done checkbox now reflects only the user's `showDone` state and is never disabled by the all-done fallback.
+- When Show done is off and matching tasks are all closed, the queue shows `No unfinished tasks match this filter.`
+- With no visible queue rows, the detail pane clears instead of showing a hidden done task.
+- Re-checking Show done restores completed rows through the existing queue sorting and refresh selection path.
+
+Decisions:
+- Default behavior remains Show done off. All-done filters start with the unfinished-work empty state until the user checks Show done.
+- Stop condition did not fire: no task graph API semantics changed.
+- Human review trigger did not fire: the task acceptance criteria specified the Show done off empty state.
+
+Verification:
+- `bun test packages/web/test/app.test.tsx` passed: 35 tests.
+- `bun test packages/web/test/scopes.test.ts packages/web/test/monorepo-projects.test.tsx` passed: 9 tests.
+- `bun run harness:web` passed: 72 tests.
 
 ## History
 
