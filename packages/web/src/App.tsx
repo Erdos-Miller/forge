@@ -6,6 +6,13 @@ import type { TaskCoordinationPayload, TaskGraphPayload } from "./api";
 import { shouldShowDoneInQueue } from "./queue-visibility";
 import { getProjectOptions, taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
+import {
+  ShortcutHelpOverlay,
+  getCyclableProjectIds,
+  getCyclableWorktreeIds,
+  getWorkspaceShortcutSelection,
+  shouldIgnoreQueueShortcutTarget,
+} from "./shortcuts";
 import "./styles.css";
 import {
   getVisibleSelectedTask,
@@ -32,13 +39,12 @@ export function App({ initialData }: AppProps) {
   const [urlRequestedTaskId, setUrlRequestedTaskId] = useState<string | null>(initialUrlTaskId);
   const [data, setData] = useState<AppData | null>(initialData ?? null);
   const [selectedRepoId, setSelectedRepoId] = useState<string>(initialUrlRepoId ?? "all");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    initialUrlTaskId ?? null,
-  );
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialUrlTaskId ?? null);
   const [activeTab, setActiveTab] = useState<"queue" | "analytics">("queue");
   const [groupBy, setGroupBy] = useState<"area" | "priority">("area");
   const [scopeFilter, setScopeFilter] = useState("all");
   const [showDone, setShowDone] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadTasks = useCallback(() => {
@@ -208,6 +214,18 @@ export function App({ initialData }: AppProps) {
     }
   }, [data, scopeFilter, showDone]);
 
+  const selectProject = useCallback((projectId: string) => {
+    const nextTaskId = currentData
+      ? selectTaskAfterRefresh(null, currentData, projectId, showDone)
+      : null;
+    setScopeFilter(projectId);
+    setUrlRequestedTaskId(null);
+    setSelectedTaskId(nextTaskId);
+    if (nextTaskId) {
+      writeTaskSelectionToUrl(nextTaskId, resolvedRepoId);
+    }
+  }, [currentData, resolvedRepoId, showDone]);
+
   const setQueueRowRef = useCallback((taskId: string, element: HTMLButtonElement | null) => {
     if (element) {
       queueRowRefs.current.set(taskId, element);
@@ -249,6 +267,57 @@ export function App({ initialData }: AppProps) {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [selectVisibleTask, selectedVisibleTaskId, visibleQueueTasks]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (shouldIgnoreQueueShortcutTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === "?") {
+        event.preventDefault();
+        setShowShortcutHelp(true);
+        return;
+      }
+      if (event.key === "Escape" && showShortcutHelp) {
+        event.preventDefault();
+        setShowShortcutHelp(false);
+        return;
+      }
+
+      const nextShortcut = getWorkspaceShortcutSelection({
+        key: event.key,
+        projectIds: getCyclableProjectIds(scopeOptions),
+        selectedProjectId: projectFilter,
+        selectedWorktreeId: resolvedRepoId,
+        worktreeIds: getCyclableWorktreeIds(workspaceGraphs),
+      });
+      if (!nextShortcut.handled) {
+        return;
+      }
+
+      event.preventDefault();
+      if (nextShortcut.kind === "worktree" && nextShortcut.id) {
+        selectRepo(nextShortcut.id);
+      }
+      if (nextShortcut.kind === "project" && nextShortcut.id) {
+        selectProject(nextShortcut.id);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    projectFilter,
+    resolvedRepoId,
+    scopeOptions,
+    selectProject,
+    selectRepo,
+    showShortcutHelp,
+    workspaceGraphs,
+  ]);
 
   if (!data) {
     return (
@@ -444,7 +513,18 @@ export function App({ initialData }: AppProps) {
           {recommendedTasks.length} ready / {blockedOpenTasks.length} blocked /{" "}
           {doneTasks.length} done / {scopedTasks.length} total
         </span>
+        <button
+          className="shortcutHelpButton"
+          type="button"
+          onClick={() => setShowShortcutHelp(true)}
+        >
+          Shortcuts
+        </button>
       </footer>
+
+      {showShortcutHelp ? (
+        <ShortcutHelpOverlay onClose={() => setShowShortcutHelp(false)} />
+      ) : null}
     </main>
   );
 }
@@ -851,25 +931,6 @@ function getKeyboardQueueIndex(currentIndex: number, taskCount: number, key: str
     return Math.max(0, currentIndex - 1);
   }
   return Math.min(taskCount - 1, currentIndex + 1);
-}
-
-export function shouldIgnoreQueueShortcutTarget(target: EventTarget | null) {
-  if (!target || !("tagName" in target)) {
-    return false;
-  }
-
-  const tagName = String((target as { tagName?: unknown }).tagName).toLowerCase();
-  if (["input", "select", "textarea", "button"].includes(tagName)) {
-    return true;
-  }
-
-  if (typeof Element !== "undefined" && target instanceof Element) {
-    return Boolean(
-      target.closest("button, a, [role='button'], [contenteditable='true']"),
-    );
-  }
-
-  return false;
 }
 
 export function sortQueueTasks(

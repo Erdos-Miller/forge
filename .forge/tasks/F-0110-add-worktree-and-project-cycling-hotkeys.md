@@ -2,7 +2,7 @@
 id: F-0110
 title: "Add Worktree and Project cycling hotkeys"
 kind: task
-status: open
+status: done
 priority: medium
 area: "web"
 parent: "F-0000"
@@ -13,7 +13,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T14:57:56-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:51:47.913Z
+closed_at: 2026-05-21T21:51:47.913Z
+close_reason: "Added Worktree and Project cycling shortcuts and verified web harness."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add Worktree and Project cycling hotkeys
 
@@ -74,6 +78,21 @@ Tracked in frontmatter: F-0115.
 Use bracket keys because they are browser-safe, compact, and align with previous/next navigation.
 
 Updated 2026-05-21: This should land after Project filtering is backed by explicit task `project`, not the older path-overlap model.
+
+Added Worktree and Project keyboard shortcuts:
+
+- `[` and `]` cycle Worktrees with wraparound when multiple Worktrees are available.
+- `{` and `}` cycle Projects with wraparound using the same Project options as the web filter.
+- `?` opens a compact keyboard shortcut reference, also available from the footer Shortcuts button.
+- Shortcuts ignore form controls, links, buttons, and contenteditable targets.
+- Moved shortcut helpers into `packages/web/src/shortcuts.tsx` to keep `App.tsx` under the readability budget.
+
+Verification:
+
+- `bun test packages/web/test/app.test.tsx packages/core/test/readability-ratchet.test.ts`
+- `bun run harness:web`
+- `bun run build` from `packages/web`
+- `forge doctor --json` reports only expected dirty-worktree warnings for F-0110 before commit.
 
 ## History
 

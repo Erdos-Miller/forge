@@ -5,10 +5,15 @@ import {
   getKeyboardQueueSelection,
   groupQueueTasks,
   selectTaskAfterRefresh,
-  shouldIgnoreQueueShortcutTarget,
   sortQueueTasks,
 } from "../src/App";
 import type { TaskGraphPayload, WorkspaceTaskGraphPayload } from "../src/api";
+import {
+  ShortcutHelpOverlay,
+  getCycledOption,
+  getWorkspaceShortcutSelection,
+  shouldIgnoreQueueShortcutTarget,
+} from "../src/shortcuts";
 import {
   getRepoIdFromSearch,
   getTaskIdFromSearch,
@@ -710,6 +715,21 @@ describe("App", () => {
     expect(html).toContain("Very long project name for truncation");
   });
 
+  test("renders a discoverable keyboard shortcut reference action", () => {
+    const html = renderToStaticMarkup(<App initialData={payload} />);
+
+    expect(html).toContain("Shortcuts");
+  });
+
+  test("shortcut help documents Worktree and Project cycling", () => {
+    const html = renderToStaticMarkup(<ShortcutHelpOverlay onClose={() => {}} />);
+
+    expect(html).toContain("[ / ]");
+    expect(html).toContain("Previous or next Worktree");
+    expect(html).toContain("{ / }");
+    expect(html).toContain("Previous or next Project");
+  });
+
   test("selects a repo and task from URL params", () => {
     const html = withMockWindow("?repo=web&task=F-web", () =>
       renderToStaticMarkup(<App initialData={workspacePayload} />),
@@ -1080,6 +1100,45 @@ describe("App", () => {
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "SELECT" } as any)).toBe(true);
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "TEXTAREA" } as any)).toBe(true);
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "BUTTON" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "A" } as any)).toBe(true);
+    expect(shouldIgnoreQueueShortcutTarget({ tagName: "DIV", isContentEditable: true } as any))
+      .toBe(true);
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "DIV" } as any)).toBe(false);
+  });
+
+  test("workspace shortcuts cycle Worktrees and Projects with wrapping", () => {
+    expect(getCycledOption(["all", "api", "web"], "all", 1)).toBe("api");
+    expect(getCycledOption(["all", "api", "web"], "all", -1)).toBe("web");
+    expect(getWorkspaceShortcutSelection({
+      key: "]",
+      projectIds: ["all", "cli"],
+      selectedProjectId: "all",
+      selectedWorktreeId: "api",
+      worktreeIds: ["all", "api", "web"],
+    })).toEqual({ handled: true, kind: "worktree", id: "web" });
+    expect(getWorkspaceShortcutSelection({
+      key: "{",
+      projectIds: ["all", "cli", "web"],
+      selectedProjectId: "all",
+      selectedWorktreeId: "api",
+      worktreeIds: ["all", "api"],
+    })).toEqual({ handled: true, kind: "project", id: "web" });
+  });
+
+  test("workspace shortcuts are unavailable with a single Worktree or Project", () => {
+    expect(getWorkspaceShortcutSelection({
+      key: "]",
+      projectIds: ["all", "cli"],
+      selectedProjectId: "all",
+      selectedWorktreeId: "api",
+      worktreeIds: [],
+    })).toEqual({ handled: false, kind: "worktree", id: null });
+    expect(getWorkspaceShortcutSelection({
+      key: "}",
+      projectIds: ["all"],
+      selectedProjectId: "all",
+      selectedWorktreeId: "api",
+      worktreeIds: ["all", "api"],
+    })).toEqual({ handled: false, kind: "project", id: null });
   });
 });
