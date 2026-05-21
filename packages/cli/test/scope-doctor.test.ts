@@ -13,7 +13,7 @@ afterEach(async () => {
   await Promise.all(fixtureRepos.splice(0).map((repo) => repo.cleanup()));
 });
 
-describe("scope config doctor diagnostics", () => {
+describe("project config doctor diagnostics", () => {
   test("does not warn when a repo has no scope config", async () => {
     const repo = await makeRepo();
 
@@ -23,9 +23,9 @@ describe("scope config doctor diagnostics", () => {
     expect(payload.diagnostics).toEqual([]);
   });
 
-  test("does not warn for healthy configured scopes", async () => {
+  test("does not warn for healthy configured Projects", async () => {
     const repo = await makeRepo();
-    await writeScopeConfig(repo.repoRoot, [
+    await writeProjectConfig(repo.repoRoot, [
       scopeConfigEntry("web", "Web", ["packages/web/**"]),
       scopeConfigEntry("cli", "CLI", ["packages/cli/**"]),
       scopeConfigEntry("docs", "Docs", ["docs/**"]),
@@ -39,59 +39,129 @@ describe("scope config doctor diagnostics", () => {
 
   test("warns when many active tasks do not match configured scopes", async () => {
     const repo = await makeRepo();
-    await writeScopeConfig(repo.repoRoot, [
+    await writeProjectConfig(repo.repoRoot, [
       scopeConfigEntry("web", "Web", ["packages/web/**"]),
     ]);
 
     const payload = await runDoctor(repo.repoRoot);
-    const diagnostic = findDiagnostic(payload, "scope_config_unmatched_tasks");
+    const diagnostic = findDiagnostic(payload, "project_config_unmatched_tasks");
 
     expect(diagnostic).toMatchObject({
       severity: "warning",
       sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
       taskIds: ["F-0002", "F-0003"],
     });
-    expect(diagnostic.repairHint).toContain("forge scopes infer --json");
+    expect(diagnostic.repairHint).toContain("forge projects infer --json");
   });
 
-  test("warns for overlapping and unused configured scope paths", async () => {
+  test("warns for overlapping and unused configured Project paths", async () => {
     const repo = await makeRepo();
-    await writeScopeConfig(repo.repoRoot, [
+    await writeProjectConfig(repo.repoRoot, [
       scopeConfigEntry("packages", "Packages", ["packages/**"]),
       scopeConfigEntry("web", "Web", ["packages/web/**"]),
       scopeConfigEntry("mobile", "Mobile", ["apps/mobile/**"]),
     ]);
 
     const payload = await runDoctor(repo.repoRoot);
-    const overlap = findDiagnostic(payload, "scope_config_overlap");
-    const unused = findDiagnostic(payload, "scope_config_unused_path");
+    const overlap = findDiagnostic(payload, "project_config_overlap");
+    const unused = findDiagnostic(payload, "project_config_unused_path");
+    const unusedProject = findDiagnostic(payload, "project_config_unused_project");
 
     expect(overlap).toMatchObject({
       severity: "warning",
-      scopeIds: ["packages", "web"],
+      projectIds: ["packages", "web"],
     });
     expect(unused).toMatchObject({
       severity: "warning",
-      scopeId: "mobile",
+      projectId: "mobile",
       path: "apps/mobile/**",
+    });
+    expect(unusedProject).toMatchObject({
+      severity: "warning",
+      projectId: "mobile",
     });
   });
 
-  test("warns for an empty configured scope file", async () => {
+  test("warns for an empty configured Project file", async () => {
     const repo = await makeRepo();
     await fs.writeFile(
       path.join(repo.repoRoot, ".forge", "scopes.yml"),
-      ["version: 1", "scopes:", ""].join("\n"),
+      ["version: 1", "projects:", ""].join("\n"),
     );
 
     const payload = await runDoctor(repo.repoRoot);
-    const diagnostic = findDiagnostic(payload, "scope_config_empty");
+    const diagnostic = findDiagnostic(payload, "project_config_empty");
 
     expect(diagnostic).toMatchObject({
       severity: "warning",
       sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
     });
-    expect(diagnostic.repairHint).toContain("forge scopes infer --json");
+    expect(diagnostic.repairHint).toContain("forge projects infer --json");
+  });
+
+  test("warns for legacy scopes config while preserving compatibility", async () => {
+    const repo = await makeRepo();
+    await writeScopeConfig(repo.repoRoot, [
+      scopeConfigEntry("web", "Web", ["packages/web/**"]),
+      scopeConfigEntry("cli", "CLI", ["packages/cli/**"]),
+      scopeConfigEntry("docs", "Docs", ["docs/**"]),
+    ]);
+
+    const payload = await runDoctor(repo.repoRoot);
+    const diagnostic = findDiagnostic(payload, "project_config_legacy_scopes_key");
+
+    expect(diagnostic).toMatchObject({
+      severity: "warning",
+      sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
+    });
+    expect(diagnostic.repairHint).toContain("forge projects");
+  });
+
+  test("reports malformed project config as doctor errors", async () => {
+    const cases = [
+      {
+        name: "invalid id",
+        body: projectConfigEntry("Bad_ID", "Bad", ["packages/bad/**"]),
+        message: "invalid scope id",
+      },
+      {
+        name: "empty label",
+        body: projectConfigEntry("bad", "", ["packages/bad/**"]),
+        message: "scope label must not be empty",
+      },
+      {
+        name: "empty paths",
+        body: projectConfigEntry("bad", "Bad", []),
+        message: "scope paths must not be empty",
+      },
+      {
+        name: "duplicate paths",
+        body: [
+          ...projectConfigEntry("web", "Web", ["packages/web/**"]),
+          ...projectConfigEntry("web-copy", "Web Copy", ["packages/web/**"]),
+        ],
+        message: "duplicate scope path",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const repo = await makeRepo();
+      await fs.writeFile(
+        path.join(repo.repoRoot, ".forge", "scopes.yml"),
+        ["version: 1", "projects:", ...testCase.body, ""].join("\n"),
+      );
+
+      const payload = await runDoctor(repo.repoRoot);
+      const diagnostic = findDiagnostic(payload, "project_config_invalid");
+
+      expect(payload.summary.errors).toBe(1);
+      expect(diagnostic).toMatchObject({
+        severity: "error",
+        sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      });
+      expect(diagnostic.message).toContain(testCase.message);
+      expect(diagnostic.repairHint).toContain("forge projects infer --json");
+    }
   });
 });
 
@@ -110,6 +180,10 @@ async function makeRepo(): Promise<ForgeFixtureRepo> {
 }
 
 function scopeConfigEntry(id: string, label: string, paths: string[]): string[] {
+  return projectConfigEntry(id, label, paths);
+}
+
+function projectConfigEntry(id: string, label: string, paths: string[]): string[] {
   return [
     `  - id: ${id}`,
     `    label: "${label}"`,
@@ -119,9 +193,17 @@ function scopeConfigEntry(id: string, label: string, paths: string[]): string[] 
 }
 
 async function writeScopeConfig(repoRoot: string, entries: string[][]) {
+  await writeConfig(repoRoot, "scopes", entries);
+}
+
+async function writeProjectConfig(repoRoot: string, entries: string[][]) {
+  await writeConfig(repoRoot, "projects", entries);
+}
+
+async function writeConfig(repoRoot: string, key: "projects" | "scopes", entries: string[][]) {
   await fs.writeFile(
     path.join(repoRoot, ".forge", "scopes.yml"),
-    ["version: 1", "scopes:", ...entries.flat(), ""].join("\n"),
+    ["version: 1", `${key}:`, ...entries.flat(), ""].join("\n"),
   );
 }
 
@@ -132,7 +214,7 @@ async function runDoctor(repoRoot: string): Promise<any> {
     stdout: (message) => stdout.push(message),
     stderr: () => {},
   });
-  expect(code).toBe(0);
+  expect([0, 4]).toContain(code);
   expect(stdout).toHaveLength(1);
   return JSON.parse(stdout[0]);
 }

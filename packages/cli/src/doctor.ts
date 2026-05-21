@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
+  getScopeConfigPath,
   parseTaskFile,
   readScopeConfig,
   TaskParseError,
@@ -25,6 +26,8 @@ export interface DoctorDiagnostic {
   reason?: string;
   classification?: string;
   path?: string;
+  projectId?: string;
+  projectIds?: string[];
   scopeId?: string;
   scopeIds?: string[];
   taskIds?: string[];
@@ -488,17 +491,26 @@ export async function getScopeConfigDoctorDiagnostics(
   repoRoot: string,
   tasks: Task[],
 ): Promise<DoctorDiagnostic[]> {
-  const result = await readScopeConfig(repoRoot);
+  const sourcePath = getScopeConfigPath(repoRoot);
+  let result;
+  try {
+    result = await readScopeConfig(repoRoot);
+  } catch (error) {
+    return [toProjectConfigParseDiagnostic(sourcePath, error)];
+  }
   if (!result.exists) {
     return [];
   }
 
   const activeTasks = tasks.filter((task) => task.status !== "done" && task.status !== "canceled");
+  const projects = result.config.projects;
   const diagnostics: DoctorDiagnostic[] = [];
-  diagnostics.push(...getEmptyScopeConfigDiagnostics(result.sourcePath, result.config.scopes));
-  diagnostics.push(...getUnmatchedTaskDiagnostics(result.sourcePath, result.config.scopes, activeTasks));
-  diagnostics.push(...getUnusedScopePathDiagnostics(result.sourcePath, result.config.scopes, activeTasks));
-  diagnostics.push(...getOverlappingScopeDiagnostics(result.sourcePath, result.config.scopes));
+  diagnostics.push(...(await getLegacyProjectConfigDiagnostics(result.sourcePath)));
+  diagnostics.push(...getEmptyProjectConfigDiagnostics(result.sourcePath, projects));
+  diagnostics.push(...getUnmatchedTaskDiagnostics(result.sourcePath, projects, activeTasks));
+  diagnostics.push(...getUnusedProjectDiagnostics(result.sourcePath, projects, activeTasks));
+  diagnostics.push(...getUnusedProjectPathDiagnostics(result.sourcePath, projects, activeTasks));
+  diagnostics.push(...getOverlappingProjectDiagnostics(result.sourcePath, projects));
   return diagnostics;
 }
 
@@ -511,93 +523,149 @@ export async function getWorkspaceConfigDoctorDiagnostics(
   }));
 }
 
-function getEmptyScopeConfigDiagnostics(
+function toProjectConfigParseDiagnostic(
   sourcePath: string,
-  scopes: ScopeConfigEntry[],
-): DoctorDiagnostic[] {
-  if (scopes.length > 0) {
+  error: unknown,
+): DoctorDiagnostic {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    code: "project_config_invalid",
+    severity: "error",
+    message,
+    sourcePath,
+    repairHint:
+      "Fix .forge/scopes.yml, or regenerate Projects with forge projects infer --json and forge projects add.",
+  };
+}
+
+async function getLegacyProjectConfigDiagnostics(
+  sourcePath: string,
+): Promise<DoctorDiagnostic[]> {
+  const contents = await fs.readFile(sourcePath, "utf8");
+  if (!/^\s*scopes:\s*$/m.test(contents)) {
     return [];
   }
   return [
     {
-      code: "scope_config_empty",
+      code: "project_config_legacy_scopes_key",
       severity: "warning",
-      message: "configured scope file has no scopes",
+      message: "Project config uses legacy scopes key",
       sourcePath,
-      repairHint: "Run forge scopes infer --json, then add useful scopes with forge scopes add.",
+      repairHint: "Use forge projects commands to rewrite config with the projects key.",
+    },
+  ];
+}
+
+function getEmptyProjectConfigDiagnostics(
+  sourcePath: string,
+  projects: ScopeConfigEntry[],
+): DoctorDiagnostic[] {
+  if (projects.length > 0) {
+    return [];
+  }
+  return [
+    {
+      code: "project_config_empty",
+      severity: "warning",
+      message: "configured Project file has no Projects",
+      sourcePath,
+      repairHint: "Run forge projects infer --json, then add useful Projects with forge projects add.",
     },
   ];
 }
 
 function getUnmatchedTaskDiagnostics(
   sourcePath: string,
-  scopes: ScopeConfigEntry[],
+  projects: ScopeConfigEntry[],
   tasks: Task[],
 ): DoctorDiagnostic[] {
-  if (scopes.length === 0) {
+  if (projects.length === 0) {
     return [];
   }
   const unmatchedTaskIds = tasks
-    .filter((task) => !taskMatchesConfiguredScope(task, scopes))
+    .filter((task) => !taskMatchesConfiguredScope(task, projects))
     .map((task) => task.id)
     .sort();
-  if (unmatchedTaskIds.length < 2) {
+  if (unmatchedTaskIds.length === 0) {
     return [];
   }
   return [
     {
-      code: "scope_config_unmatched_tasks",
+      code: "project_config_unmatched_tasks",
       severity: "warning",
-      message: `${unmatchedTaskIds.length} active tasks do not match any configured scope`,
+      message: `${unmatchedTaskIds.length} active task${unmatchedTaskIds.length === 1 ? "" : "s"} do not match any configured Project`,
       sourcePath,
       taskIds: unmatchedTaskIds,
-      repairHint: "Run forge scopes infer --json and update .forge/scopes.yml for missing areas.",
+      repairHint: "Run forge projects infer --json and update Projects for missing work areas.",
     },
   ];
 }
 
-function getUnusedScopePathDiagnostics(
+function getUnusedProjectDiagnostics(
   sourcePath: string,
-  scopes: ScopeConfigEntry[],
+  projects: ScopeConfigEntry[],
   tasks: Task[],
 ): DoctorDiagnostic[] {
   const taskScopes = tasks.flatMap((task) => task.scope);
-  return scopes.flatMap((scope) =>
-    scope.paths
+  return projects
+    .filter((project) =>
+      project.paths.every(
+        (projectPath) => !taskScopes.some((taskScope) => scopePathsOverlap(projectPath, taskScope)),
+      ),
+    )
+    .map((project) => ({
+      code: "project_config_unused_project",
+      severity: "warning" as const,
+      message: `configured Project ${project.id} matches no active task scopes`,
+      sourcePath,
+      projectId: project.id,
+      repairHint: `Remove it with forge projects remove ${project.id} --json, or update its paths.`,
+    }));
+}
+
+function getUnusedProjectPathDiagnostics(
+  sourcePath: string,
+  projects: ScopeConfigEntry[],
+  tasks: Task[],
+): DoctorDiagnostic[] {
+  const taskScopes = tasks.flatMap((task) => task.scope);
+  return projects.flatMap((project) =>
+    project.paths
       .filter((scopePath) => !taskScopes.some((taskScope) => scopePathsOverlap(scopePath, taskScope)))
       .map((scopePath) => ({
-        code: "scope_config_unused_path",
+        code: "project_config_unused_path",
         severity: "warning" as const,
-        message: `configured scope ${scope.id} path ${scopePath} matches no active task scopes`,
+        message: `configured Project ${project.id} path ${scopePath} matches no active task scopes`,
         sourcePath,
-        scopeId: scope.id,
+        projectId: project.id,
         path: scopePath,
-        repairHint: `Remove ${scopePath}, or update it with forge scopes update ${scope.id} --path <glob> --json.`,
+        repairHint: `Remove ${scopePath}, or update it with forge projects update ${project.id} --path <glob> --json.`,
       })),
   );
 }
 
-function getOverlappingScopeDiagnostics(
+function getOverlappingProjectDiagnostics(
   sourcePath: string,
-  scopes: ScopeConfigEntry[],
+  projects: ScopeConfigEntry[],
 ): DoctorDiagnostic[] {
   const diagnostics: DoctorDiagnostic[] = [];
-  for (let leftIndex = 0; leftIndex < scopes.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < scopes.length; rightIndex += 1) {
-      const left = scopes[leftIndex];
-      const right = scopes[rightIndex];
+  for (let leftIndex = 0; leftIndex < projects.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < projects.length; rightIndex += 1) {
+      const left = projects[leftIndex];
+      const right = projects[rightIndex];
       const overlappingPath = findOverlappingScopePath(left, right);
       if (!overlappingPath) {
         continue;
       }
       diagnostics.push({
-        code: "scope_config_overlap",
+        code: "project_config_overlap",
         severity: "warning",
-        message: `configured scopes ${left.id} and ${right.id} overlap at ${overlappingPath}`,
+        message: `configured Projects ${left.id} and ${right.id} overlap at ${overlappingPath}`,
         sourcePath,
+        projectIds: [left.id, right.id],
         scopeIds: [left.id, right.id],
         path: overlappingPath,
-        repairHint: "Narrow one scope path so each task area maps to one configured scope.",
+        repairHint: "Narrow one Project path so each task area maps to one configured Project.",
       });
     }
   }
