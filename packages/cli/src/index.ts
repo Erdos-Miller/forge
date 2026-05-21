@@ -40,6 +40,7 @@ import {
   parseSetArgs,
   parseTaskListArgs,
   parseWebArgs,
+  parseWorktreeStatusArgs,
   type LinkMode,
 } from "./args";
 import {
@@ -74,6 +75,7 @@ import {
   type WebSession,
 } from "./web-session";
 import { findAvailablePort } from "./web-port";
+import { getWorktreeStatusPayload } from "./worktree-status";
 
 export { COMMANDS } from "./command-metadata";
 export type {
@@ -104,6 +106,7 @@ const COMMAND_HANDLERS = {
   show,
   blockers,
   "user-guidance": userGuidance,
+  "worktree-status": worktreeStatus,
   deps,
   doctor,
   closeout,
@@ -374,6 +377,22 @@ async function blockers(options: CliOptions, args: string[]): Promise<number> {
       taskId: task.id,
       blockers: toRobotBlockers(task, analysis),
     }),
+  );
+  return 0;
+}
+
+async function worktreeStatus(options: CliOptions, args: string[]): Promise<number> {
+  const parsed = parseWorktreeStatusArgs(args);
+  if (!parsed.ok) {
+    return writeJsonUsageError(options, parsed.message);
+  }
+
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await loadTasksFrom(repoRoot);
+  options.stdout(
+    stringifyJson(
+      await getWorktreeStatusPayload({ repoRoot, tasks, taskId: parsed.taskId }),
+    ),
   );
   return 0;
 }

@@ -249,6 +249,47 @@ Returns direct dependencies and direct dependents for one task. This command doe
 }
 ```
 
+### `worktree-status`
+
+Classifies dirty git files relative to the selected task. When `--task` is not
+provided, Forge infers the task only when exactly one active claimed task exists.
+
+<!-- contract:worktree-status -->
+```json
+{
+  "ok": true,
+  "version": 1,
+  "repoRoot": "/repo",
+  "task": {
+    "id": "F-0010",
+    "title": "Define robot JSON contracts",
+    "status": "doing",
+    "priority": "urgent",
+    "area": "cli",
+    "claimed_by": "codex",
+    "scope": [".forge/**", "packages/cli/**", "packages/core/**"],
+    "depends_on": ["F-0004"]
+  },
+  "summary": {
+    "blocking": 1,
+    "review": 1,
+    "non_blocking": 1,
+    "total": 3,
+    "clean": false,
+    "taskInference": "single_active_claimed"
+  },
+  "files": [
+    {
+      "path": "packages/cli/src/index.ts",
+      "status": " M",
+      "classification": "blocking",
+      "reason": "inside_task_scope"
+    }
+  ],
+  "recommendation": "stop"
+}
+```
+
 ### `doctor`
 
 Returns graph health diagnostics. It exits `0` when `summary.errors` is `0`; otherwise it exits `4`.

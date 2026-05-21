@@ -95,6 +95,33 @@ export function parseReadyArgs(args: string[]): { links: LinkMode } | null {
   return { links };
 }
 
+export function parseWorktreeStatusArgs(
+  args: string[],
+): { ok: true; taskId: string | null } | { ok: false; message: string } {
+  let json = false;
+  let taskId: string | null = null;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (arg === "--task") {
+      const value = args[index + 1];
+      if (!value) {
+        return { ok: false, message: "worktree-status option --task requires a value" };
+      }
+      taskId = value;
+      index += 1;
+      continue;
+    }
+    return { ok: false, message: WORKTREE_STATUS_USAGE };
+  }
+
+  return json ? { ok: true, taskId } : { ok: false, message: WORKTREE_STATUS_USAGE };
+}
+
 function parseLinkMode(value: string): LinkMode | null {
   if (value === "auto" || value === "always" || value === "never") {
     return value;
@@ -328,6 +355,9 @@ export const CREATE_USAGE =
   "usage: forge create <id> --title <title> " +
   "[--why <text>] [--success <text>] [--acceptance <text>] " +
   "[--verification <text>] [--notes <text>] [options]";
+
+export const WORKTREE_STATUS_USAGE =
+  "usage: forge worktree-status --json [--task <id>]";
 
 function parsePriority(value: string): TaskPriority {
   if (value === "urgent" || value === "high" || value === "medium" || value === "low") {

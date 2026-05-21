@@ -160,6 +160,7 @@ describe("forge cli", () => {
       "show",
       "blockers",
       "user-guidance",
+      "worktree-status",
       "deps",
       "doctor",
       "closeout",

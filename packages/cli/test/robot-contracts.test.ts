@@ -11,6 +11,7 @@ const expectedTopLevelKeys = {
   show: ["ok", "version", "task"],
   blockers: ["ok", "version", "taskId", "blockers"],
   deps: ["ok", "version", "taskId", "depends_on", "dependents"],
+  "worktree-status": ["ok", "version", "repoRoot", "task", "summary", "files", "recommendation"],
   doctor: ["ok", "version", "summary", "diagnostics"],
   done: ["ok", "version", "task"],
   error: ["ok", "version", "error"],
@@ -71,6 +72,12 @@ describe("robot JSON contract documentation", () => {
       "code",
       "message",
       "details",
+    ]);
+    expect(Object.keys(contracts["worktree-status"].files[0])).toEqual([
+      "path",
+      "status",
+      "classification",
+      "reason",
     ]);
   });
 });

@@ -105,6 +105,15 @@ export const COMMANDS = [
     agentPurpose: "Inspect personal guidance stored outside repo task state.",
   },
   {
+    name: "worktree-status",
+    usage: "forge worktree-status --json [--task <id>]",
+    description: "Classify dirty worktree files for the current task.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge worktree-status --json", "forge worktree-status --json --task F-0001"],
+    agentPurpose: "Decide whether dirty files block the current claimed task.",
+  },
+  {
     name: "deps",
     usage:
       "forge deps <id> --json | " +
@@ -273,6 +282,7 @@ export const COMMAND_WORKFLOWS = {
   show: "inspect",
   blockers: "inspect",
   "user-guidance": "inspect",
+  "worktree-status": "inspect",
   deps: "mutate",
   doctor: "verify",
   closeout: "close",
