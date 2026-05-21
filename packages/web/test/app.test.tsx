@@ -491,19 +491,22 @@ describe("App", () => {
             ...payload.tasks[1],
             id: "F-readme",
             title: "Readme cleanup",
+            project: undefined,
             scope: ["README.md"],
           },
           {
             ...payload.tasks[1],
             id: "F-component",
             title: "Component cleanup",
+            project: undefined,
             scope: ["lib/typescript/ui/src/components/Wells/**"],
           },
         ])}
       />,
     );
 
-    expect(html).not.toContain(">Project<");
+    expect(html).toContain(">Project<");
+    expect(html).toContain('<option value="web">web</option>');
     expect(html).not.toContain('<option value="packages/web">packages/web</option>');
     expect(html).not.toContain('<option value="lib/typescript/ui">lib/typescript/ui</option>');
     expect(html).not.toContain('<option value="Other">Other</option>');
@@ -514,6 +517,7 @@ describe("App", () => {
   test("renders configured Project labels while preserving raw task scope detail", () => {
     const configuredPayload: TaskGraphPayload = {
       ...payload,
+      tasks: [{ ...payload.tasks[1], project: "ui" }],
       scopeConfig: {
         source: "configured",
         scopes: [
@@ -535,6 +539,7 @@ describe("App", () => {
   test("uses configured Project matching when selecting after refresh", () => {
     const configuredPayload: TaskGraphPayload = {
       ...payload,
+      tasks: [{ ...payload.tasks[1], project: "ui" }],
       scopeConfig: {
         source: "configured",
         scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
@@ -547,8 +552,8 @@ describe("App", () => {
 
   test("keeps unmatched tasks visible under All projects only", () => {
     const unmatchedPayload = graphPayload("/workspace", [
-      { ...payload.tasks[1], id: "F-web", scope: ["packages/web/**"] },
-      { ...payload.tasks[2], id: "F-docs", scope: ["docs/**"] },
+      { ...payload.tasks[1], id: "F-web", project: "ui", scope: ["packages/web/**"] },
+      { ...payload.tasks[2], id: "F-docs", project: undefined, scope: ["docs/**"] },
     ]);
     const configuredPayload: TaskGraphPayload = {
       ...unmatchedPayload,
@@ -610,6 +615,7 @@ describe("App", () => {
   test("qualifies configured scopes in an all-roots aggregate queue", () => {
     const configuredApiGraph: TaskGraphPayload = {
       ...apiGraph,
+      tasks: apiGraph.tasks.map((task) => ({ ...task, project: "ui" })),
       scopeConfig: {
         source: "configured",
         scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
@@ -617,6 +623,7 @@ describe("App", () => {
     };
     const configuredWebGraph: TaskGraphPayload = {
       ...webGraph,
+      tasks: webGraph.tasks.map((task) => ({ ...task, project: "ui" })),
       scopeConfig: {
         source: "configured",
         scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
@@ -662,6 +669,7 @@ describe("App", () => {
         {
           ...payload.tasks[1],
           id: "F-long",
+          project: "long-project",
           title: "Long label task",
           scope: ["packages/web/src/components/very/deep/feature/**"],
         },

@@ -2,7 +2,7 @@
 id: F-0115
 title: "Make web Project filtering use task project"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:22:38.564Z
+closed_at: 2026-05-21T21:22:38.564Z
+close_reason: "Web Project filtering now uses explicit task project metadata."
+blocked_reason: ""
+review_reason: ""
 ---
 # Make web Project filtering use task project
 
@@ -72,6 +76,17 @@ Tracked in frontmatter: F-0112, F-0113.
 ## Notes
 
 This supersedes the old Project-as-path-overlap behavior from F-0106.
+
+Implemented explicit Project filtering in the web UI:
+- `taskMatchesScope` now uses `task.project` for Project membership instead of path overlap.
+- Project selector options come from configured Projects plus unknown project IDs present on tasks.
+- Tasks without `project` remain visible under All projects only.
+- Aggregate workspace tasks scope their `project` IDs by Worktree, matching aggregate Project option IDs.
+- Task detail continues to show Project, Area, and Edit scope separately.
+
+Verification:
+- `bun test packages/web/test/scopes.test.ts packages/web/test/app.test.tsx packages/web/test/monorepo-projects.test.tsx`
+- `bun run harness:web`
 
 ## History
 

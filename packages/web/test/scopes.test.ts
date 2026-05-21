@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Task } from "@forge/core";
 import {
   getInferredScopeOptions,
+  getProjectOptions,
   inferScopeLabel,
   inferTaskScopeLabels,
   taskMatchesScope,
@@ -46,19 +47,19 @@ describe("workspace scope inference", () => {
     ]);
   });
 
-  test("matches tasks by inferred coarse scope", () => {
-    const webTask = task(["packages/web/src/components/Queue.tsx"]);
+  test("matches tasks by explicit project field", () => {
+    const webTask = task(["packages/web/src/components/Queue.tsx"], "ui");
     const otherTask = task(["README.md"]);
 
-    expect(taskMatchesScope(webTask, "packages/web")).toBe(true);
-    expect(taskMatchesScope(webTask, "packages/core")).toBe(false);
-    expect(taskMatchesScope(otherTask, "Other")).toBe(true);
+    expect(taskMatchesScope(webTask, "ui")).toBe(true);
+    expect(taskMatchesScope(webTask, "docs")).toBe(false);
+    expect(taskMatchesScope(otherTask, "ui")).toBe(false);
     expect(taskMatchesScope(otherTask, "all")).toBe(true);
   });
 
-  test("matches tasks by configured scope paths", () => {
-    const webTask = task(["packages/web/src/components/Queue.tsx"]);
-    const readmeTask = task(["README.md"]);
+  test("uses configured Projects as labels without path-overlap membership", () => {
+    const webTask = task(["packages/web/src/components/Queue.tsx"], "ui");
+    const readmeTask = task(["README.md"], "docs");
     const scopeConfig = {
       source: "configured" as const,
       scopes: [
@@ -73,13 +74,27 @@ describe("workspace scope inference", () => {
     expect(taskMatchesScope(readmeTask, "ui", scopeConfig)).toBe(false);
   });
 
+  test("builds Project options from config and unknown task project ids", () => {
+    const scopeConfig = {
+      source: "configured" as const,
+      projects: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+      scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+    };
+
+    expect(getProjectOptions([task(["packages/web/**"], "ui"), task(["docs/**"], "docs")], scopeConfig))
+      .toEqual([
+        { id: "ui", label: "UI", paths: ["packages/web/**"] },
+        { id: "docs", label: "docs", paths: [] },
+      ]);
+  });
+
   test("keeps all-worktree configured scopes scoped to their root", () => {
     const webTask = {
-      ...task(["packages/web/**"]),
+      ...task(["packages/web/**"], "web::ui"),
       workspaceRootId: "web",
     };
     const apiTask = {
-      ...task(["packages/web/**"]),
+      ...task(["packages/web/**"], "web::ui"),
       workspaceRootId: "api",
     };
     const scopeConfig = {
@@ -93,6 +108,6 @@ describe("workspace scope inference", () => {
   });
 });
 
-function task(scope: string[]): Task {
-  return { scope } as Task;
+function task(scope: string[], project?: string): Task {
+  return { scope, project } as Task;
 }

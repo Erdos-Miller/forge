@@ -150,6 +150,7 @@ function decorateTaskForRoot(root: WorkspaceGraph, task: Task): QueueTask {
   return {
     ...task,
     id: scopedTaskId(root.id, task.id),
+    project: task.project ? scopedTaskId(root.id, task.project) : undefined,
     depends_on: task.depends_on.map((dependencyId) => scopedTaskId(root.id, dependencyId)),
     originalTaskId: task.id,
     workspaceRootId: root.id,

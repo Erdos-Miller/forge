@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import type { TaskCoordinationPayload, TaskGraphPayload } from "./api";
 import { shouldShowDoneInQueue } from "./queue-visibility";
-import { taskMatchesScope } from "./scopes";
+import { getProjectOptions, taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
 import {
@@ -114,10 +114,7 @@ export function App({ initialData }: AppProps) {
   }, [currentData]);
 
   const scopeOptions = useMemo(() => {
-    if (currentData?.scopeConfig.source === "configured") {
-      return currentData.scopeConfig.projects ?? currentData.scopeConfig.scopes;
-    }
-    return [];
+    return currentData ? getProjectOptions(currentData.tasks, currentData.scopeConfig) : [];
   }, [currentData]);
   const projectFilter = useMemo(
     () => getEffectiveProjectFilter(currentData, scopeFilter),
@@ -804,18 +801,16 @@ export function selectTaskAfterRefresh(
 }
 
 function getEffectiveProjectFilter(
-  payload: Pick<TaskGraphPayload, "scopeConfig"> | null,
+  payload: Pick<TaskGraphPayload, "scopeConfig" | "tasks"> | null,
   scopeFilter: string,
 ) {
-  if (!payload || payload.scopeConfig.source !== "configured") {
+  if (!payload) {
     return "all";
   }
   if (scopeFilter === "all") {
     return "all";
   }
-  return (payload.scopeConfig.projects ?? payload.scopeConfig.scopes).some(
-    (scope) => scope.id === scopeFilter,
-  )
+  return getProjectOptions(payload.tasks, payload.scopeConfig).some((scope) => scope.id === scopeFilter)
     ? scopeFilter
     : "all";
 }

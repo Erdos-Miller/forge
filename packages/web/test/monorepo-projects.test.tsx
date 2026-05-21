@@ -58,30 +58,35 @@ function monorepoProjectPayload(): TaskGraphPayload {
       id: "F-mono-001",
       title: "Toolhub Wells route",
       area: "web",
+      project: "toolhub-wells",
       scope: ["product/toolhub/src/app/wells/**"],
     }),
     task({
       id: "F-mono-002",
       title: "Toolhub Travelers workflow",
       area: "core",
+      project: "toolhub-travelers",
       scope: ["product/toolhub/src/app/travelers/**", "lib/typescript/travelers/**"],
     }),
     task({
       id: "F-mono-003",
       title: "Toolhub Wells docs",
       area: "docs",
+      project: "toolhub-wells",
       scope: ["product/toolhub/docs/wells/**"],
     }),
     task({
       id: "F-mono-004",
       title: "Fluxchart comparison harness",
       area: "harness",
+      project: "fluxchart",
       scope: ["lib/typescript/fluxchart/comparisons/**"],
     }),
     task({
       id: "F-mono-005",
       title: "Shared UI regression tests",
       area: "test",
+      project: "shared-ui",
       scope: ["lib/typescript/ui/**"],
     }),
   ];
@@ -128,11 +133,12 @@ function monorepoProjectPayload(): TaskGraphPayload {
   };
 }
 
-function task(input: Pick<Task, "id" | "title" | "area" | "scope">): Task {
+function task(input: Pick<Task, "id" | "title" | "area" | "project" | "scope">): Task {
   return {
     id: input.id,
     title: input.title,
     area: input.area,
+    project: input.project,
     kind: "task",
     status: "open",
     priority: "high",

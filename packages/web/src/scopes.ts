@@ -1,5 +1,5 @@
 import type { Task } from "@forge/core";
-import type { ResolvedScopeConfigPayload } from "./api";
+import type { ResolvedScopeConfigPayload, ScopeFilterPayload } from "./api";
 import type { QueueTask } from "./workspace";
 
 export const OTHER_SCOPE = "Other";
@@ -22,13 +22,34 @@ export function taskMatchesScope(
   if (scopeFilter === "all") {
     return true;
   }
-  const configuredScope = getConfiguredProjects(scopeConfig).find(
-    (scope) => scope.id === scopeFilter,
+  const configuredProject = getConfiguredProjects(scopeConfig).find(
+    (project) => project.id === scopeFilter,
   );
-  if (configuredScope) {
-    return taskMatchesConfiguredScope(task, configuredScope);
+  if (configuredProject && !taskMatchesProjectRoot(task, configuredProject)) {
+    return false;
   }
-  return inferTaskScopeLabels(task).includes(scopeFilter);
+  return task.project === scopeFilter;
+}
+
+export function getProjectOptions(
+  tasks: Array<Task | QueueTask>,
+  scopeConfig?: ResolvedScopeConfigPayload,
+): ScopeFilterPayload[] {
+  const configuredProjects = getConfiguredProjects(scopeConfig);
+  const optionsById = new Map(configuredProjects.map((project) => [project.id, project]));
+  const unknownProjectIds = Array.from(
+    new Set(
+      tasks
+        .map((task) => task.project)
+        .filter((project): project is string => Boolean(project) && !optionsById.has(project)),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  for (const projectId of unknownProjectIds) {
+    optionsById.set(projectId, { id: projectId, label: projectId, paths: [] });
+  }
+
+  return [...configuredProjects, ...unknownProjectIds.map((projectId) => optionsById.get(projectId)!)];
 }
 
 export function inferTaskScopeLabels(task: Pick<Task, "scope">): string[] {
@@ -99,23 +120,24 @@ function isFileLike(part: string) {
   return /^[^.].*\.[a-z0-9]+$/i.test(part);
 }
 
-function taskMatchesConfiguredScope(
+function taskMatchesProjectRoot(
   task: Task | QueueTask,
-  configuredScope: ResolvedScopeConfigPayload["scopes"][number],
+  configuredProject: ResolvedScopeConfigPayload["scopes"][number],
 ) {
-  if (configuredScope.rootId && "workspaceRootId" in task) {
-    if (task.workspaceRootId !== configuredScope.rootId) {
+  if (configuredProject.rootId && "workspaceRootId" in task) {
+    if (task.workspaceRootId !== configuredProject.rootId) {
       return false;
     }
   }
-  return task.scope.some((taskScope) =>
-    configuredScope.paths.some((scopePath) => scopePathsOverlap(scopePath, taskScope)),
-  );
+  return true;
 }
 
 function getConfiguredProjects(
   scopeConfig: ResolvedScopeConfigPayload | undefined,
 ): ResolvedScopeConfigPayload["scopes"] {
+  if (scopeConfig?.source !== "configured") {
+    return [];
+  }
   return scopeConfig?.projects ?? scopeConfig?.scopes ?? [];
 }
 
