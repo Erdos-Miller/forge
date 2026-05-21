@@ -2,7 +2,7 @@
 id: F-0122
 title: "Expose header layout telemetry"
 kind: task
-status: open
+status: done
 priority: urgent
 project: "forge"
 area: "web"
@@ -14,8 +14,8 @@ scope:
   - "packages/web/**"
   - ".forge/tasks/**"
 created_at: 2026-05-21T17:26:34-05:00
-updated_at: 2026-05-21T17:26:34-05:00
-closed_at: ""
+updated_at: 2026-05-21T22:43:51.307Z
+closed_at: 2026-05-21T22:43:51.307Z
 close_reason: ""
 blocked_reason: ""
 review_reason: ""
@@ -72,6 +72,18 @@ Tracked in frontmatter: F-0121.
 ## Notes
 
 This task should not change header positioning. It prepares observable evidence for the next task.
+
+- Moved browser layout measurement into `packages/web/test/layout-contract.ts` so future contracts can reuse named rectangle failure output.
+- Header telemetry now covers stable test IDs for brand, Worktree, Project, top navigation, Queue, and Analytics.
+- Added desktop assertions for no overlap, left-to-right ordering, same-row placement, and label preservation.
+- Added a narrow/conditional-control case that proves hidden Worktree/Project controls are handled without forcing visible debug UI.
+- No screenshot assertions or Storybook references were added.
+Verification:
+- `bun run harness:web:layout`
+- `bun run harness:web`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun run --cwd packages/web build`
+- `rg -n "page\\.screenshot|toHaveScreenshot|storybook|Storybook" packages/web/test packages/web/src` returned no matches.
 
 ## History
 

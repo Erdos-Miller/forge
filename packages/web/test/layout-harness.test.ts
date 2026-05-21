@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import {
   createForgeFixtureWorkspace,
   minimalForgeFixtureTasks,
@@ -13,13 +13,14 @@ import {
   stopLiveForgeWeb,
   type LiveForgeWebServer,
 } from "./live-server";
-
-interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import {
+  expectInside,
+  expectLeftToRight,
+  expectNoOverlap,
+  expectSameRow,
+  expectWrappedBelow,
+  measureHeaderLayout,
+} from "./layout-contract";
 
 const browsers: Browser[] = [];
 const fixtureWorkspaces: ForgeFixtureWorkspace[] = [];
@@ -56,98 +57,70 @@ describe("Forge web layout harness", () => {
 
     const server = await startLiveForgeWeb(workspace.workspaceRoot);
     servers.push(server);
-    const page = await openFixturePage(server);
+    const page = await openFixturePage(
+      server,
+      "/?repo=web-client-with-a-long-layout-name",
+    );
 
-    const topbar = await measure(page.getByTestId("forge-topbar"), "forge-topbar", page);
-    const brand = await measure(page.getByTestId("forge-brand"), "forge-brand", page);
-    const controls = await measure(
-      page.getByTestId("forge-header-controls"),
-      "forge-header-controls",
-      page,
-    );
-    const worktree = await measure(
-      page.getByTestId("forge-worktree-control"),
-      "forge-worktree-control",
-      page,
-    );
-    const project = await measure(
-      page.getByTestId("forge-project-control"),
-      "forge-project-control",
-      page,
-    );
-    const nav = await measure(page.getByTestId("forge-top-nav"), "forge-top-nav", page);
+    const layout = await measureHeaderLayout(page);
 
-    assertPositive("topbar", topbar);
-    assertInside("brand", brand, topbar, page);
-    assertInside("controls", controls, topbar, page);
-    assertInside("navigation", nav, topbar, page);
-    assertLeftToRight("worktree before project", worktree, project, page);
+    expect(layout.controls).toBeDefined();
+    expect(layout.worktree).toBeDefined();
+    expect(layout.project).toBeDefined();
+    expect(layout.topbar.width, "topbar width should be positive").toBeGreaterThan(0);
+    expect(layout.topbar.height, "topbar height should be positive").toBeGreaterThan(0);
+    await expectInside(page, "brand", layout.brand, layout.topbar);
+    await expectInside(page, "controls", layout.controls!, layout.topbar);
+    await expectInside(page, "navigation", layout.nav, layout.topbar);
+    await expectSameRow(page, "desktop brand and navigation", layout.brand, layout.nav);
+    await expectNoOverlap(page, "desktop brand and controls", layout.brand, layout.controls!);
+    await expectNoOverlap(page, "desktop controls and navigation", layout.controls!, layout.nav);
+    await expectLeftToRight(page, "Worktree before Project", layout.worktree!, layout.project!);
+    await expectLeftToRight(page, "Queue before Analytics", layout.queueTab, layout.analyticsTab);
+    await expectHeaderLabels(page);
+  });
+
+  test("reports conditional controls and narrow wrapping without screenshots", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-layout-minimal-",
+      roots: [{ name: "solo", tasks: minimalForgeFixtureTasks() }],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const server = await startLiveForgeWeb(workspace.workspaceRoot);
+    servers.push(server);
+    const page = await openFixturePage(server, "/", 420);
+
+    const layout = await measureHeaderLayout(page);
+
+    expect(layout.worktree).toBeUndefined();
+    expect(layout.project).toBeUndefined();
+    await expectWrappedBelow(page, "narrow navigation after brand", layout.brand, layout.nav);
+    await expectLeftToRight(page, "Queue before Analytics", layout.queueTab, layout.analyticsTab);
   });
 });
 
-async function openFixturePage(server: LiveForgeWebServer): Promise<Page> {
+async function openFixturePage(
+  server: LiveForgeWebServer,
+  route: string,
+  width = 1280,
+): Promise<Page> {
   const browser = await chromium.launch({ headless: true });
   browsers.push(browser);
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  await page.goto(`${serverUrl(server)}/?repo=web-client-with-a-long-layout-name`, {
-    waitUntil: "networkidle",
-  });
+  const page = await browser.newPage({ viewport: { width, height: 720 } });
+  await page.goto(`${serverUrl(server)}${route}`, { waitUntil: "networkidle" });
   return page;
 }
 
-async function measure(locator: Locator, name: string, page: Page): Promise<Rect> {
-  await locator.waitFor({ state: "visible", timeout: 5_000 });
-  const box = await locator.boundingBox();
-  if (!box) {
-    throw new Error(await layoutFailure(page, `${name} has no bounding box`));
-  }
-  return box;
+async function expectHeaderLabels(page: Page): Promise<void> {
+  await expectText(page.getByTestId("forge-worktree-control"), "Worktree");
+  await expectText(page.getByTestId("forge-project-control"), "Project");
+  await expectText(page.getByTestId("forge-queue-tab"), "Queue");
+  await expectText(page.getByTestId("forge-analytics-tab"), "Analytics");
 }
 
-function assertPositive(name: string, rect: Rect): void {
-  expect(rect.width, `${name} width should be positive`).toBeGreaterThan(0);
-  expect(rect.height, `${name} height should be positive`).toBeGreaterThan(0);
-}
-
-async function assertInside(
-  name: string,
-  child: Rect,
-  parent: Rect,
-  page: Page,
-): Promise<void> {
-  const inside =
-    child.x >= parent.x &&
-    child.y >= parent.y &&
-    child.x + child.width <= parent.x + parent.width + 1 &&
-    child.y + child.height <= parent.y + parent.height + 1;
-
-  if (!inside) {
-    throw new Error(await layoutFailure(page, `${name} is outside the header`, { child, parent }));
-  }
-}
-
-async function assertLeftToRight(
-  name: string,
-  left: Rect,
-  right: Rect,
-  page: Page,
-): Promise<void> {
-  if (left.x > right.x) {
-    throw new Error(await layoutFailure(page, `${name} failed`, { left, right }));
-  }
-}
-
-async function layoutFailure(
-  page: Page,
-  message: string,
-  rectangles: Record<string, Rect> = {},
-): Promise<string> {
-  return [
-    message,
-    `url: ${page.url()}`,
-    `viewport: ${JSON.stringify(page.viewportSize())}`,
-    `rectangles: ${JSON.stringify(rectangles, null, 2)}`,
-  ].join("\n");
+async function expectText(locator: ReturnType<Page["getByTestId"]>, expected: string) {
+  expect(await locator.textContent()).toContain(expected);
 }
 
 async function writeProjectConfig(repoRoot: string): Promise<void> {
