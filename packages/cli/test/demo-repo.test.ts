@@ -1,21 +1,36 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { analyzeTasks, loadTasksFrom, rankReadyTasks } from "@forge/core";
+import {
+  analyzeTasks,
+  discoverForgeRootsDownward,
+  loadTasksFrom,
+  rankReadyTasks,
+} from "@forge/core";
 import { parseWebArgs } from "../src/args";
 import {
   createDemoForgeRepo,
+  createDemoForgeWorkspace,
   type DemoForgeRepo,
+  type DemoForgeWorkspace,
 } from "../src/demo-repo";
 
 const demoRepos: DemoForgeRepo[] = [];
+const demoWorkspaces: DemoForgeWorkspace[] = [];
 
 afterEach(async () => {
   await Promise.all(demoRepos.splice(0).map((repo) => repo.cleanup()));
+  await Promise.all(demoWorkspaces.splice(0).map((workspace) => workspace.cleanup()));
 });
 
 async function makeDemoRepo(): Promise<DemoForgeRepo> {
   const repo = await createDemoForgeRepo();
   demoRepos.push(repo);
   return repo;
+}
+
+async function makeDemoWorkspace(): Promise<DemoForgeWorkspace> {
+  const workspace = await createDemoForgeWorkspace();
+  demoWorkspaces.push(workspace);
+  return workspace;
 }
 
 describe("web demo mode", () => {
@@ -33,6 +48,18 @@ describe("web demo mode", () => {
     expect(new Set(tasks.map((task) => task.area)).size).toBeGreaterThanOrEqual(5);
     expect(analysis.missingDependencies).toEqual([]);
     expect(analysis.dependencyCycles).toEqual([]);
+  });
+
+  test("creates a multi-root demo workspace for workspace switching", async () => {
+    const workspace = await makeDemoWorkspace();
+    const roots = await discoverForgeRootsDownward(workspace.workspaceRoot);
+
+    expect(roots.map((root) => root.id)).toEqual(["agent-runtime", "forge-ui"]);
+    expect(roots.every((root) => root.taskCount > 0)).toBe(true);
+    for (const root of roots) {
+      const tasks = await loadTasksFrom(root.path);
+      expect(rankReadyTasks(tasks).length).toBeGreaterThan(0);
+    }
   });
 
   test("parses demo web arguments without changing status behavior", () => {

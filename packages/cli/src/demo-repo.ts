@@ -24,20 +24,53 @@ export interface DemoForgeRepo {
   cleanup: () => Promise<void>;
 }
 
+export interface DemoForgeWorkspace {
+  workspaceRoot: string;
+  repoRoots: string[];
+  cleanup: () => Promise<void>;
+}
+
 export async function createDemoForgeRepo(): Promise<DemoForgeRepo> {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-demo-"));
-  const tasksDir = path.join(repoRoot, ".forge", "tasks");
-  await fs.mkdir(tasksDir, { recursive: true });
-  await fs.writeFile(path.join(repoRoot, "README.md"), "# Forge Demo\n");
-  await fs.mkdir(path.join(repoRoot, "packages", "web", "src"), { recursive: true });
-  await fs.mkdir(path.join(repoRoot, "packages", "api", "src"), { recursive: true });
-  await fs.mkdir(path.join(repoRoot, "packages", "docs"), { recursive: true });
-  await Promise.all(demoTasks.map((task) => writeDemoTask(tasksDir, task)));
+  await writeDemoForgeRepo(repoRoot, "Forge Demo", demoTasks);
 
   return {
     repoRoot,
     cleanup: () => fs.rm(repoRoot, { recursive: true, force: true }),
   };
+}
+
+export async function createDemoForgeWorkspace(): Promise<DemoForgeWorkspace> {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-demo-workspace-"));
+  const repoRoots = [
+    path.join(workspaceRoot, "forge-ui"),
+    path.join(workspaceRoot, "agent-runtime"),
+  ];
+
+  await Promise.all([
+    writeDemoForgeRepo(repoRoots[0], "Forge UI Demo", demoTasks),
+    writeDemoForgeRepo(repoRoots[1], "Forge Agent Runtime Demo", agentRuntimeDemoTasks),
+  ]);
+
+  return {
+    workspaceRoot,
+    repoRoots,
+    cleanup: () => fs.rm(workspaceRoot, { recursive: true, force: true }),
+  };
+}
+
+async function writeDemoForgeRepo(
+  repoRoot: string,
+  title: string,
+  tasks: DemoTask[],
+): Promise<void> {
+  const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  await fs.mkdir(tasksDir, { recursive: true });
+  await fs.writeFile(path.join(repoRoot, "README.md"), `# ${title}\n`);
+  await fs.mkdir(path.join(repoRoot, "packages", "web", "src"), { recursive: true });
+  await fs.mkdir(path.join(repoRoot, "packages", "api", "src"), { recursive: true });
+  await fs.mkdir(path.join(repoRoot, "packages", "docs"), { recursive: true });
+  await Promise.all(tasks.map((task) => writeDemoTask(tasksDir, task)));
 }
 
 async function writeDemoTask(tasksDir: string, task: DemoTask): Promise<void> {
@@ -429,6 +462,120 @@ const demoTasks: DemoTask[] = [
       acceptance: [
         "Graceful shutdown removes the temp repo.",
         "Session discovery ignores stale demo records.",
+      ],
+    }),
+  },
+];
+
+const agentRuntimeDemoTasks: DemoTask[] = [
+  {
+    id: "F-2001",
+    title: "Keep loop prompt aligned with task fields",
+    status: "open",
+    priority: "urgent",
+    area: "cli",
+    scope: ["packages/cli/**"],
+    depends_on: ["F-2004"],
+    created_at: "2026-05-14T09:00:00-05:00",
+    updated_at: "2026-05-18T15:00:00-05:00",
+    body: body({
+      why:
+        "The agent runtime repo should demonstrate the same expected task brief " +
+        "shape without sharing files with the UI demo repo.",
+      success:
+        "The workspace switcher can move from UI work to agent-runtime work and " +
+        "still show a readable selected task.",
+      acceptance: [
+        "The repo appears as a separate workspace option.",
+        "The ready queue contains at least one high-priority CLI task.",
+        "The selected detail starts with Why and What success looks like.",
+      ],
+    }),
+  },
+  {
+    id: "F-2002",
+    title: "Add agent closeout smoke fixture",
+    status: "open",
+    priority: "high",
+    area: "test",
+    scope: ["packages/cli/test/**"],
+    depends_on: ["F-2001"],
+    created_at: "2026-05-14T11:00:00-05:00",
+    updated_at: "2026-05-17T10:30:00-05:00",
+    body: body({
+      why:
+        "The execution loop is easier to trust when the harness proves closeout " +
+        "notes and task status move together.",
+      success: "A fixture completes one task and leaves the queue with a clear next task.",
+      acceptance: [
+        "The fixture claims, notes, closes, and reloads the task graph.",
+        "The expected next task is stable.",
+      ],
+    }),
+  },
+  {
+    id: "F-2003",
+    title: "Document personal guidance lookup",
+    status: "doing",
+    priority: "medium",
+    area: "docs",
+    scope: ["README.md"],
+    claimed_by: "codex",
+    depends_on: ["F-2004"],
+    created_at: "2026-05-15T10:00:00-05:00",
+    updated_at: "2026-05-18T09:30:00-05:00",
+    body: body({
+      why:
+        "Personal guidance should be visible enough for agents to use without " +
+        "burying project instructions in hidden repo files.",
+      success: "The docs show the config path and the CLI command that prints it.",
+      acceptance: [
+        "The docs avoid project-local hidden guidance files.",
+        "The example uses `forge user-guidance`.",
+      ],
+      notes: "Claimed to demonstrate in-progress work in the second demo repo.",
+    }),
+  },
+  {
+    id: "F-2004",
+    title: "Parse workspace session metadata",
+    status: "done",
+    priority: "high",
+    area: "cli",
+    scope: ["packages/cli/**"],
+    created_at: "2026-05-12T13:00:00-05:00",
+    updated_at: "2026-05-14T14:00:00-05:00",
+    closed_at: "2026-05-14T14:00:00-05:00",
+    close_reason: "Workspace session metadata is now discoverable from each root.",
+    body: body({
+      why:
+        "Terminal links from separate worktrees need a shared server identity and " +
+        "a repo id for deep links.",
+      success: "A session file in either root can describe the same workspace server.",
+      acceptance: [
+        "Single-root links remain unchanged.",
+        "Workspace links include repo and task query params.",
+      ],
+    }),
+  },
+  {
+    id: "F-2005",
+    title: "Handle stale workspace sessions",
+    status: "blocked",
+    priority: "low",
+    area: "cli",
+    scope: ["packages/cli/**"],
+    depends_on: ["F-2002"],
+    created_at: "2026-05-16T12:00:00-05:00",
+    updated_at: "2026-05-18T08:00:00-05:00",
+    body: body({
+      why:
+        "A dead web server should not leave clickable terminal links pointing at " +
+        "a stale workspace.",
+      success: "Session discovery removes dead records from every indexed root.",
+      acceptance: [
+        "Stale pids clear all workspace session files.",
+        "Missing sessions fall back to plain task ids.",
       ],
     }),
   },

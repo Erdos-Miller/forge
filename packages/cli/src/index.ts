@@ -47,7 +47,10 @@ import {
   getTaskCloseoutGuidance,
   inspectTaskStore,
 } from "./doctor";
-import { createDemoForgeRepo, type DemoForgeRepo } from "./demo-repo";
+import {
+  createDemoForgeWorkspace,
+  type DemoForgeWorkspace,
+} from "./demo-repo";
 import { formatAgentPrompt, formatLoopPrompt } from "./prompt-format";
 import {
   formatAgentHelp,
@@ -681,16 +684,19 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
     return 0;
   }
 
-  let demoRepo: DemoForgeRepo | null = null;
+  let demoWorkspace: DemoForgeWorkspace | null = null;
   const webRootInfo = webOptions.demo
-    ? await resolveDemoWebRootInfo((demoRepo = await createDemoForgeRepo()).repoRoot)
+    ? await resolveWebStartRepoRoot(
+        (demoWorkspace = await createDemoForgeWorkspace()).workspaceRoot,
+      )
     : await resolveWebStartRepoRoot(webOptions.startDir);
   const repoRoot = webRootInfo.repoRoot;
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
   const actualPort = await findAvailablePort(webOptions.host, webOptions.port);
   const url = `http://${webOptions.host}:${actualPort}/`;
+  const servedPath = demoWorkspace?.workspaceRoot ?? repoRoot;
 
-  options.stdout(`${webOptions.demo ? "serving demo" : "serving"} ${repoRoot}`);
+  options.stdout(`${webOptions.demo ? "serving demo" : "serving"} ${servedPath}`);
   options.stdout(url);
 
   const child = Bun.spawn(
@@ -709,7 +715,9 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
       cwd: webPackageDir,
       env: {
         ...process.env,
-        FORGE_START_DIR: webOptions.demo ? repoRoot : path.resolve(webOptions.startDir),
+        FORGE_START_DIR: webOptions.demo
+          ? demoWorkspace?.workspaceRoot ?? repoRoot
+          : path.resolve(webOptions.startDir),
       },
       stderr: "inherit",
       stdin: "inherit",
@@ -735,7 +743,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
     process.off("SIGINT", stopChild);
     process.off("SIGTERM", stopChild);
     await removeWebSession(repoRoot, child.pid);
-    await demoRepo?.cleanup();
+    await demoWorkspace?.cleanup();
   }
 }
 
@@ -803,15 +811,6 @@ function writeDependencyEditError(options: CliOptions, error: unknown): number {
     }),
   );
   return 1;
-}
-
-async function resolveDemoWebRootInfo(
-  repoRoot: string,
-): Promise<{ repoRoot: string; discoveredRoots: DiscoveredForgeRoot[] }> {
-  return {
-    repoRoot,
-    discoveredRoots: await discoverForgeRootsDownward(repoRoot),
-  };
 }
 
 function writeTaskLines(
