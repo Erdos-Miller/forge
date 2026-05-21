@@ -161,6 +161,7 @@ describe("forge cli", () => {
       "blockers",
       "user-guidance",
       "worktree-status",
+      "archive",
       "projects",
       "scopes",
       "deps",
@@ -249,6 +250,7 @@ describe("forge cli", () => {
     expect(text).toContain("Inspect:\n- forge commands --json [read]");
     expect(text).toContain("- forge user-guidance [read]");
     expect(text).toContain("- forge worktree-status --json [--task <id>] [read]");
+    expect(text).toContain("- forge archive --dry-run --json [read]");
     expect(text).toContain("continue on non_blocking, pause on review, stop on blocking");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title>");

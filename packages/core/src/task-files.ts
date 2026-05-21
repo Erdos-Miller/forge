@@ -58,6 +58,18 @@ export interface DiscoveredForgeRoot {
   taskCount: number;
 }
 
+export interface TaskLoadOptions {
+  includeArchive?: boolean;
+}
+
+export interface ClosedTaskArchivePlanItem {
+  taskId: string;
+  title: string;
+  status: "done" | "canceled";
+  from: string;
+  to: string;
+}
+
 const WORKSPACE_DISCOVERY_IGNORED_DIRS = new Set([
   ".cache",
   ".git",
@@ -243,13 +255,19 @@ function normalizeRootId(relativePath: string): string {
   return relativePath.split(path.sep).filter(Boolean).join("/");
 }
 
-export async function loadTasks(repoRoot = process.cwd()): Promise<Task[]> {
-  const parsedTasks = await loadParsedTaskFiles(repoRoot);
+export async function loadTasks(
+  repoRoot = process.cwd(),
+  options: TaskLoadOptions = {},
+): Promise<Task[]> {
+  const parsedTasks = await loadParsedTaskFiles(repoRoot, options);
   return parsedTasks.map((parsedTask) => parsedTask.task);
 }
 
-export async function loadTasksFrom(startDir = process.cwd()): Promise<Task[]> {
-  return loadTasks(await findForgeRoot(startDir));
+export async function loadTasksFrom(
+  startDir = process.cwd(),
+  options: TaskLoadOptions = {},
+): Promise<Task[]> {
+  return loadTasks(await findForgeRoot(startDir), options);
 }
 
 export async function createTask(
@@ -363,13 +381,14 @@ export function createTaskBody(input: CreateTaskInput, timestamp: string): strin
 
 export async function loadParsedTaskFiles(
   repoRoot = process.cwd(),
+  options: TaskLoadOptions = {},
 ): Promise<ParsedTask[]> {
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
-  const entries = await fs.readdir(tasksDir, { withFileTypes: true });
-  const files = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => path.join(tasksDir, entry.name))
-    .sort();
+  const archiveDir = path.join(repoRoot, ".forge", "archive");
+  const files = [
+    ...(await listTaskMarkdownFiles(tasksDir)),
+    ...(options.includeArchive === false ? [] : await listTaskMarkdownFiles(archiveDir)),
+  ].sort();
 
   const tasks = await Promise.all(
     files.map(async (filePath) => {
@@ -378,6 +397,50 @@ export async function loadParsedTaskFiles(
   );
 
   return tasks;
+}
+
+export async function getClosedTaskArchivePlan(
+  repoRoot = process.cwd(),
+): Promise<ClosedTaskArchivePlanItem[]> {
+  const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  const archiveDir = path.join(repoRoot, ".forge", "archive");
+  const parsedTasks = await loadParsedTaskFiles(repoRoot, { includeArchive: false });
+  return parsedTasks
+    .filter((parsedTask) =>
+      parsedTask.task.status === "done" || parsedTask.task.status === "canceled",
+    )
+    .map((parsedTask) => {
+      const relativePath = path.relative(tasksDir, parsedTask.task.sourcePath);
+      return {
+        taskId: parsedTask.task.id,
+        title: parsedTask.task.title,
+        status: parsedTask.task.status as "done" | "canceled",
+        from: parsedTask.task.sourcePath,
+        to: path.join(archiveDir, relativePath),
+      };
+    });
+}
+
+async function listTaskMarkdownFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return (
+      await Promise.all(
+        entries.map(async (entry) => {
+          const entryPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            return listTaskMarkdownFiles(entryPath);
+          }
+          return entry.isFile() && entry.name.endsWith(".md") ? [entryPath] : [];
+        }),
+      )
+    ).flat();
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function readTaskFile(sourcePath: string): Promise<ParsedTask> {

@@ -115,6 +115,15 @@ export const COMMANDS = [
       "Classify dirty files: continue on non_blocking, pause on review, stop on blocking.",
   },
   {
+    name: "archive",
+    usage: "forge archive --dry-run --json",
+    description: "Plan which closed task files would move to the archive.",
+    classification: "read",
+    supportsJson: true,
+    examples: ["forge archive --dry-run --json"],
+    agentPurpose: "Inspect closed-task archive moves without mutating files.",
+  },
+  {
     name: "projects",
     usage:
       "forge projects --json | forge projects infer --json | " +
@@ -324,6 +333,7 @@ export const COMMAND_WORKFLOWS = {
   blockers: "inspect",
   "user-guidance": "inspect",
   "worktree-status": "inspect",
+  archive: "inspect",
   projects: "mutate",
   scopes: "mutate",
   deps: "mutate",

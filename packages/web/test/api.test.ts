@@ -141,6 +141,27 @@ describe("getTaskGraphPayload", () => {
     expect(payload.diagnostics.missingDependencies).toEqual([]);
   });
 
+  test("includes archived closed tasks in graph history", async () => {
+    const { repoRoot } = await makeRepo();
+    const archiveDir = path.join(repoRoot, ".forge", "archive");
+    await fs.mkdir(archiveDir, { recursive: true });
+    await fs.writeFile(
+      path.join(archiveDir, "F-0000-archived.md"),
+      taskFile({ id: "F-0000", title: "Archived", status: "done", area: "docs" }),
+    );
+
+    const payload = await getTaskGraphPayload(repoRoot);
+
+    expect(payload.tasks.map((task) => task.id)).toEqual([
+      "F-0000",
+      "F-0001",
+      "F-0002",
+      "F-0003",
+    ]);
+    expect(payload.readyTaskIds).toEqual(["F-0002"]);
+    expect(payload.availabilityByTaskId["F-0000"]).toBe("closed");
+  });
+
   test("loads configured scope labels into the task graph payload", async () => {
     const { repoRoot } = await makeRepo();
     await writeScopeConfig(

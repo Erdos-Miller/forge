@@ -131,7 +131,9 @@ export async function removeScopeConfigEntry(
 }
 
 export async function inferScopeConfigEntries(repoRoot: string): Promise<ScopeConfigEntry[]> {
-  return inferScopeConfigEntriesFromTasks(await loadTasks(repoRoot));
+  return inferScopeConfigEntriesFromTasks(
+    await loadTasks(repoRoot, { includeArchive: false }),
+  );
 }
 
 export function inferScopeConfigEntriesFromTasks(tasks: Task[]): ScopeConfigEntry[] {

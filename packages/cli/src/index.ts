@@ -13,6 +13,7 @@ import {
   findForgeRoot,
   inferScopeConfigEntries,
   getReadyTasks,
+  getClosedTaskArchivePlan,
   loadTasksFrom,
   rankReadyTaskQueue,
   rankReadyTasks,
@@ -117,6 +118,7 @@ const COMMAND_HANDLERS = {
   blockers,
   "user-guidance": userGuidance,
   "worktree-status": worktreeStatus,
+  archive,
   projects,
   scopes,
   deps,
@@ -204,6 +206,24 @@ async function help(options: CliOptions, args: string[]): Promise<number> {
   }
 
   options.stdout(formatAgentHelp());
+  return 0;
+}
+
+async function archive(options: CliOptions, args: string[]): Promise<number> {
+  if (args.length !== 2 || args[0] !== "--dry-run" || args[1] !== "--json") {
+    return writeJsonUsageError(options, "usage: forge archive --dry-run --json");
+  }
+  const repoRoot = await findForgeRoot(options.cwd);
+  const tasks = await getClosedTaskArchivePlan(repoRoot);
+  options.stdout(
+    stringifyJson({
+      ok: true,
+      version: 1,
+      repoRoot,
+      dryRun: true,
+      tasks,
+    }),
+  );
   return 0;
 }
 

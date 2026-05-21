@@ -19,6 +19,11 @@ require in arbitrary user repos.
 
 Tasks live in `.forge/tasks/*.md`.
 
+Closed tasks may move to `.forge/archive/` after completion. Archived tasks keep
+the same Markdown format and task IDs. Forge loads them for history, analytics,
+and dependency references, while default queue and list views remain focused on
+unfinished work.
+
 Use plain YAML frontmatter followed by a normal Markdown body:
 
 ```markdown

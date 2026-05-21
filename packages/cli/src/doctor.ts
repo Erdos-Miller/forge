@@ -38,10 +38,16 @@ export async function inspectTaskStore(
   repoRoot: string,
 ): Promise<{ tasks: Task[]; diagnostics: DoctorDiagnostic[] }> {
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
+  const archiveDir = path.join(repoRoot, ".forge", "archive");
   const diagnostics: DoctorDiagnostic[] = [];
   const tasks: Task[] = [];
+  const taskFilePaths = (
+    await Promise.all([tasksDir, archiveDir].map((dir) => listMarkdownFiles(dir)))
+  )
+    .flat()
+    .sort();
 
-  for (const sourcePath of await listMarkdownFiles(tasksDir)) {
+  for (const sourcePath of taskFilePaths) {
     const contents = await fs.readFile(sourcePath, "utf8");
     if (contents.includes("<<<<<<<") || contents.includes("=======") || contents.includes(">>>>>>>")) {
       diagnostics.push({
@@ -65,7 +71,15 @@ export async function inspectTaskStore(
 }
 
 async function listMarkdownFiles(dir: string): Promise<string[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
   return (
     await Promise.all(
       entries.map(async (entry) => {

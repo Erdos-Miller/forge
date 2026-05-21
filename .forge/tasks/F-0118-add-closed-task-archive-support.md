@@ -2,7 +2,7 @@
 id: F-0118
 title: "Add closed-task archive support"
 kind: task
-status: open
+status: done
 priority: medium
 area: "core"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:58:54.273Z
+closed_at: 2026-05-21T21:58:54.273Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add closed-task archive support
 
@@ -73,6 +77,13 @@ Tracked in frontmatter: F-0111.
 This task should make archive readable first. Moving existing closed tasks can come later.
 
 Decision: Closed-task archiving should be readable and non-disruptive before Forge adds any command that moves task files.
+
+- Added archive-aware task loading: `.forge/tasks/` remains the active store while `.forge/archive/` is included for graph/history reads.
+- Added `forge archive --dry-run --json` to preview closed task moves without mutating files.
+- Updated doctor to include archived tasks when validating dependency references, so active tasks can depend on archived closed tasks.
+- Kept inferred Project suggestions active-only so historical archived tasks do not pollute current project setup.
+- Added core, CLI, doctor, and web API coverage for active-only loading, archive history, archived dependencies, and archive dry-run output.
+- Verification: `bun test packages/core/test/archive.test.ts packages/cli/test/archive.test.ts packages/cli/test/cli.test.ts packages/web/test/api.test.ts`; `bun test packages/core/test/readability-ratchet.test.ts`; `bun run harness:check`; `forge doctor --json`; `forge archive --dry-run --json`.
 
 ## History
 
