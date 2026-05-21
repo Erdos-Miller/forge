@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import type { TaskCoordinationPayload, TaskGraphPayload } from "./api";
 import { shouldShowDoneInQueue } from "./queue-visibility";
-import { getInferredScopeOptions, taskMatchesScope } from "./scopes";
+import { taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
 import {
@@ -117,12 +117,12 @@ export function App({ initialData }: AppProps) {
     if (currentData?.scopeConfig.source === "configured") {
       return currentData.scopeConfig.scopes;
     }
-    return getInferredScopeOptions(currentData?.tasks ?? []).map((scope) => ({
-      id: scope,
-      label: scope,
-      paths: [],
-    }));
+    return [];
   }, [currentData]);
+  const projectFilter = useMemo(
+    () => getEffectiveProjectFilter(currentData, scopeFilter),
+    [currentData, scopeFilter],
+  );
 
   const recommendedTasks = useMemo(() => {
     if (!currentData) {
@@ -131,14 +131,14 @@ export function App({ initialData }: AppProps) {
     return currentData.recommendedTaskIds
       .map((taskId) => tasksById.get(taskId))
       .filter((task): task is Task => Boolean(task))
-      .filter((task) => taskMatchesScope(task, scopeFilter, currentData.scopeConfig));
-  }, [currentData, scopeFilter, tasksById]);
+      .filter((task) => taskMatchesScope(task, projectFilter, currentData.scopeConfig));
+  }, [currentData, projectFilter, tasksById]);
 
   const scopedTasks = useMemo(() => {
     return (currentData?.tasks ?? []).filter((task) =>
-      taskMatchesScope(task, scopeFilter, currentData?.scopeConfig),
+      taskMatchesScope(task, projectFilter, currentData?.scopeConfig),
     );
-  }, [currentData, scopeFilter]);
+  }, [currentData, projectFilter]);
 
   const blockedOpenTasks = useMemo(() => {
     return scopedTasks.filter((task) => {
@@ -284,17 +284,22 @@ export function App({ initialData }: AppProps) {
               </select>
             </label>
           ) : null}
-          <label className="headerControl">
-            <span>Project</span>
-            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)}>
-              <option value="all">All</option>
-              {scopeOptions.map((scope) => (
-                <option key={scope.id} value={scope.id}>
-                  {scope.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {scopeOptions.length > 0 ? (
+            <label className="headerControl">
+              <span>Project</span>
+              <select
+                value={projectFilter}
+                onChange={(event) => setScopeFilter(event.target.value)}
+              >
+                <option value="all">All projects</option>
+                {scopeOptions.map((scope) => (
+                  <option key={scope.id} value={scope.id}>
+                    {scope.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <nav className="topNav" aria-label="Forge views">
           <button
@@ -767,8 +772,9 @@ export function selectTaskAfterRefresh(
   showDone = false,
   urlRequestedTaskId: string | null = null,
 ): string | null {
+  const projectFilter = getEffectiveProjectFilter(payload, scopeFilter);
   const scopedTasks = payload.tasks.filter((task) =>
-    taskMatchesScope(task, scopeFilter, payload.scopeConfig),
+    taskMatchesScope(task, projectFilter, payload.scopeConfig),
   );
   const effectiveShowDone = shouldShowDoneInQueue(scopedTasks, showDone);
   const recommendedRank = new Map(
@@ -794,6 +800,21 @@ export function selectTaskAfterRefresh(
   }
 
   return visibleTasks[0]?.id ?? null;
+}
+
+function getEffectiveProjectFilter(
+  payload: Pick<TaskGraphPayload, "scopeConfig"> | null,
+  scopeFilter: string,
+) {
+  if (!payload || payload.scopeConfig.source !== "configured") {
+    return "all";
+  }
+  if (scopeFilter === "all") {
+    return "all";
+  }
+  return payload.scopeConfig.scopes.some((scope) => scope.id === scopeFilter)
+    ? scopeFilter
+    : "all";
 }
 
 export function getKeyboardQueueSelection(

@@ -478,7 +478,7 @@ describe("App", () => {
     expect(html).not.toContain("F-9999.md");
   });
 
-  test("renders inferred scope options instead of raw edit paths", () => {
+  test("hides Project selector instead of rendering inferred edit-scope options", () => {
     const html = renderToStaticMarkup(
       <App
         initialData={graphPayload("/workspace", [
@@ -499,14 +499,15 @@ describe("App", () => {
       />,
     );
 
-    expect(html).toContain('<option value="packages/web">packages/web</option>');
-    expect(html).toContain('<option value="lib/typescript/ui">lib/typescript/ui</option>');
-    expect(html).toContain('<option value="Other">Other</option>');
+    expect(html).not.toContain(">Project<");
+    expect(html).not.toContain('<option value="packages/web">packages/web</option>');
+    expect(html).not.toContain('<option value="lib/typescript/ui">lib/typescript/ui</option>');
+    expect(html).not.toContain('<option value="Other">Other</option>');
     expect(html).not.toContain('<option value="README.md">README.md</option>');
     expect(html).not.toContain("components/Wells");
   });
 
-  test("renders configured scope labels while preserving raw task scope detail", () => {
+  test("renders configured Project labels while preserving raw task scope detail", () => {
     const configuredPayload: TaskGraphPayload = {
       ...payload,
       scopeConfig: {
@@ -520,12 +521,14 @@ describe("App", () => {
 
     const html = renderToStaticMarkup(<App initialData={configuredPayload} />);
 
+    expect(html).toContain(">Project<");
+    expect(html).toContain("All projects</option>");
     expect(html).toContain('<option value="ui">UI</option>');
     expect(html).toContain('<option value="backend">Backend</option>');
     expect(html).toContain("packages/web/**");
   });
 
-  test("uses configured scope matching when selecting after refresh", () => {
+  test("uses configured Project matching when selecting after refresh", () => {
     const configuredPayload: TaskGraphPayload = {
       ...payload,
       scopeConfig: {
@@ -535,7 +538,16 @@ describe("App", () => {
     };
 
     expect(selectTaskAfterRefresh("missing", configuredPayload, "ui")).toBe("F-0002");
-    expect(selectTaskAfterRefresh("missing", configuredPayload, "unknown")).toBeNull();
+    expect(selectTaskAfterRefresh("missing", configuredPayload, "unknown")).toBe("F-0002");
+  });
+
+  test("ignores stale Project filters for repos without project config", () => {
+    const noConfigPayload = graphPayload("/workspace", [
+      { ...payload.tasks[1], id: "F-web", scope: ["packages/web/**"] },
+      { ...payload.tasks[2], id: "F-core", scope: ["packages/core/**"] },
+    ]);
+
+    expect(selectTaskAfterRefresh("missing", noConfigPayload, "packages/core")).toBe("F-web");
   });
 
   test("renders an empty workspace without a repo switcher", () => {
@@ -622,14 +634,26 @@ describe("App", () => {
   });
 
   test("renders stable header controls for long worktree and project labels", () => {
-    const longGraph = graphPayload("/workspace/very-long-worktree", [
-      {
-        ...payload.tasks[1],
-        id: "F-long",
-        title: "Long label task",
-        scope: ["packages/web/src/components/very/deep/feature/**"],
+    const longGraph: TaskGraphPayload = {
+      ...graphPayload("/workspace/very-long-worktree", [
+        {
+          ...payload.tasks[1],
+          id: "F-long",
+          title: "Long label task",
+          scope: ["packages/web/src/components/very/deep/feature/**"],
+        },
+      ]),
+      scopeConfig: {
+        source: "configured",
+        scopes: [
+          {
+            id: "long-project",
+            label: "Very long project name for truncation",
+            paths: ["packages/web/src/components/very/deep/feature/**"],
+          },
+        ],
       },
-    ]);
+    };
     const longPayload: WorkspaceTaskGraphPayload = {
       ...longGraph,
       workspace: {
@@ -652,7 +676,7 @@ describe("App", () => {
       html.indexOf('class="topNav"'),
     );
     expect(html).toContain("very-long-worktree-name-for-header-truncation");
-    expect(html).toContain("packages/web");
+    expect(html).toContain("Very long project name for truncation");
   });
 
   test("selects a repo and task from URL params", () => {
@@ -738,9 +762,9 @@ describe("App", () => {
     expect(selectTaskAfterRefresh("F-9999", payload, "all", false, "F-9999")).toBe(
       "F-9999",
     );
-    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBe("F-0001");
-    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core", true)).toBe("F-0001");
-    expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBeNull();
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core")).toBe("F-0002");
+    expect(selectTaskAfterRefresh("F-9999", payload, "packages/core", true)).toBe("F-0002");
+    expect(selectTaskAfterRefresh("F-9999", payload, "missing")).toBe("F-0002");
   });
 
   test("URL helpers parse, preserve, and update task selection", () => {
@@ -792,7 +816,7 @@ describe("App", () => {
 
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", false)).toBe("F-0001");
     expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "all", true)).toBe("F-0001");
-    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "packages/web", true)).toBeNull();
+    expect(selectTaskAfterRefresh("F-0001", doneOnlyPayload, "packages/web", true)).toBe("F-0001");
   });
 
   test("falls back to the first visible queue row when selection is hidden", () => {

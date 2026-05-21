@@ -2,7 +2,7 @@
 id: F-0105
 title: "Stop inferred edit scopes from becoming header Projects"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "web"
 parent: "F-0000"
@@ -13,7 +13,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:12:57.354Z
+closed_at: 2026-05-21T20:12:57.354Z
+close_reason: "Hid inferred edit scopes from Project navigation while preserving configured Project filtering."
+blocked_reason: ""
+review_reason: ""
 ---
 # Stop inferred edit scopes from becoming header Projects
 
@@ -69,6 +73,18 @@ Tracked in frontmatter: F-0102.
 ## Notes
 
 This is the core UX fix for the current confusing dropdown.
+
+Implemented the cleaner no-config behavior: the Project selector is hidden unless explicit configured Projects exist. This avoids presenting inferred task edit-scope folders such as `packages/web` or `.forge` as Projects.
+
+Behavior decisions:
+- Configured Project entries still render in the header and filter tasks by configured path overlap.
+- Repos without project config are treated as `all` for selection/refresh, so stale Project filter state cannot hide the queue.
+- Raw task `scope` globs remain visible in task detail as edit-boundary data.
+- Area and Priority grouping behavior is unchanged.
+
+Verification:
+- `bun test packages/web/test/app.test.tsx` passed: 34 tests.
+- `bun run harness:web` passed: 68 tests.
 
 ## History
 
