@@ -35,5 +35,6 @@ Forge so the next agent can verify its own work.
   `bun run harness:check` and usually `bun run quality:check`.
 - Workspace or monorepo work should start from fixture repos before touching
   real user workspaces.
+- Workspace discovery, API, navigation, live refresh, and terminal-link tasks
+  should use the workspace fixture helpers in `packages/core/test/fixture-repo.ts`.
 - Close tasks only after the task notes contain concrete verification evidence.
-

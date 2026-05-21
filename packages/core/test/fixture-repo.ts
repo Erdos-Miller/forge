@@ -27,16 +27,25 @@ export interface ForgeFixtureRepo {
   cleanup: () => Promise<void>;
 }
 
+export interface MalformedForgeFixtureFile {
+  filename: string;
+  contents: string;
+}
+
 interface CreateForgeFixtureRepoOptions {
   prefix?: string;
+  repoRoot?: string;
   tasks?: ForgeFixtureTask[];
   nestedPath?: string[];
+  malformedFiles?: MalformedForgeFixtureFile[];
 }
 
 export async function createForgeFixtureRepo(
   options: CreateForgeFixtureRepoOptions = {},
 ): Promise<ForgeFixtureRepo> {
-  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), options.prefix ?? "forge-fixture-"));
+  const repoRoot = options.repoRoot
+    ? path.resolve(options.repoRoot)
+    : await fs.mkdtemp(path.join(os.tmpdir(), options.prefix ?? "forge-fixture-"));
   const tasksDir = path.join(repoRoot, ".forge", "tasks");
   const nestedDir = path.join(repoRoot, ...(options.nestedPath ?? ["packages", "core", "src"]));
   await fs.mkdir(tasksDir, { recursive: true });
@@ -60,8 +69,74 @@ export async function createForgeFixtureRepo(
   if (options.tasks) {
     await fixtureRepo.writeTasks(options.tasks);
   }
+  if (options.malformedFiles) {
+    await Promise.all(
+      options.malformedFiles.map((file) =>
+        writeMalformedForgeFixtureTask(tasksDir, file.filename, file.contents),
+      ),
+    );
+  }
 
   return fixtureRepo;
+}
+
+export interface ForgeFixtureWorkspaceRootOptions {
+  name?: string;
+  tasks?: ForgeFixtureTask[];
+  nestedPath?: string[];
+  malformedFiles?: MalformedForgeFixtureFile[];
+}
+
+export interface ForgeFixtureWorkspace {
+  workspaceRoot: string;
+  roots: ForgeFixtureRepo[];
+  ignoredRoots: string[];
+  writeRoot: (options?: ForgeFixtureWorkspaceRootOptions) => Promise<ForgeFixtureRepo>;
+  writeIgnoredRoot: (relativePath: string[], tasks?: ForgeFixtureTask[]) => Promise<string>;
+  cleanup: () => Promise<void>;
+}
+
+interface CreateForgeFixtureWorkspaceOptions {
+  prefix?: string;
+  roots?: ForgeFixtureWorkspaceRootOptions[];
+}
+
+export async function createForgeFixtureWorkspace(
+  options: CreateForgeFixtureWorkspaceOptions = {},
+): Promise<ForgeFixtureWorkspace> {
+  const workspaceRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), options.prefix ?? "forge-workspace-fixture-"),
+  );
+  const roots: ForgeFixtureRepo[] = [];
+  const ignoredRoots: string[] = [];
+
+  const workspace: ForgeFixtureWorkspace = {
+    workspaceRoot,
+    roots,
+    ignoredRoots,
+    writeRoot: async (rootOptions = {}) => {
+      const rootName = rootOptions.name ?? `repo-${roots.length + 1}`;
+      const repo = await createForgeFixtureRepo({
+        ...rootOptions,
+        repoRoot: path.join(workspaceRoot, rootName),
+      });
+      roots.push(repo);
+      return repo;
+    },
+    writeIgnoredRoot: async (relativePath, tasks = minimalForgeFixtureTasks()) => {
+      const ignoredRoot = path.join(workspaceRoot, ...relativePath);
+      const repo = await createForgeFixtureRepo({ repoRoot: ignoredRoot, tasks });
+      ignoredRoots.push(repo.repoRoot);
+      return repo.repoRoot;
+    },
+    cleanup: async () => fs.rm(workspaceRoot, { recursive: true, force: true }),
+  };
+
+  for (const root of options.roots ?? []) {
+    await workspace.writeRoot(root);
+  }
+
+  return workspace;
 }
 
 export async function writeForgeFixtureTask(
@@ -70,6 +145,17 @@ export async function writeForgeFixtureTask(
 ): Promise<string> {
   const filePath = path.join(tasksDir, `${task.id}-${slugify(task.title ?? task.id)}.md`);
   await fs.writeFile(filePath, createForgeFixtureTaskFile(task));
+  return filePath;
+}
+
+export async function writeMalformedForgeFixtureTask(
+  tasksDir: string,
+  filename: string,
+  contents = "---\nid: [\n---\n",
+): Promise<string> {
+  const filePath = path.join(tasksDir, filename);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, contents);
   return filePath;
 }
 
