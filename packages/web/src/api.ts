@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   analyzeTasks,
   discoverForgeRootsDownward,
@@ -11,7 +13,16 @@ import {
   type TaskGraphAnalysis,
   type TaskAvailability,
 } from "../../core/src/index.ts";
+import {
+  classifyWorktreeEntries,
+  recommendWorktreeStatus,
+  type GitStatusEntry,
+  type WorktreeRecommendation,
+  type WorktreeStatusFile,
+} from "../../core/src/worktree-coordination.ts";
 import { inferScopeLabel, OTHER_SCOPE } from "./scopes";
+
+const execFileAsync = promisify(execFile);
 
 export interface ScopeFilterPayload extends ScopeConfigEntry {
   rootId?: string;
@@ -29,12 +40,25 @@ export interface TaskGraphPayload {
   recommendedTaskIds: string[];
   availabilityByTaskId: Record<string, TaskAvailability>;
   blockersByTaskId: Record<string, string[]>;
+  coordinationByTaskId: Record<string, TaskCoordinationPayload>;
   scopeConfig: ResolvedScopeConfigPayload;
   diagnostics: {
     missingDependencies: Array<{ taskId: string; dependencyId: string }>;
     dependencyCycles: Array<{ taskIds: string[] }>;
     duplicateTaskIds: Array<{ taskId: string; sourcePaths: string[] }>;
   };
+}
+
+export interface TaskCoordinationPayload {
+  summary: {
+    blocking: number;
+    review: number;
+    non_blocking: number;
+    total: number;
+    clean: boolean;
+  };
+  files: WorktreeStatusFile[];
+  recommendation: WorktreeRecommendation;
 }
 
 export interface WorkspaceLoadTiming {
@@ -82,8 +106,9 @@ export async function getTaskGraphPayload(
   const tasks = await loadTasks(repoRoot);
   const analysis = analyzeTasks(tasks);
   const scopeConfig = await getResolvedScopeConfig(repoRoot, tasks);
+  const coordinationByTaskId = await getCoordinationByTaskId(repoRoot, tasks);
 
-  return toTaskGraphPayload(repoRoot, tasks, analysis, scopeConfig);
+  return toTaskGraphPayload(repoRoot, tasks, analysis, scopeConfig, coordinationByTaskId);
 }
 
 export async function getWorkspaceTaskGraphPayload(
@@ -148,6 +173,7 @@ export function toTaskGraphPayload(
   tasks: Task[],
   analysis: CompatibleTaskGraphAnalysis,
   scopeConfig = getInferredScopeConfig(tasks),
+  coordinationByTaskId: Record<string, TaskCoordinationPayload> = {},
 ): TaskGraphPayload {
   const availabilityByTaskId =
     analysis.availabilityByTaskId ?? deriveAvailabilityByTaskId(tasks, analysis);
@@ -158,6 +184,7 @@ export function toTaskGraphPayload(
     recommendedTaskIds: rankReadyTasks(tasks).map((task) => task.id),
     availabilityByTaskId: Object.fromEntries(availabilityByTaskId.entries()),
     blockersByTaskId: Object.fromEntries(analysis.blockersByTaskId.entries()),
+    coordinationByTaskId,
     scopeConfig,
     diagnostics: {
       missingDependencies: analysis.missingDependencies,
@@ -200,10 +227,23 @@ async function toWorkspaceRootPayload(
       () => getResolvedScopeConfig(root.path, tasks),
       rootContext,
     );
+    const coordinationByTaskId = await measureWorkspaceLoadPhase(
+      timings,
+      "root.coordination",
+      () => getCoordinationByTaskId(root.path, tasks),
+      rootContext,
+    );
     const graph = await measureWorkspaceLoadPhase(
       timings,
       "root.graph_payload",
-      () => toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks), scopeConfig),
+      () =>
+        toTaskGraphPayload(
+          root.path,
+          tasks,
+          analyzeTasks(tasks),
+          scopeConfig,
+          coordinationByTaskId,
+        ),
       { ...rootContext, taskCount: tasks.length },
     );
     workspaceTimings.push(...timings);
@@ -261,6 +301,7 @@ function emptyTaskGraphPayload(repoRoot: string): TaskGraphPayload {
     recommendedTaskIds: [],
     availabilityByTaskId: {},
     blockersByTaskId: {},
+    coordinationByTaskId: {},
     scopeConfig: { source: "inferred", scopes: [] },
     diagnostics: {
       missingDependencies: [],
@@ -310,6 +351,78 @@ function sortInferredScopeLabels(left: string, right: string) {
     return -1;
   }
   return left.localeCompare(right);
+}
+
+async function getCoordinationByTaskId(
+  repoRoot: string,
+  tasks: Task[],
+): Promise<Record<string, TaskCoordinationPayload>> {
+  const gitEntries = await readGitStatus(repoRoot);
+  if (gitEntries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    tasks.map((task) => {
+      const files = classifyWorktreeEntries(repoRoot, tasks, task, gitEntries);
+      return [task.id, toCoordinationPayload(files)];
+    }),
+  );
+}
+
+async function readGitStatus(repoRoot: string): Promise<GitStatusEntry[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repoRoot, "status", "--porcelain=v1", "-z"],
+      { encoding: "utf8" },
+    );
+    return parsePorcelainStatus(stdout);
+  } catch {
+    return [];
+  }
+}
+
+function parsePorcelainStatus(output: string): GitStatusEntry[] {
+  const parts = output.split("\0").filter(Boolean);
+  const entries: GitStatusEntry[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const raw = parts[index];
+    const status = raw.slice(0, 2);
+    const filePath = raw.slice(3);
+    if (status.includes("R") || status.includes("C")) {
+      index += 1;
+    }
+    entries.push({ path: normalizeGitPath(filePath), status });
+  }
+
+  return entries.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function normalizeGitPath(value: string) {
+  return value.replace(/\\/g, "/");
+}
+
+function toCoordinationPayload(files: WorktreeStatusFile[]): TaskCoordinationPayload {
+  return {
+    summary: {
+      blocking: countCoordinationClass(files, "blocking"),
+      review: countCoordinationClass(files, "review"),
+      non_blocking: countCoordinationClass(files, "non_blocking"),
+      total: files.length,
+      clean: files.length === 0,
+    },
+    files,
+    recommendation: recommendWorktreeStatus(files),
+  };
+}
+
+function countCoordinationClass(
+  files: WorktreeStatusFile[],
+  classification: WorktreeStatusFile["classification"],
+) {
+  return files.filter((file) => file.classification === classification).length;
 }
 
 function countAvailability(

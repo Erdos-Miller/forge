@@ -104,6 +104,7 @@ const payload: TaskGraphPayload = {
   blockersByTaskId: {
     "F-0003": [],
   },
+  coordinationByTaskId: {},
   scopeConfig: {
     source: "inferred",
     scopes: [
@@ -157,6 +158,7 @@ const emptyWorkspacePayload: WorkspaceTaskGraphPayload = {
   recommendedTaskIds: [],
   availabilityByTaskId: {},
   blockersByTaskId: {},
+  coordinationByTaskId: {},
   scopeConfig: { source: "inferred", scopes: [] },
   diagnostics: {
     missingDependencies: [],
@@ -177,6 +179,7 @@ function graphPayload(repoRoot: string, tasks: TaskGraphPayload["tasks"]): TaskG
     recommendedTaskIds: tasks.map((task) => task.id),
     availabilityByTaskId: Object.fromEntries(tasks.map((task) => [task.id, "ready"])),
     blockersByTaskId: Object.fromEntries(tasks.map((task) => [task.id, []])),
+    coordinationByTaskId: {},
     scopeConfig: {
       source: "inferred",
       scopes: Array.from(new Set(tasks.flatMap((task) => task.scope))).map((scope) => ({
@@ -399,6 +402,80 @@ describe("App", () => {
     expect(html).toContain("Task diagnostics");
     expect(html).toContain("F-0004 depends on missing task F-9999");
     expect(html).toContain("Ready task");
+  });
+
+  test("renders coordination warnings for selected blocking and review files", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          coordinationByTaskId: {
+            "F-0002": {
+              recommendation: "stop",
+              summary: {
+                blocking: 1,
+                review: 1,
+                non_blocking: 0,
+                total: 2,
+                clean: false,
+              },
+              files: [
+                {
+                  path: "packages/web/src/App.tsx",
+                  status: " M",
+                  classification: "blocking",
+                  reason: "inside_task_scope",
+                },
+                {
+                  path: "package.json",
+                  status: " M",
+                  classification: "review",
+                  reason: "shared_file",
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Worktree coordination");
+    expect(html).toContain("1 blocking / 1 review");
+    expect(html).toContain("Stop before continuing.");
+    expect(html).toContain("packages/web/src/App.tsx");
+  });
+
+  test("does not render coordination warnings for non-blocking files only", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={{
+          ...payload,
+          coordinationByTaskId: {
+            "F-0002": {
+              recommendation: "continue",
+              summary: {
+                blocking: 0,
+                review: 0,
+                non_blocking: 1,
+                total: 1,
+                clean: false,
+              },
+              files: [
+                {
+                  path: ".forge/tasks/F-9999.md",
+                  status: "??",
+                  classification: "non_blocking",
+                  reason: "future_task_file",
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(html).not.toContain("Worktree coordination");
+    expect(html).not.toContain("F-9999.md");
   });
 
   test("renders inferred scope options instead of raw edit paths", () => {

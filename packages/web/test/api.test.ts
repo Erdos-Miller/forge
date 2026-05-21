@@ -85,6 +85,31 @@ async function writeScopeConfig(repoRoot: string, contents: string) {
   await fs.writeFile(path.join(repoRoot, ".forge", "scopes.yml"), contents);
 }
 
+async function initGit(repoRoot: string) {
+  await runGit(repoRoot, ["init"]);
+  await runGit(repoRoot, ["add", "."]);
+  await runGit(repoRoot, [
+    "-c",
+    "user.email=forge@example.test",
+    "-c",
+    "user.name=Forge Test",
+    "commit",
+    "-m",
+    "initial",
+  ]);
+}
+
+async function runGit(cwd: string, args: string[]) {
+  const proc = Bun.spawn(["git", ...args], { cwd, stderr: "pipe", stdout: "pipe" });
+  const [stderr, code] = await Promise.all([
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `git ${args.join(" ")} failed`);
+  }
+}
+
 describe("getTaskGraphPayload", () => {
   test("returns tasks and graph analysis", async () => {
     const { repoRoot } = await makeRepo();
@@ -133,6 +158,34 @@ describe("getTaskGraphPayload", () => {
     expect(payload.scopeConfig).toEqual({
       source: "configured",
       scopes: [{ id: "app", label: "Application", paths: ["packages/**"] }],
+    });
+  });
+
+  test("includes worktree coordination state for dirty scoped files", async () => {
+    const { repoRoot } = await makeRepo();
+    await fs.mkdir(path.join(repoRoot, "packages"), { recursive: true });
+    await fs.writeFile(path.join(repoRoot, "packages", "dirty.ts"), "clean\n");
+    await initGit(repoRoot);
+    await fs.writeFile(path.join(repoRoot, "packages", "dirty.ts"), "dirty\n");
+
+    const payload = await getTaskGraphPayload(repoRoot);
+
+    expect(payload.coordinationByTaskId["F-0002"]).toMatchObject({
+      recommendation: "stop",
+      summary: {
+        blocking: 1,
+        review: 0,
+        non_blocking: 0,
+        total: 1,
+        clean: false,
+      },
+      files: [
+        {
+          path: "packages/dirty.ts",
+          classification: "blocking",
+          reason: "inside_task_scope",
+        },
+      ],
     });
   });
 

@@ -95,6 +95,14 @@ function buildAggregateGraph(data: AppData, roots: WorkspaceGraph[]): TaskGraphP
       ]),
     ),
   );
+  const coordinationByTaskId = Object.fromEntries(
+    roots.flatMap((root) =>
+      Object.entries(root.graph.coordinationByTaskId).map(([taskId, coordination]) => [
+        scopedTaskId(root.id, taskId),
+        coordination,
+      ]),
+    ),
+  );
 
   return {
     repoRoot: "workspace" in data ? data.workspace.startDir : data.repoRoot,
@@ -103,6 +111,7 @@ function buildAggregateGraph(data: AppData, roots: WorkspaceGraph[]): TaskGraphP
     recommendedTaskIds: getAggregateRecommendedTaskIds(tasks, availabilityByTaskId),
     availabilityByTaskId,
     blockersByTaskId,
+    coordinationByTaskId,
     scopeConfig: getAggregateScopeConfig(roots),
     diagnostics: {
       missingDependencies: roots.flatMap((root) => root.graph.diagnostics.missingDependencies),

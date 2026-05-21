@@ -2,7 +2,7 @@ import type { Task, TaskAvailability } from "@forge/core";
 import { marked } from "marked";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
-import type { TaskGraphPayload } from "./api";
+import type { TaskCoordinationPayload, TaskGraphPayload } from "./api";
 import { shouldShowDoneInQueue } from "./queue-visibility";
 import { getInferredScopeOptions, taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
@@ -422,6 +422,9 @@ export function App({ initialData }: AppProps) {
 
           <TaskDetail
             blockers={selectedTask ? currentData.blockersByTaskId[selectedTask.id] ?? [] : []}
+            coordination={
+              selectedTask ? currentData.coordinationByTaskId[selectedTask.id] : undefined
+            }
             isRecommended={
               selectedTask ? currentData.recommendedTaskIds.includes(selectedTask.id) : false
             }
@@ -516,11 +519,13 @@ function SummaryList({ title, tasks }: { title: string; tasks: Task[] }) {
 function TaskDetail({
   task,
   blockers,
+  coordination,
   isRecommended,
   tasksById,
 }: {
   task: QueueTask | null;
   blockers: string[];
+  coordination?: TaskCoordinationPayload;
   isRecommended: boolean;
   tasksById: Map<string, Task>;
 }) {
@@ -570,6 +575,8 @@ function TaskDetail({
         </section>
       ) : null}
 
+      <CoordinationWarning coordination={coordination} />
+
       <div className="taskSections">
         <TaskSection section={sections.why} title="Why" variant="lead" />
         <TaskSection section={sections.success} title="What success looks like" />
@@ -605,6 +612,50 @@ function TaskDetail({
       </div>
     </aside>
   );
+}
+
+function CoordinationWarning({
+  coordination,
+}: {
+  coordination: TaskCoordinationPayload | undefined;
+}) {
+  if (!coordination || coordination.summary.blocking + coordination.summary.review === 0) {
+    return null;
+  }
+
+  const relevantFiles = coordination.files.filter((file) => {
+    return file.classification === "blocking" || file.classification === "review";
+  });
+
+  return (
+    <section className="coordinationWarning">
+      <h3>Worktree coordination</h3>
+      <p>{getCoordinationMessage(coordination)}</p>
+      <details>
+        <summary>{relevantFiles.length} file{relevantFiles.length === 1 ? "" : "s"}</summary>
+        <ul>
+          {relevantFiles.map((file) => (
+            <li key={`${file.path}:${file.classification}`}>
+              <span>{file.path}</span>
+              <small>{file.classification.replace("_", " ")}</small>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </section>
+  );
+}
+
+function getCoordinationMessage(coordination: TaskCoordinationPayload) {
+  const parts = [
+    coordination.summary.blocking ? `${coordination.summary.blocking} blocking` : null,
+    coordination.summary.review ? `${coordination.summary.review} review` : null,
+  ].filter(Boolean);
+  const action =
+    coordination.recommendation === "stop"
+      ? "Stop before continuing."
+      : "Review before closing.";
+  return `${parts.join(" / ")} worktree item${parts.length === 1 ? "" : "s"}. ${action}`;
 }
 
 function DependencyDetails({

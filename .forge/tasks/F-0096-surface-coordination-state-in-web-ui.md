@@ -2,7 +2,7 @@
 id: F-0096
 title: "Surface coordination state in web UI"
 kind: task
-status: open
+status: done
 priority: medium
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T12:03:14-05:00
-updated_at: 2026-05-21T12:03:14-05:00
+updated_at: 2026-05-21T18:56:02.545Z
+closed_at: 2026-05-21T18:56:02.545Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Surface coordination state in web UI
 
@@ -72,6 +76,14 @@ Tracked in frontmatter: F-0094.
 ## Notes
 
 This is useful but should wait until the CLI classification behavior is stable.
+
+Decision: Worktree classification now lives in a pure core source helper shared by CLI and web. Runtime-specific git status collection stays at the edge: the CLI uses Bun, and the Vite web middleware uses Node `execFile`.
+
+- Added shared pure worktree classification under core source and reused it from CLI and web.
+- Added `coordinationByTaskId` to web task graph payloads, including workspace aggregate mapping.
+- Rendered selected-task worktree coordination warnings only for blocking/review files; non-blocking future task files stay hidden.
+- Decision: Worktree classification is shared; git status collection remains runtime-specific at CLI/web edges.
+- Verification: focused CLI/web coordination tests, `bun run harness:web`, `bun run quality:check`.
 
 ## History
 
