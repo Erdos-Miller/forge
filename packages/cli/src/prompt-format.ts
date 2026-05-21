@@ -1,12 +1,11 @@
-import type { GuidanceBundle, Task } from "@forge/core";
+import type { Task } from "@forge/core";
 import {
   COMMANDS,
   COMMAND_WORKFLOWS,
   COMMAND_WORKFLOW_ORDER,
 } from "./command-metadata";
-import { formatGuidanceText } from "./robot";
 
-export function formatAgentPrompt(task: Task, guidance: GuidanceBundle, fullGuidance: boolean): string {
+export function formatAgentPrompt(task: Task): string {
   const lines = [
     `Goal: Complete Forge task ${task.id} - ${task.title}`,
     "",
@@ -26,26 +25,10 @@ export function formatAgentPrompt(task: Task, guidance: GuidanceBundle, fullGuid
     "Task body:",
     task.body.trim(),
     "",
-    "Guidance:",
-    formatGuidanceText(guidance, fullGuidance),
-    "",
-    ...formatGuidanceDiagnostics(guidance),
     formatPromptCommandGuidance(),
   ];
 
   return lines.join("\n");
-}
-
-function formatGuidanceDiagnostics(guidance: GuidanceBundle): string[] {
-  if (guidance.diagnostics.length === 0) {
-    return [];
-  }
-
-  return [
-    "Guidance diagnostics:",
-    ...guidance.diagnostics.map((diagnostic) => `- ${diagnostic.message}`),
-    "",
-  ];
 }
 
 export function formatLoopPrompt(): string {

@@ -88,40 +88,6 @@ async function makeRepo(): Promise<{
   return { repoRoot, nestedDir, taskPath: openPath };
 }
 
-async function writeGuidanceFixture(repoRoot: string): Promise<void> {
-  const forgeDir = path.join(repoRoot, ".forge");
-  const guidanceDir = path.join(forgeDir, "guidance");
-  await fs.mkdir(guidanceDir, { recursive: true });
-  await fs.writeFile(
-    path.join(forgeDir, "guidance.yml"),
-    [
-      "version: 1",
-      "routes:",
-      "  - include: guidance/core.md",
-      "    when:",
-      "      cwd:",
-      "        - packages/cli/**",
-      "  - include: guidance/core.md",
-      "    when:",
-      "      path:",
-      "        - packages/cli/src/**",
-      "  - include: guidance/task.md",
-      "    when:",
-      "      scope:",
-      "        - packages/**",
-      "",
-    ].join("\n"),
-  );
-  await fs.writeFile(
-    path.join(guidanceDir, "core.md"),
-    ["# Core", "", "## Prompt Summary", "", "Use the local CLI patterns.", ""].join("\n"),
-  );
-  await fs.writeFile(
-    path.join(guidanceDir, "task.md"),
-    ["# Task", "", "## Prompt Summary", "", "Task-scoped guidance.", ""].join("\n"),
-  );
-}
-
 async function run(
   cwd: string,
   args: string[],
@@ -168,7 +134,6 @@ describe("forge cli", () => {
       "show",
       "blockers",
       "deps",
-      "guidance",
       "doctor",
       "closeout",
       "create",
@@ -586,71 +551,6 @@ describe("forge cli", () => {
   test("deps --json reports unknown task ids", async () => {
     const { repoRoot } = await makeRepo();
     const result = await run(repoRoot, ["deps", "F-9999", "--json"]);
-    const payload = parseStderrJson(result);
-
-    expect(result.code).toBe(3);
-    expect(payload.error.code).toBe("task_not_found");
-  });
-
-  test("guidance prints concise text output for cwd matches", async () => {
-    const { repoRoot, nestedDir } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-
-    const result = await run(nestedDir, ["guidance"]);
-
-    expect(result.code).toBe(0);
-    expect(result.stdout[0]).toContain("guidance/core.md");
-    expect(result.stdout[0]).toContain("reasons: cwd:packages/cli/src");
-    expect(result.stdout[0]).toContain("Use the local CLI patterns.");
-    expect(result.stdout[0]).not.toContain("# Core");
-  });
-
-  test("guidance --json resolves task and path context", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-
-    const result = await run(repoRoot, [
-      "guidance",
-      "--for-task",
-      "F-0002",
-      "--path",
-      "packages/cli/src/index.ts",
-      "--json",
-    ]);
-    const payload = parseStdoutJson(result);
-
-    expect(result.code).toBe(0);
-    expect(payload.ok).toBe(true);
-    expect(payload.matches.map((match: any) => match.path)).toEqual([
-      "guidance/core.md",
-      "guidance/task.md",
-    ]);
-    expect(payload.matches[0].promptSummary).toBe("Use the local CLI patterns.");
-    expect(payload.matches[0].content).toBeUndefined();
-  });
-
-  test("guidance --full includes full matched content", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-
-    const result = await run(repoRoot, [
-      "guidance",
-      "--path",
-      "packages/cli/src/index.ts",
-      "--full",
-      "--json",
-    ]);
-    const payload = parseStdoutJson(result);
-
-    expect(result.code).toBe(0);
-    expect(payload.matches[0].content).toContain("# Core");
-  });
-
-  test("guidance --json reports missing task ids", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-
-    const result = await run(repoRoot, ["guidance", "--for-task", "F-9999", "--json"]);
     const payload = parseStderrJson(result);
 
     expect(result.code).toBe(3);
@@ -1109,9 +1009,6 @@ describe("forge cli", () => {
     expect(result.stdout[0]).toContain("Depends on: F-0001");
     expect(result.stdout[0]).toContain("- packages/**");
     expect(result.stdout[0]).toContain("Body stays readable.");
-    expect(result.stdout[0]).toContain("Guidance:");
-    expect(result.stdout[0]).toContain("No guidance matched.");
-    expect(result.stdout[0]).toContain("no .forge/guidance.yml found");
   });
 
   test("prompt prints a reusable agent prompt for a specific task", async () => {
@@ -1123,58 +1020,23 @@ describe("forge cli", () => {
     expect(result.stdout[0]).toContain("Depends on: F-0002");
   });
 
-  test("prompt next includes matched guidance summaries", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-    const result = await run(repoRoot, ["prompt", "next"]);
-
-    expect(result.code).toBe(0);
-    expect(result.stdout[0]).toContain("Goal: Complete Forge task F-0002 - Open");
-    expect(result.stdout[0]).toContain("guidance/task.md");
-    expect(result.stdout[0]).toContain("reasons: scope:packages/**");
-    expect(result.stdout[0]).toContain("Task-scoped guidance.");
-    expect(result.stdout[0]).not.toContain("# Task");
-  });
-
-  test("prompt explicit task includes matched guidance summaries", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-    const result = await run(repoRoot, ["prompt", "F-0003"]);
-
-    expect(result.code).toBe(0);
-    expect(result.stdout[0]).toContain("Goal: Complete Forge task F-0003 - Blocked");
-    expect(result.stdout[0]).toContain("guidance/task.md");
-    expect(result.stdout[0]).toContain("Task-scoped guidance.");
-  });
-
-  test("prompt --full includes full matched guidance content", async () => {
-    const { repoRoot } = await makeRepo();
-    await writeGuidanceFixture(repoRoot);
-    const result = await run(repoRoot, ["prompt", "F-0003", "--full"]);
-
-    expect(result.code).toBe(0);
-    expect(result.stdout[0]).toContain("guidance/task.md");
-    expect(result.stdout[0]).toContain("# Task");
-    expect(result.stdout[0]).toContain("## Prompt Summary");
-  });
-
   test("prompt rejects invalid usage", async () => {
     const { repoRoot } = await makeRepo();
 
     expect(await run(repoRoot, ["prompt"])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge prompt <id|next> [--full]"],
+      stderr: ["usage: forge prompt <id|next>"],
     });
     expect(await run(repoRoot, ["prompt", "next", "--extra"])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge prompt <id|next> [--full]"],
+      stderr: ["usage: forge prompt <id|next>"],
     });
     expect(await run(repoRoot, ["prompt", "--full"])).toEqual({
       code: 1,
       stdout: [],
-      stderr: ["usage: forge prompt <id|next> [--full]"],
+      stderr: ["usage: forge prompt <id|next>"],
     });
   });
 

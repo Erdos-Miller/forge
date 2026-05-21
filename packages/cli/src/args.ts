@@ -427,49 +427,6 @@ export function parseNextArgs(
   return claim ? { ok: true, claim, claimedBy } : { ok: true, claim };
 }
 
-export function parseGuidanceArgs(args: string[]):
-  | { ok: true; json: boolean; full: boolean; taskId?: string; paths: string[] }
-  | { ok: false; json: boolean; message: string } {
-  let json = false;
-  let full = false;
-  let taskId: string | undefined;
-  const paths: string[] = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    switch (arg) {
-      case "--json":
-        json = true;
-        break;
-      case "--full":
-        full = true;
-        break;
-      case "--for-task": {
-        const value = args[index + 1];
-        if (!value) {
-          return { ok: false, json, message: "guidance option --for-task requires a value" };
-        }
-        taskId = value;
-        index += 1;
-        break;
-      }
-      case "--path": {
-        const value = args[index + 1];
-        if (!value) {
-          return { ok: false, json, message: "guidance option --path requires a value" };
-        }
-        paths.push(value);
-        index += 1;
-        break;
-      }
-      default:
-        return { ok: false, json, message: `unknown guidance option: ${arg}` };
-    }
-  }
-
-  return { ok: true, json, full, taskId, paths };
-}
-
 export function parseWebArgs(
   args: string[],
   defaultStartDir: string,

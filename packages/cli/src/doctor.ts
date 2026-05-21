@@ -1,10 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  inspectGuidanceConfig,
   parseTaskFile,
   TaskParseError,
-  type GuidanceBundle,
   type Task,
   type TaskGraphAnalysis,
 } from "@forge/core";
@@ -176,60 +174,6 @@ function hasMarkdownSection(body: string, sectionTitle: string): boolean {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export async function getGuidanceDoctorDiagnostics(repoRoot: string): Promise<DoctorDiagnostic[]> {
-  const diagnostics = await inspectGuidanceConfig(repoRoot);
-  return diagnostics.map((diagnostic) => {
-    const mapped = mapGuidanceDiagnostic(diagnostic.kind);
-    return {
-      code: mapped.code,
-      severity: mapped.severity,
-      message: diagnostic.message,
-      sourcePath: diagnostic.path
-        ? path.join(repoRoot, ".forge", diagnostic.path.replace(/^\.forge\//, ""))
-        : path.join(repoRoot, ".forge", "guidance.yml"),
-      repairHint: getGuidanceRepairHint(diagnostic.kind),
-    };
-  });
-}
-
-function mapGuidanceDiagnostic(
-  kind: GuidanceBundle["diagnostics"][number]["kind"],
-): { code: string; severity: "error" | "warning" } {
-  switch (kind) {
-    case "invalid_config":
-      return { code: "invalid_guidance_config", severity: "error" };
-    case "missing_include":
-      return { code: "missing_guidance_include", severity: "error" };
-    case "unreadable_include":
-      return { code: "unreadable_guidance_include", severity: "error" };
-    case "duplicate_include":
-      return { code: "duplicate_guidance_include", severity: "warning" };
-    case "local_file_not_ignored":
-      return { code: "local_guidance_not_ignored", severity: "warning" };
-    case "missing_config":
-      return { code: "missing_guidance_config", severity: "warning" };
-  }
-}
-
-function getGuidanceRepairHint(
-  kind: GuidanceBundle["diagnostics"][number]["kind"],
-): string {
-  switch (kind) {
-    case "invalid_config":
-      return "Fix .forge/guidance.yml so version is 1 and routes are valid.";
-    case "missing_include":
-      return "Create the referenced guidance file or remove the route.";
-    case "unreadable_include":
-      return "Make the guidance include a readable Markdown file.";
-    case "duplicate_include":
-      return "Remove the duplicate route or make its conditions distinct.";
-    case "local_file_not_ignored":
-      return "Add .forge/local/** to .gitignore or move the file out of .forge/local.";
-    case "missing_config":
-      return "Create .forge/guidance.yml if this repo uses routed guidance.";
-  }
 }
 
 export async function getTaskCloseoutGuidance(

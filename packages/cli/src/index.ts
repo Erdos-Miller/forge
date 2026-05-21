@@ -15,7 +15,6 @@ import {
   rankReadyTaskQueue,
   rankReadyTasks,
   requestTaskReviewFrom,
-  resolveGuidance,
   removeTaskDependencyFrom,
   unblockTaskFrom,
   upsertTaskExecutionPlanFrom,
@@ -32,7 +31,6 @@ import {
   parseCreateArgs,
   parseDepsArgs,
   parseDoneArgs,
-  parseGuidanceArgs,
   parseIdJsonArgs,
   parseReadyArgs,
   parseNextArgs,
@@ -44,7 +42,6 @@ import {
 } from "./args";
 import {
   getGraphDoctorDiagnostics,
-  getGuidanceDoctorDiagnostics,
   getTaskCloseoutGuidance,
   inspectTaskStore,
 } from "./doctor";
@@ -52,13 +49,11 @@ import { createDemoForgeRepo, type DemoForgeRepo } from "./demo-repo";
 import { formatAgentPrompt, formatLoopPrompt } from "./prompt-format";
 import {
   formatAgentHelp,
-  formatGuidanceText,
   stringifyJson,
   toDependencySummary,
   toRobotBlockers,
   toRobotCommandMetadata,
   toRobotDiagnostics,
-  toRobotGuidanceBundle,
   toRobotQueueTask,
   toRobotTaskDocument,
   toRobotTaskSummary,
@@ -99,7 +94,6 @@ const COMMAND_HANDLERS = {
   show,
   blockers,
   deps,
-  guidance,
   doctor,
   closeout,
   create,
@@ -218,21 +212,18 @@ function isClosedTask(task: Task): boolean {
   return task.status === "done" || task.status === "canceled";
 }
 
-function parsePromptArgs(args: string[]): { ok: true; target: string; full: boolean } | { ok: false; message: string } {
-  const usage = "usage: forge prompt <id|next> [--full]";
-  if (args.length === 0 || args.length > 2) {
+function parsePromptArgs(args: string[]): { ok: true; target: string } | { ok: false; message: string } {
+  const usage = "usage: forge prompt <id|next>";
+  if (args.length !== 1) {
     return { ok: false, message: usage };
   }
 
-  const [target, option] = args;
-  if (!target || target === "--full") {
-    return { ok: false, message: usage };
-  }
-  if (option !== undefined && option !== "--full") {
+  const [target] = args;
+  if (!target || target.startsWith("-")) {
     return { ok: false, message: usage };
   }
 
-  return { ok: true, target, full: option === "--full" };
+  return { ok: true, target };
 }
 
 async function queue(options: CliOptions, args: string[]): Promise<number> {
@@ -410,50 +401,6 @@ async function deps(options: CliOptions, args: string[]): Promise<number> {
   return 0;
 }
 
-async function guidance(options: CliOptions, args: string[]): Promise<number> {
-  const parsed = parseGuidanceArgs(args);
-  if (!parsed.ok) {
-    if (parsed.json) {
-      return writeJsonUsageError(options, parsed.message);
-    }
-    options.stderr(parsed.message);
-    return 2;
-  }
-
-  try {
-    const bundle = await resolveGuidance({
-      cwd: options.cwd,
-      taskId: parsed.taskId,
-      paths: parsed.paths,
-      includeContent: parsed.full,
-    });
-
-    if (parsed.json) {
-      options.stdout(
-        stringifyJson({
-          ok: true,
-          version: 1,
-          ...toRobotGuidanceBundle(bundle),
-        }),
-      );
-    } else {
-      options.stdout(formatGuidanceText(bundle, parsed.full));
-    }
-    return 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const taskMatch = /^task (\S+) not found$/.exec(message);
-    if (taskMatch) {
-      if (parsed.json) {
-        return writeTaskNotFound(options, taskMatch[1]);
-      }
-      options.stderr(message);
-      return 3;
-    }
-    throw error;
-  }
-}
-
 async function doctor(options: CliOptions, args: string[]): Promise<number> {
   if (!isJsonOnly(args)) {
     return writeJsonUsageError(options, "usage: forge doctor --json");
@@ -461,7 +408,6 @@ async function doctor(options: CliOptions, args: string[]): Promise<number> {
 
   const repoRoot = await findForgeRoot(options.cwd);
   const { tasks, diagnostics } = await inspectTaskStore(repoRoot);
-  diagnostics.push(...(await getGuidanceDoctorDiagnostics(repoRoot)));
 
   if (tasks.length > 0) {
     diagnostics.push(...getGraphDoctorDiagnostics(analyzeTasks(tasks)));
@@ -610,13 +556,7 @@ async function prompt(options: CliOptions, args: string[]): Promise<number> {
     return 1;
   }
 
-  const guidance = await resolveGuidance({
-    cwd: options.cwd,
-    taskId: task.id,
-    includeContent: parsed.full,
-  });
-
-  options.stdout(formatAgentPrompt(task, guidance, parsed.full));
+  options.stdout(formatAgentPrompt(task));
   return 0;
 }
 

@@ -191,10 +191,10 @@ Then keep the task claimed or open as appropriate and write the short reason in
 `review_reason`. If the task cannot continue without that answer, block it
 instead.
 
-App-specific review policy belongs in repo guidance routed through
-`.forge/guidance.yml`, not in Forge's generic task schema. For example, a web
-app may require a browser screenshot before closeout, while a library task may
-require API compatibility notes.
+App-specific review policy belongs in task Markdown or repository agent
+instructions such as `AGENTS.md`, not in Forge's generic task schema. For
+example, a web app may require a browser screenshot before closeout, while a
+library task may require API compatibility notes.
 
 ## Storage Model
 
@@ -207,55 +207,6 @@ Relate work to projects or directories with:
 
 - `scope` for machine-readable file globs.
 - `area` for human grouping such as `core`, `cli`, `web`, or `docs`.
-
-## Guidance Routing
-
-Forge can route repo guidance into agent prompts with a committed
-`.forge/guidance.yml` file and shared Markdown files in `.forge/guidance/*.md`.
-This keeps project-specific instructions near the task graph without baking
-product rules into the CLI.
-
-Use this shape:
-
-```yaml
-version: 1
-routes:
-  - include: guidance/forge.md
-    when:
-      area:
-        - core
-      scope:
-        - packages/core/**
-      path:
-        - packages/core/src/**
-      cwd:
-        - packages/core/**
-```
-
-`include` is relative to `.forge/`. A route matches when every present `when`
-field matches the current context. Values inside one field are alternatives.
-
-- `area` matches the task `area`.
-- `scope` matches task `scope` globs.
-- `path` matches explicit repo-relative paths under consideration.
-- `cwd` matches the current working directory relative to the repo root.
-
-Shared guidance files should use `## Prompt Summary` for the default excerpt
-included in agent prompts. Content after that section may hold deeper notes for
-humans and future tooling.
-
-Include order is deterministic:
-
-1. Read routes from `.forge/guidance.yml` in file order.
-2. Include matching shared guidance files in route order.
-3. De-duplicate by normalized repo-relative guidance path.
-4. Include ignored local user guidance from `.forge/local/user.md` last when
-   that file exists.
-
-Local guidance is for machine-specific preferences or temporary notes. It can
-override or supplement user preferences after committed repo and project
-guidance, but it must not change task acceptance criteria or be required for the
-repo to work. Keep every file under `.forge/local/` out of git.
 
 ## Derived Relationships
 

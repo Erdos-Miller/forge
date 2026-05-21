@@ -2,7 +2,7 @@
 id: F-0066
 title: "Remove routed repo guidance"
 kind: task
-status: open
+status: done
 priority: high
 area: "core"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-20T15:36:40.722Z
-updated_at: 2026-05-20T15:38:09.543Z
+updated_at: 2026-05-21T15:02:45.089Z
+closed_at: 2026-05-21T15:02:45.089Z
+close_reason: "Routed repo guidance removed from core, CLI, prompts, doctor, docs, and tests; harness and quality checks passed."
+blocked_reason: ""
+review_reason: ""
 ---
 # Remove routed repo guidance
 
@@ -70,6 +74,27 @@ None.
 ## Notes
 
 Planning task created from the guidance simplification plan.
+
+Implemented routed repo guidance removal.
+
+Decisions:
+- Removed the core `.forge/guidance.yml` resolver module, routed guidance types, and routed guidance tests.
+- Removed the public `forge guidance` command, command metadata, CLI argument parser, robot JSON guidance serialization, and prompt guidance injection.
+- Removed doctor diagnostics for `.forge/guidance.yml` and `.forge/guidance/*` includes.
+- Removed the committed `.forge/guidance.yml`, `.forge/guidance/forge.md`, and obsolete `.forge/.gitignore` entries for local routed guidance.
+- Updated README and `.forge/README.md` to state that committed project guidance is not routed by Forge; durable work context belongs in task Markdown and `AGENTS.md`.
+- Kept closeout guidance and command guidance because they are separate CLI/task workflow concepts, not routed repo guidance.
+
+Verification:
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/prompt-guidance.test.ts packages/cli/test/robot-contracts.test.ts` passed: 58 tests, 0 failures.
+- `bun test packages/core` passed: 63 tests, 0 failures.
+- `bun run harness:cli` passed: 7 tests, 0 failures.
+- `bun run quality:check` passed: 176 tests, 0 failures, web production build passed.
+
+Closeout review resolution:
+- No deprecated `forge guidance` alias was kept because the task acceptance criteria and user decision were to remove routed guidance now.
+- Public command compatibility was handled by updating command metadata, generated usage/help, robot contract tests, and CLI tests.
+- Task parsing, queue ranking, prompt generation, doctor, and web build all passed through `bun run quality:check` after the removal.
 
 ## History
 

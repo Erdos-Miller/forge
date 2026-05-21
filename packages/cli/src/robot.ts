@@ -1,6 +1,4 @@
 import {
-  type GuidanceBundle,
-  type GuidanceMatch,
   type RankedQueueEntry,
   type Task,
   type TaskGraphAnalysis,
@@ -100,40 +98,6 @@ export function formatAgentHelp(): string {
 
 function capitalize(value: string): string {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
-}
-
-export function toRobotGuidanceBundle(bundle: GuidanceBundle): Record<string, unknown> {
-  return {
-    repoRoot: bundle.repoRoot,
-    matches: bundle.matches.map((match) => ({
-      path: match.path,
-      sourcePath: match.sourcePath,
-      reasons: match.reasons,
-      promptSummary: match.promptSummary,
-      ...(match.content === undefined ? {} : { content: match.content }),
-    })),
-    diagnostics: bundle.diagnostics,
-  };
-}
-
-export function formatGuidanceText(bundle: GuidanceBundle, full: boolean): string {
-  if (bundle.matches.length === 0) {
-    return "No guidance matched.";
-  }
-
-  return bundle.matches
-    .map((match) => formatGuidanceMatchText(match, full))
-    .join("\n\n");
-}
-
-function formatGuidanceMatchText(match: GuidanceMatch, full: boolean): string {
-  const lines = [
-    match.path,
-    `reasons: ${match.reasons.join(", ")}`,
-    "",
-    full ? (match.content ?? "") : (match.promptSummary ?? "No prompt summary."),
-  ];
-  return lines.join("\n").trimEnd();
 }
 
 export function toRobotBlockers(task: Task, analysis: TaskGraphAnalysis): Array<Record<string, unknown>> {

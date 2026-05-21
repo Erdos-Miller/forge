@@ -110,15 +110,6 @@ export const COMMANDS = [
     agentPurpose: "Inspect graph context and make validated dependency edits.",
   },
   {
-    name: "guidance",
-    usage: "forge guidance [--json] [--for-task <id>] [--path <path>] [--full]",
-    description: "Resolve contextual guidance.",
-    classification: "read",
-    supportsJson: true,
-    examples: ["forge guidance", "forge guidance --for-task F-0001 --json"],
-    agentPurpose: "Load repo, task, cwd, and path guidance for an agent step.",
-  },
-  {
     name: "doctor",
     usage: "forge doctor --json",
     description: "Validate task files and graph health.",
@@ -147,11 +138,11 @@ export const COMMANDS = [
   },
   {
     name: "prompt",
-    usage: "forge prompt <id|next> [--full]",
-    description: "Emit a reusable task prompt with matched guidance.",
+    usage: "forge prompt <id|next>",
+    description: "Emit a reusable task prompt.",
     classification: "read",
     supportsJson: false,
-    examples: ["forge prompt next", "forge prompt F-0001 --full"],
+    examples: ["forge prompt next", "forge prompt F-0001"],
     agentPurpose: "Start an agent on a concrete task.",
   },
   {
@@ -268,7 +259,6 @@ export const COMMAND_WORKFLOWS = {
   show: "inspect",
   blockers: "inspect",
   deps: "mutate",
-  guidance: "inspect",
   doctor: "verify",
   closeout: "close",
   create: "plan",

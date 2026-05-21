@@ -67,39 +67,6 @@ export interface DependencyEditResult {
   reason: "added" | "already_present" | "removed" | "absent";
 }
 
-export interface ResolveGuidanceInput {
-  cwd?: string;
-  taskId?: string;
-  paths?: string[];
-  includeContent?: boolean;
-}
-
-export interface GuidanceMatch {
-  path: string;
-  sourcePath: string;
-  reasons: string[];
-  promptSummary: string | null;
-  content?: string;
-}
-
-export interface GuidanceDiagnostic {
-  kind:
-    | "missing_config"
-    | "missing_include"
-    | "invalid_config"
-    | "unreadable_include"
-    | "duplicate_include"
-    | "local_file_not_ignored";
-  message: string;
-  path?: string;
-}
-
-export interface GuidanceBundle {
-  repoRoot: string;
-  matches: GuidanceMatch[];
-  diagnostics: GuidanceDiagnostic[];
-}
-
 export interface MissingDependencyDiagnostic {
   taskId: string;
   dependencyId: string;
