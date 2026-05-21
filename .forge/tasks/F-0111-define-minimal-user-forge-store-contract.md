@@ -2,18 +2,19 @@
 id: F-0111
 title: "Define minimal user Forge store contract"
 kind: task
-status: open
+status: blocked
 priority: urgent
 area: "docs"
 parent: "F-0000"
 depends_on: []
-claimed_by: ""
+claimed_by: "codex"
 scope:
   - ".forge/**"
   - "README.md"
   - "AGENTS.md"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T20:49:10.024Z
+blocked_reason: "Acceptance requires updating generated prompt references in packages/cli/src/prompt-format.ts and prompt tests, but this task scope only allows .forge/**, README.md, and AGENTS.md. Expand scope or move prompt changes to a follow-up before implementation."
 ---
 # Define minimal user Forge store contract
 
