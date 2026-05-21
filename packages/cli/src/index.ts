@@ -9,7 +9,6 @@ import {
   completeTaskFrom,
   discoverForgeRootsDownward,
   addScopeConfigEntry,
-  createTaskFrom,
   findParsedTaskByIdFrom,
   findForgeRoot,
   inferScopeConfigEntries,
@@ -24,7 +23,6 @@ import {
   updateScopeConfigEntry,
   unblockTaskFrom,
   upsertTaskExecutionPlanFrom,
-  type CreateTaskInput,
   type DiscoveredForgeRoot,
   type ScopeConfigReadResult,
   type Task,
@@ -36,7 +34,6 @@ import { COMMANDS, USAGE, type CommandName } from "./command-metadata";
 import {
   isJsonOnly,
   parseClaimArgs,
-  parseCreateArgs,
   parseDepsArgs,
   parseDoneArgs,
   parseIdJsonArgs,
@@ -51,6 +48,7 @@ import {
   parseWorktreeStatusArgs,
   type LinkMode,
 } from "./args";
+import { create } from "./create";
 import {
   getGraphDoctorDiagnostics,
   getScopeConfigDoctorDiagnostics,
@@ -699,13 +697,6 @@ async function set(options: CliOptions, args: string[]): Promise<number> {
       task: toRobotTaskDocument(task),
     }),
   );
-  return 0;
-}
-
-async function create(options: CliOptions, args: string[]): Promise<number> {
-  const input = parseCreateArgs(args);
-  const task = await createTaskFrom(options.cwd, input, options.now);
-  options.stdout(`created ${task.id} ${task.sourcePath}`);
   return 0;
 }
 

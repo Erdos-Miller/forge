@@ -2,7 +2,7 @@
 id: F-0114
 title: "Make forge create project-first and cwd-aware"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:32:04.299Z
+closed_at: 2026-05-21T21:32:04.299Z
+close_reason: "Implemented project-first cwd-aware create flow and verified CLI harness."
+blocked_reason: ""
+review_reason: ""
 ---
 # Make forge create project-first and cwd-aware
 
@@ -73,6 +77,25 @@ Tracked in frontmatter: F-0112, F-0113.
 ## Notes
 
 Project is the organizational link. `scope` remains an edit-boundary refinement.
+
+Implemented project-first task creation:
+
+- Added title-first `forge create "Title"` with auto-generated next task IDs.
+- Kept the explicit-id compatibility form `forge create F-0004 --title ...`.
+- Resolved `--project` explicitly when provided, including configured Project validation.
+- Inferred `project` from cwd when exactly one configured Project path matches.
+- Failed clearly when cwd matches multiple Projects.
+- Left `project` unset when no Project matches cwd.
+- Added `--json` create output with `project.source` as `explicit`, `inferred`, or `unset`.
+- Split create implementation and focused tests out of the large CLI entrypoint/test file.
+
+Verification:
+
+- `bun test packages/cli/test/create.test.ts packages/cli/test/cli.test.ts packages/cli/test/projects.test.ts`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun test packages/cli/test/create.test.ts packages/core/test/readability-ratchet.test.ts`
+- `bun run harness:cli`
+- `forge doctor --json` reports only expected dirty-worktree warnings for the active task before commit.
 
 ## History
 

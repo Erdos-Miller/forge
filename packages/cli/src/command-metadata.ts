@@ -189,8 +189,9 @@ export const COMMANDS = [
     usage: CREATE_USAGE.replace(/^usage: /, ""),
     description: "Create a canonical task file with expected Markdown fields.",
     classification: "write",
-    supportsJson: false,
+    supportsJson: true,
     examples: [
+      'forge create "Add web queue" --project web --area web --json',
       'forge create F-0006 --title "Add task creation" --why "New tasks need context."',
       'forge create F-0007 --title "Wire smoke test" --acceptance "Test fails before fix."',
     ],

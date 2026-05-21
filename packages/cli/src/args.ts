@@ -6,6 +6,12 @@ import type {
 } from "@forge/core";
 import type { CliOptions } from "./index";
 
+export interface ParsedCreateArgs {
+  input: CreateTaskInput;
+  json: boolean;
+  explicitProject: boolean;
+}
+
 const SET_USAGE =
   "usage: forge set <id> [--priority <value>] [--status <value>] " +
   "[--project <id>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] " +
@@ -303,16 +309,23 @@ export function parseSetArgs(args: string[]):
   return { ok: true, taskId, updates };
 }
 
-export function parseCreateArgs(args: string[]): CreateTaskInput {
-  const [id, ...rest] = args;
-  if (!id) {
+export function parseCreateArgs(args: string[]): ParsedCreateArgs {
+  const [first, ...rest] = args;
+  if (!first) {
     throw new Error(CREATE_USAGE);
   }
 
-  const input: CreateTaskInput = { id, title: "" };
+  const titleFirst = !looksLikeTaskId(first);
+  const input: CreateTaskInput = titleFirst ? { id: "", title: first } : { id: first, title: "" };
+  let json = false;
+  let explicitProject = false;
 
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
     const value = rest[index + 1];
     if (!value) {
       throw new Error(`${arg} requires a value`);
@@ -333,6 +346,7 @@ export function parseCreateArgs(args: string[]): CreateTaskInput {
         break;
       case "--project":
         input.project = value;
+        explicitProject = true;
         break;
       case "--priority":
         input.priority = parsePriority(value);
@@ -366,13 +380,17 @@ export function parseCreateArgs(args: string[]): CreateTaskInput {
     throw new Error("create requires --title <title>");
   }
 
-  return input;
+  return { input, json, explicitProject };
 }
 
 export const CREATE_USAGE =
-  "usage: forge create <id> --title <title> " +
+  "usage: forge create <id> --title <title> | forge create <title> " +
   "[--why <text>] [--success <text>] [--acceptance <text>] " +
-  "[--verification <text>] [--notes <text>] [options]";
+  "[--verification <text>] [--notes <text>] [--project <id>] [options] [--json]";
+
+function looksLikeTaskId(value: string): boolean {
+  return /^F-\d+$/i.test(value);
+}
 
 export const WORKTREE_STATUS_USAGE =
   "usage: forge worktree-status --json [--task <id>]";
