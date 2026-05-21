@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import type { TaskGraphPayload } from "./api";
 import { shouldShowDoneInQueue } from "./queue-visibility";
+import { getInferredScopeOptions, taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
 import "./styles.css";
 import {
@@ -113,13 +114,7 @@ export function App({ initialData }: AppProps) {
   }, [currentData]);
 
   const scopeOptions = useMemo(() => {
-    const scopes = new Set<string>();
-    for (const task of currentData?.tasks ?? []) {
-      for (const scope of task.scope) {
-        scopes.add(getScopeRoot(scope));
-      }
-    }
-    return Array.from(scopes).sort((a, b) => a.localeCompare(b));
+    return getInferredScopeOptions(currentData?.tasks ?? []);
   }, [currentData]);
 
   const recommendedTasks = useMemo(() => {
@@ -701,14 +696,6 @@ function SectionDetails({ title, sections }: { title: string; sections: Markdown
       ))}
     </details>
   );
-}
-
-function getScopeRoot(scope: string) {
-  return scope.replace(/\/?\*\*.*$/, "").replace(/\/?\*.*$/, "").replace(/\/$/, "") || scope;
-}
-
-function taskMatchesScope(task: Task, scopeFilter: string) {
-  return scopeFilter === "all" || task.scope.some((scope) => getScopeRoot(scope) === scopeFilter);
 }
 
 export function selectTaskAfterRefresh(

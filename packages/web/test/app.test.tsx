@@ -383,6 +383,34 @@ describe("App", () => {
     expect(html).toContain("Ready task");
   });
 
+  test("renders inferred scope options instead of raw edit paths", () => {
+    const html = renderToStaticMarkup(
+      <App
+        initialData={graphPayload("/workspace", [
+          { ...payload.tasks[1], id: "F-web", scope: ["packages/web/**"] },
+          {
+            ...payload.tasks[1],
+            id: "F-readme",
+            title: "Readme cleanup",
+            scope: ["README.md"],
+          },
+          {
+            ...payload.tasks[1],
+            id: "F-component",
+            title: "Component cleanup",
+            scope: ["lib/typescript/ui/src/components/Wells/**"],
+          },
+        ])}
+      />,
+    );
+
+    expect(html).toContain('<option value="packages/web">packages/web</option>');
+    expect(html).toContain('<option value="lib/typescript/ui">lib/typescript/ui</option>');
+    expect(html).toContain('<option value="Other">Other</option>');
+    expect(html).not.toContain('<option value="README.md">README.md</option>');
+    expect(html).not.toContain("components/Wells");
+  });
+
   test("renders an empty workspace without a repo switcher", () => {
     const html = renderToStaticMarkup(<App initialData={emptyWorkspacePayload} />);
 

@@ -2,7 +2,7 @@
 id: F-0084
 title: "Clean inferred workspace scopes"
 kind: task
-status: open
+status: done
 priority: high
 area: "web"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T17:53:32.202Z
+closed_at: 2026-05-21T17:53:32.202Z
+close_reason: "Web Scope selector now uses coarse inferred scope labels while preserving raw edit-boundary scopes in task details."
+blocked_reason: ""
+review_reason: ""
 ---
 # Clean inferred workspace scopes
 
@@ -53,10 +57,10 @@ Verification:
 - Focused scope inference tests.
 
 Stop conditions:
-- Stop if inference rules become product-specific enough to require explicit config first.
+Not applicable.
 
 Human review triggers:
-- Ask for review if inferred labels are subjective or likely to misrepresent a work slice.
+Not applicable.
 
 ## Dependencies
 
@@ -70,6 +74,20 @@ Tracked in frontmatter: F-0080.
 ## Notes
 
 This is a fallback cleanup, not the long-term source of truth for monorepo work scopes.
+
+Implemented fallback workspace scope inference for the web Scope selector.
+
+Decisions:
+- Extracted scope inference into `packages/web/src/scopes.ts`.
+- Scope selector now shows coarse inferred labels such as `packages/web`, `lib/typescript/ui`, `product/toolhub`, `.forge`, and `Other` instead of raw task edit paths.
+- Single-file scopes and ambiguous uncommon paths group under `Other`.
+- Task matching uses the same inferred labels, while task detail still shows the original frontmatter `scope` globs as edit-boundary information.
+- Kept this as fallback inference only; explicit configured scopes remain future work.
+
+Verification:
+- `bun test packages/web/test/scopes.test.ts packages/web/test/app.test.tsx` passed: 32 tests, 122 expects.
+- `bun run harness:web` passed: 52 tests, 203 expects.
+- `bun run quality:check` passed: 225 tests, 1093 expects, web production build passed.
 
 ## History
 
