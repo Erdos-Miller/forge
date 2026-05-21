@@ -3,11 +3,23 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Task, TaskGraphAnalysis } from "@forge/core";
-import { getTaskGraphPayload, toTaskGraphPayload } from "../src/api";
+import {
+  blockedForgeFixtureTasks,
+  createForgeFixtureWorkspace,
+  minimalForgeFixtureTasks,
+  type ForgeFixtureWorkspace,
+} from "../../core/test/fixture-repo";
+import {
+  getTaskGraphPayload,
+  getWorkspaceTaskGraphPayload,
+  toTaskGraphPayload,
+} from "../src/api";
 
 const tempDirs: string[] = [];
+const fixtureWorkspaces: ForgeFixtureWorkspace[] = [];
 
 afterEach(async () => {
+  await Promise.all(fixtureWorkspaces.splice(0).map((workspace) => workspace.cleanup()));
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
@@ -133,6 +145,155 @@ describe("getTaskGraphPayload", () => {
       "F-0004": "claimed",
       "F-0005": "blocked",
     });
+  });
+});
+
+describe("getWorkspaceTaskGraphPayload", () => {
+  test("returns an empty compatible graph when no Forge roots are discovered", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-empty-workspace-",
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+
+    expect(payload.repoRoot).toBe(workspace.workspaceRoot);
+    expect(payload.tasks).toEqual([]);
+    expect(payload.readyTaskIds).toEqual([]);
+    expect(payload.recommendedTaskIds).toEqual([]);
+    expect(payload.workspace).toEqual({
+      startDir: workspace.workspaceRoot,
+      roots: [],
+    });
+  });
+
+  test("preserves the single-root task graph while adding workspace metadata", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-single-workspace-",
+      roots: [{ name: "app", tasks: blockedForgeFixtureTasks() }],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [root] = workspace.roots;
+    const rootPath = await fs.realpath(root.repoRoot);
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+
+    expect(payload.repoRoot).toBe(rootPath);
+    expect(payload.tasks.map((task) => task.id)).toEqual(["F-0101", "F-0102"]);
+    expect(payload.readyTaskIds).toEqual(["F-0101"]);
+    expect(payload.availabilityByTaskId).toEqual({
+      "F-0101": "ready",
+      "F-0102": "blocked",
+    });
+    expect(payload.workspace.roots).toEqual([
+      expect.objectContaining({
+        id: "app",
+        displayName: "app",
+        path: rootPath,
+        status: "ok",
+        taskCount: 2,
+        summary: {
+          totalTasks: 2,
+          readyTaskIds: ["F-0101"],
+          recommendedTaskIds: ["F-0101"],
+          availabilityCounts: {
+            active: 0,
+            blocked: 1,
+            claimed: 0,
+            closed: 0,
+            ready: 1,
+          },
+          diagnostics: {
+            missingDependencies: [],
+            dependencyCycles: [],
+            duplicateTaskIds: [],
+          },
+        },
+      }),
+    ]);
+  });
+
+  test("includes summaries for multiple discovered roots", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-many-workspace-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        { name: "web", tasks: blockedForgeFixtureTasks() },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+
+    expect(payload.workspace.roots.map((root) => root.id)).toEqual(["api", "web"]);
+    expect(payload.workspace.roots.map((root) => root.status)).toEqual(["ok", "ok"]);
+    expect(payload.workspace.roots.map((root) => root.summary?.totalTasks)).toEqual([
+      1,
+      2,
+    ]);
+    expect(payload.workspace.roots.map((root) => root.summary?.readyTaskIds)).toEqual([
+      ["F-0001"],
+      ["F-0101"],
+    ]);
+  });
+
+  test("reports malformed roots without failing valid roots", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-partial-workspace-",
+      roots: [
+        { name: "broken", malformedFiles: [{ filename: "bad.md", contents: "---\nid: [\n---\n" }] },
+        { name: "valid", tasks: minimalForgeFixtureTasks() },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+    const brokenRoot = payload.workspace.roots.find((root) => root.id === "broken");
+    const validRoot = payload.workspace.roots.find((root) => root.id === "valid");
+    const validRootPath = await fs.realpath(workspace.roots[1].repoRoot);
+
+    expect(payload.repoRoot).toBe(validRootPath);
+    expect(payload.readyTaskIds).toEqual(["F-0001"]);
+    expect(brokenRoot).toMatchObject({
+      id: "broken",
+      status: "error",
+    });
+    expect(brokenRoot?.summary).toBeUndefined();
+    expect(brokenRoot?.error).toMatch(
+      /malformed YAML frontmatter|field "id" must be a string/,
+    );
+    expect(validRoot).toMatchObject({
+      id: "valid",
+      status: "ok",
+      summary: expect.objectContaining({
+        totalTasks: 1,
+        readyTaskIds: ["F-0001"],
+      }),
+    });
+  });
+
+  test("keeps malformed-only workspaces as successful empty graphs with root errors", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-broken-workspace-",
+      roots: [
+        { name: "broken", malformedFiles: [{ filename: "bad.md", contents: "---\nid: [\n---\n" }] },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+
+    expect(payload.repoRoot).toBe(workspace.workspaceRoot);
+    expect(payload.tasks).toEqual([]);
+    expect(payload.workspace.roots).toEqual([
+      expect.objectContaining({
+        id: "broken",
+        status: "error",
+        error: expect.stringMatching(
+          /malformed YAML frontmatter|field "id" must be a string/,
+        ),
+      }),
+    ]);
   });
 });
 

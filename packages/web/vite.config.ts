@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defineConfig, normalizePath } from "vite";
 import { findForgeRoot } from "../core/src/index.ts";
-import { getTaskGraphPayload } from "./src/api";
+import { getWorkspaceTaskGraphPayload } from "./src/api";
 
 export default defineConfig({
   plugins: [
@@ -54,7 +54,7 @@ export default defineConfig({
 
         server.middlewares.use("/api/tasks", async (_request, response) => {
           try {
-            const payload = await getTaskGraphPayload(startDir);
+            const payload = await getWorkspaceTaskGraphPayload(startDir);
             response.writeHead(200, { "content-type": "application/json" });
             response.end(JSON.stringify(payload));
           } catch (error) {

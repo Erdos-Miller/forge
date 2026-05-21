@@ -684,7 +684,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
       cwd: webPackageDir,
       env: {
         ...process.env,
-        FORGE_START_DIR: repoRoot,
+        FORGE_START_DIR: webOptions.demo ? repoRoot : path.resolve(webOptions.startDir),
       },
       stderr: "inherit",
       stdin: "inherit",

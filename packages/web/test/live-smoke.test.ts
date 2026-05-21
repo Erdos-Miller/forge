@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { promises as fs } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import {
@@ -60,9 +61,10 @@ describe("live Forge web smoke harness", () => {
     servers.push(server);
 
     const api = await fetchJsonWithRetry(`${serverUrl(server)}/api/tasks`, server);
+    const repoRoot = await fs.realpath(repo.repoRoot);
 
     expect(api).toMatchObject({
-      repoRoot: repo.repoRoot,
+      repoRoot,
       readyTaskIds: ["F-0002"],
       recommendedTaskIds: ["F-0002"],
       diagnostics: {
@@ -85,6 +87,18 @@ describe("live Forge web smoke harness", () => {
     });
     expect(api.blockersByTaskId["F-0003"]).toEqual([
       "dependency F-0002 is open",
+    ]);
+    expect(api.workspace.roots).toEqual([
+      expect.objectContaining({
+        id: ".",
+        path: repoRoot,
+        status: "ok",
+        taskCount: 4,
+        summary: expect.objectContaining({
+          totalTasks: 4,
+          readyTaskIds: ["F-0002"],
+        }),
+      }),
     ]);
 
     const html = await fetchTextWithRetry(serverUrl(server), server);

@@ -1,8 +1,10 @@
 import {
   analyzeTasks,
+  discoverForgeRootsDownward,
   findForgeRoot,
   loadTasks,
   rankReadyTasks,
+  type DiscoveredForgeRoot,
   type Task,
   type TaskGraphAnalysis,
   type TaskAvailability,
@@ -22,6 +24,25 @@ export interface TaskGraphPayload {
   };
 }
 
+export interface WorkspaceRootPayload extends DiscoveredForgeRoot {
+  status: "ok" | "error";
+  summary?: {
+    totalTasks: number;
+    readyTaskIds: string[];
+    recommendedTaskIds: string[];
+    availabilityCounts: Record<TaskAvailability, number>;
+    diagnostics: TaskGraphPayload["diagnostics"];
+  };
+  error?: string;
+}
+
+export interface WorkspaceTaskGraphPayload extends TaskGraphPayload {
+  workspace: {
+    startDir: string;
+    roots: WorkspaceRootPayload[];
+  };
+}
+
 export async function getTaskGraphPayload(
   startDir = process.cwd(),
 ): Promise<TaskGraphPayload> {
@@ -30,6 +51,25 @@ export async function getTaskGraphPayload(
   const analysis = analyzeTasks(tasks);
 
   return toTaskGraphPayload(repoRoot, tasks, analysis);
+}
+
+export async function getWorkspaceTaskGraphPayload(
+  startDir = process.cwd(),
+): Promise<WorkspaceTaskGraphPayload> {
+  const roots = await discoverForgeRootsDownward(startDir);
+  const rootPayloads = await Promise.all(roots.map(toWorkspaceRootPayload));
+  const selectedRoot = rootPayloads.find((root) => root.status === "ok");
+  const selectedGraph = selectedRoot?.summary
+    ? await getTaskGraphPayload(selectedRoot.path)
+    : emptyTaskGraphPayload(startDir);
+
+  return {
+    ...selectedGraph,
+    workspace: {
+      startDir,
+      roots: rootPayloads,
+    },
+  };
 }
 
 type CompatibleTaskGraphAnalysis =
@@ -70,6 +110,64 @@ function deriveAvailabilityByTaskId(
   }
 
   return availabilityByTaskId;
+}
+
+async function toWorkspaceRootPayload(
+  root: DiscoveredForgeRoot,
+): Promise<WorkspaceRootPayload> {
+  try {
+    const tasks = await loadTasks(root.path);
+    const graph = toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks));
+    return {
+      ...root,
+      status: "ok",
+      summary: {
+        totalTasks: tasks.length,
+        readyTaskIds: graph.readyTaskIds,
+        recommendedTaskIds: graph.recommendedTaskIds,
+        availabilityCounts: countAvailability(graph.availabilityByTaskId),
+        diagnostics: graph.diagnostics,
+      },
+    };
+  } catch (error) {
+    return {
+      ...root,
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function emptyTaskGraphPayload(repoRoot: string): TaskGraphPayload {
+  return {
+    repoRoot,
+    tasks: [],
+    readyTaskIds: [],
+    recommendedTaskIds: [],
+    availabilityByTaskId: {},
+    blockersByTaskId: {},
+    diagnostics: {
+      missingDependencies: [],
+      dependencyCycles: [],
+      duplicateTaskIds: [],
+    },
+  };
+}
+
+function countAvailability(
+  availabilityByTaskId: Record<string, TaskAvailability>,
+): Record<TaskAvailability, number> {
+  const counts: Record<TaskAvailability, number> = {
+    active: 0,
+    blocked: 0,
+    claimed: 0,
+    closed: 0,
+    ready: 0,
+  };
+  for (const availability of Object.values(availabilityByTaskId)) {
+    counts[availability] += 1;
+  }
+  return counts;
 }
 
 function classifyTaskAvailability(
