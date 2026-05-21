@@ -86,8 +86,10 @@ None.
 - `parent`: optional parent spec/task id.
 - `depends_on`: task ids that must finish first.
 - `claimed_by`: optional human or agent identifier.
-- `area`: optional human grouping for project, package, app, or subsystem.
-- `scope`: optional file globs the task expects to touch.
+- `area`: optional task category or work type, such as `web`, `cli`, `core`,
+  `docs`, or `test`.
+- `scope`: optional file globs the task expects to touch. This is the task edit
+  boundary, not the web UI Scope filter.
 - `created_at`: ISO timestamp.
 - `updated_at`: ISO timestamp.
 - `closed_at`: optional ISO timestamp for completed or canceled work.
@@ -199,6 +201,25 @@ instructions such as `AGENTS.md`, not in Forge's generic task schema. For
 example, a web app may require a browser screenshot before closeout, while a
 library task may require API compatibility notes.
 
+## Decision Records
+
+Use `.forge/decisions/NNNN-short-title.md` for durable product or architecture
+decisions that future tasks must preserve. Decision records are for shared
+semantics, product behavior, architecture boundaries, and agent workflow rules
+that outlive one task.
+
+Use task `Notes` for local implementation evidence, verification results,
+blockers, and task-specific decisions. If a note establishes a cross-cutting
+rule, promote it into a decision record and link the related task ids.
+
+Decision records should stay short and use this shape:
+
+- `Context`: the problem or ambiguity.
+- `Decision`: the chosen rule or convention.
+- `Alternatives`: serious options that were not chosen.
+- `Consequences`: follow-up work, tradeoffs, or compatibility notes.
+- `Related tasks`: task ids that introduced or depend on the decision.
+
 ## Storage Model
 
 Use one tracked `.forge/` directory at the git repository root.
@@ -208,8 +229,14 @@ Nested stores split the task graph and make dependencies harder to reason about.
 
 Relate work to projects or directories with:
 
-- `scope` for machine-readable file globs.
-- `area` for human grouping such as `core`, `cli`, `web`, or `docs`.
+- task `scope` for machine-readable edit-boundary file globs.
+- `area` for task categories such as `core`, `cli`, `web`, or `docs`.
+
+When Forge serves several roots, call each selectable repo or worktree a
+`Worktree`. A Worktree is the selected `.forge` root in the web UI. Use `UI
+Scope` for a user-facing slice of work inside a selected Worktree. UI Scope is a
+navigation concept and may later be backed by explicit config; it is not the
+same thing as task frontmatter `scope`.
 
 ## Derived Relationships
 

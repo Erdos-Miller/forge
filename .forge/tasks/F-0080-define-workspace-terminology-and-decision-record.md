@@ -2,7 +2,7 @@
 id: F-0080
 title: "Define workspace terminology and decision record"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "docs"
 parent: "F-0000"
@@ -12,7 +12,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T17:08:18.865Z
+closed_at: 2026-05-21T17:08:18.865Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Define workspace terminology and decision record
 
@@ -68,6 +72,14 @@ None.
 ## Notes
 
 This task should not change runtime filter behavior. It records the language future tasks must implement.
+
+Decision: Added `.forge/decisions/0001-workspace-terminology.md` as the durable terminology record. It defines Worktree, UI Scope, Area, task scope, and Priority, and establishes the lightweight decision-record convention.
+
+Decision: Updated README and `.forge/README.md` to distinguish task frontmatter `scope` as edit-boundary globs from UI Scope as a navigation concept. Task `Notes` remain for implementation evidence and local task decisions; cross-cutting product or architecture rules should move into `.forge/decisions/`.
+
+Verification:
+- Manual docs review for terminology consistency across README, `.forge/README.md`, and the new decision record.
+- bun run quality:check: 210 pass, 1029 expect() calls, web production build passed.
 
 ## History
 

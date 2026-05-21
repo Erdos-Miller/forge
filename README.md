@@ -41,9 +41,9 @@ repos keep automation and collaboration metadata in directories such as
 `.github/` or `.vscode/`.
 
 Keep canonical tasks and specs in `.forge/` so they branch, diff, merge, and
-travel with the code they describe. Use task `scope` globs and optional `area`
-labels to relate work to packages, apps, modules, or docs without creating
-nested task stores.
+travel with the code they describe. Use task `scope` globs for edit boundaries
+and optional `area` labels for task categories such as `web`, `cli`, `core`,
+`docs`, or `test` without creating nested task stores.
 
 Generated indexes, caches, or local UI state should stay ignored by git. The
 Markdown files remain the source of truth.
@@ -51,6 +51,10 @@ Markdown files remain the source of truth.
 Forge does not currently route committed project guidance. Keep durable work
 context in task Markdown and repository agent instructions such as `AGENTS.md`.
 Personal guidance is intentionally separate from repo task state.
+
+Durable product and architecture choices live in `.forge/decisions/`. Task
+`Notes` are for implementation evidence, verification, blockers, and local task
+decisions; promote cross-cutting rules into a decision record.
 
 ## First Loop
 
@@ -116,6 +120,12 @@ To serve another repo or worktree:
 ```sh
 forge web --dir /path/to/repo --port 5175
 ```
+
+When Forge serves multiple `.forge` roots from one parent directory, the web UI
+calls each selectable root a Worktree. A Worktree may be a git repository, a git
+worktree, or any directory that owns a `.forge` store. The UI Scope filter is a
+user-facing slice of work inside the selected Worktree; it is separate from the
+task frontmatter `scope` globs that agents use as edit boundaries.
 
 To keep a local install up to date, pull the Forge repo and relink if the CLI package path changes:
 
