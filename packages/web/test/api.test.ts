@@ -192,6 +192,10 @@ describe("getWorkspaceTaskGraphPayload", () => {
         path: rootPath,
         status: "ok",
         taskCount: 2,
+        graph: expect.objectContaining({
+          repoRoot: rootPath,
+          readyTaskIds: ["F-0101"],
+        }),
         summary: {
           totalTasks: 2,
           readyTaskIds: ["F-0101"],

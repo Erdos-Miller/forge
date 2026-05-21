@@ -8,8 +8,9 @@ import {
   shouldIgnoreQueueShortcutTarget,
   sortQueueTasks,
 } from "../src/App";
-import type { TaskGraphPayload } from "../src/api";
+import type { TaskGraphPayload, WorkspaceTaskGraphPayload } from "../src/api";
 import {
+  getRepoIdFromSearch,
   getTaskIdFromSearch,
   getVisibleSelectedTask,
   writeTaskSelectionToUrl,
@@ -108,6 +109,95 @@ const payload: TaskGraphPayload = {
     duplicateTaskIds: [],
   },
 };
+
+const apiGraph = graphPayload("/workspace/api", [
+  {
+    ...payload.tasks[1],
+    id: "F-api",
+    title: "API workspace task",
+    area: "api",
+    sourcePath: "/workspace/api/.forge/tasks/F-api.md",
+  },
+]);
+
+const webGraph = graphPayload("/workspace/web", [
+  {
+    ...payload.tasks[1],
+    id: "F-web",
+    title: "Web workspace task",
+    area: "web",
+    sourcePath: "/workspace/web/.forge/tasks/F-web.md",
+  },
+]);
+
+const workspacePayload: WorkspaceTaskGraphPayload = {
+  ...apiGraph,
+  workspace: {
+    startDir: "/workspace",
+    roots: [
+      workspaceRoot("api", apiGraph),
+      workspaceRoot("web", webGraph),
+    ],
+  },
+};
+
+const emptyWorkspacePayload: WorkspaceTaskGraphPayload = {
+  repoRoot: "/workspace",
+  tasks: [],
+  readyTaskIds: [],
+  recommendedTaskIds: [],
+  availabilityByTaskId: {},
+  blockersByTaskId: {},
+  diagnostics: {
+    missingDependencies: [],
+    dependencyCycles: [],
+    duplicateTaskIds: [],
+  },
+  workspace: {
+    startDir: "/workspace",
+    roots: [],
+  },
+};
+
+function graphPayload(repoRoot: string, tasks: TaskGraphPayload["tasks"]): TaskGraphPayload {
+  return {
+    repoRoot,
+    tasks,
+    readyTaskIds: tasks.map((task) => task.id),
+    recommendedTaskIds: tasks.map((task) => task.id),
+    availabilityByTaskId: Object.fromEntries(tasks.map((task) => [task.id, "ready"])),
+    blockersByTaskId: Object.fromEntries(tasks.map((task) => [task.id, []])),
+    diagnostics: {
+      missingDependencies: [],
+      dependencyCycles: [],
+      duplicateTaskIds: [],
+    },
+  };
+}
+
+function workspaceRoot(id: string, graph: TaskGraphPayload) {
+  return {
+    id,
+    displayName: id,
+    path: graph.repoRoot,
+    status: "ok" as const,
+    taskCount: graph.tasks.length,
+    graph,
+    summary: {
+      totalTasks: graph.tasks.length,
+      readyTaskIds: graph.readyTaskIds,
+      recommendedTaskIds: graph.recommendedTaskIds,
+      availabilityCounts: {
+        active: 0,
+        blocked: 0,
+        claimed: 0,
+        closed: 0,
+        ready: graph.tasks.length,
+      },
+      diagnostics: graph.diagnostics,
+    },
+  };
+}
 
 function withMockWindow<T>(
   search: string,
@@ -288,6 +378,50 @@ describe("App", () => {
     expect(html).toContain("Ready task");
   });
 
+  test("renders an empty workspace without a repo switcher", () => {
+    const html = renderToStaticMarkup(<App initialData={emptyWorkspacePayload} />);
+
+    expect(html).toContain("Queue");
+    expect(html).toContain("No tasks match this filter.");
+    expect(html).not.toContain("All repos");
+  });
+
+  test("keeps a one-root workspace visually close to the single-root app", () => {
+    const oneRootPayload: WorkspaceTaskGraphPayload = {
+      ...apiGraph,
+      workspace: {
+        startDir: "/workspace",
+        roots: [workspaceRoot("api", apiGraph)],
+      },
+    };
+
+    const html = renderToStaticMarkup(<App initialData={oneRootPayload} />);
+
+    expect(html).toContain("API workspace task");
+    expect(html).toContain("/workspace/api");
+    expect(html).not.toContain("All repos");
+  });
+
+  test("renders an all-roots aggregate queue for many-root workspaces", () => {
+    const html = renderToStaticMarkup(<App initialData={workspacePayload} />);
+
+    expect(html).toContain("All repos");
+    expect(html).toContain("API workspace task");
+    expect(html).toContain("Web workspace task");
+    expect(html).toContain('class="badge">api</span>');
+    expect(html).toContain('class="badge">web</span>');
+  });
+
+  test("selects a repo and task from URL params", () => {
+    const html = withMockWindow("?repo=web&task=F-web", () =>
+      renderToStaticMarkup(<App initialData={workspacePayload} />),
+    );
+
+    expect(html).toContain("<h2>Web workspace task</h2>");
+    expect(html).toContain("/workspace/web");
+    expect(html).not.toContain("<h2>API workspace task</h2>");
+  });
+
   test("renders doing claimed rows as in progress instead of blocked by blocker count", () => {
     const activeTask = {
       ...payload.tasks[1],
@@ -369,14 +503,17 @@ describe("App", () => {
   test("URL helpers parse, preserve, and update task selection", () => {
     expect(getTaskIdFromSearch("?task=F-0002")).toBe("F-0002");
     expect(getTaskIdFromSearch("?task=")).toBeNull();
+    expect(getRepoIdFromSearch("?repo=web&task=F-0002")).toBe("web");
+    expect(getRepoIdFromSearch("?repo=&task=F-0002")).toBeNull();
     expect(getVisibleSelectedTask("F-9999", [payload.tasks[1]], "F-9999")).toBeNull();
 
     const replaceCalls = withMockWindow("?task=F-0002", ({ replaceCalls }) => {
       writeTaskSelectionToUrl("F-0003");
+      writeTaskSelectionToUrl("F-0003", "web");
       return replaceCalls;
     });
 
-    expect(replaceCalls).toEqual(["/?task=F-0003"]);
+    expect(replaceCalls).toEqual(["/?task=F-0003", "/?task=F-0003&repo=web"]);
   });
 
   test("keeps detail visible when only done tasks match the filter", () => {

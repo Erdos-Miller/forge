@@ -4,13 +4,17 @@ import net from "node:net";
 import path from "node:path";
 import {
   createForgeFixtureRepo,
+  createForgeFixtureWorkspace,
+  minimalForgeFixtureTasks,
   plannedBody,
   type ForgeFixtureRepo,
+  type ForgeFixtureWorkspace,
 } from "../../core/test/fixture-repo";
 
 const repoRoot = path.resolve(import.meta.dir, "../../..");
 const cliEntrypoint = path.join(repoRoot, "packages", "cli", "src", "index.ts");
 const fixtureRepos: ForgeFixtureRepo[] = [];
+const fixtureWorkspaces: ForgeFixtureWorkspace[] = [];
 const servers: LiveForgeWebServer[] = [];
 
 interface LiveForgeWebServer {
@@ -23,6 +27,7 @@ interface LiveForgeWebServer {
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => stopLiveForgeWeb(server)));
   await Promise.all(fixtureRepos.splice(0).map((repo) => repo.cleanup()));
+  await Promise.all(fixtureWorkspaces.splice(0).map((workspace) => workspace.cleanup()));
 });
 
 describe("live Forge web smoke harness", () => {
@@ -102,6 +107,50 @@ describe("live Forge web smoke harness", () => {
     ]);
 
     const html = await fetchTextWithRetry(serverUrl(server), server);
+    expect(html).toContain('<div id="root"></div>');
+    expect(html).not.toContain("Failed to load tasks");
+  });
+
+  test("serves a multi-root workspace payload from one web session", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-workspace-smoke-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        {
+          name: "web",
+          tasks: [
+            {
+              id: "F-1001",
+              title: "Web workspace smoke task",
+              priority: "urgent",
+              area: "web",
+            },
+          ],
+        },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const server = await startLiveForgeWeb(workspace.workspaceRoot);
+    servers.push(server);
+
+    const api = await fetchJsonWithRetry(`${serverUrl(server)}/api/tasks`, server);
+
+    expect(api.workspace.roots.map((root: { id: string }) => root.id)).toEqual([
+      "api",
+      "web",
+    ]);
+    expect(api.workspace.roots.map((root: { status: string }) => root.status)).toEqual([
+      "ok",
+      "ok",
+    ]);
+    expect(api.workspace.roots[0].graph.readyTaskIds).toEqual(["F-0001"]);
+    expect(api.workspace.roots[1].graph.readyTaskIds).toEqual(["F-1001"]);
+
+    const html = await fetchTextWithRetry(
+      `${serverUrl(server)}/?repo=web&task=F-1001`,
+      server,
+    );
     expect(html).toContain('<div id="root"></div>');
     expect(html).not.toContain("Failed to load tasks");
   });

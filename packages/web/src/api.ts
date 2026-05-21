@@ -26,6 +26,7 @@ export interface TaskGraphPayload {
 
 export interface WorkspaceRootPayload extends DiscoveredForgeRoot {
   status: "ok" | "error";
+  graph?: TaskGraphPayload;
   summary?: {
     totalTasks: number;
     readyTaskIds: string[];
@@ -59,9 +60,7 @@ export async function getWorkspaceTaskGraphPayload(
   const roots = await discoverForgeRootsDownward(startDir);
   const rootPayloads = await Promise.all(roots.map(toWorkspaceRootPayload));
   const selectedRoot = rootPayloads.find((root) => root.status === "ok");
-  const selectedGraph = selectedRoot?.summary
-    ? await getTaskGraphPayload(selectedRoot.path)
-    : emptyTaskGraphPayload(startDir);
+  const selectedGraph = selectedRoot?.graph ?? emptyTaskGraphPayload(startDir);
 
   return {
     ...selectedGraph,
@@ -120,6 +119,7 @@ async function toWorkspaceRootPayload(
     const graph = toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks));
     return {
       ...root,
+      graph,
       status: "ok",
       summary: {
         totalTasks: tasks.length,
