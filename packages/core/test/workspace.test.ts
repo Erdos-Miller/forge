@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { promises as fs } from "node:fs";
+import { promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import {
   createForgeFixtureWorkspace,
@@ -75,4 +75,75 @@ describe("discoverForgeRootsDownward", () => {
 
     expect(roots.map((root) => root.id)).toEqual(["app"]);
   });
+
+  test("uses bounded concurrent traversal while preserving stable output", async () => {
+    const workspace = await makeWorkspace(
+      Array.from({ length: 8 }, (_value, index) => ({
+        name: `root-${index}`,
+        tasks: minimalForgeFixtureTasks(),
+      })),
+    );
+    const readdir = createDelayedReaddir(10);
+
+    const roots = await discoverForgeRootsDownward(workspace.workspaceRoot, {
+      concurrency: 3,
+      readdir,
+    });
+
+    expect(readdir.maxActive).toBeLessThanOrEqual(3);
+    expect(readdir.maxActive).toBeGreaterThan(1);
+    expect(roots.map((root) => root.id)).toEqual([
+      "root-0",
+      "root-1",
+      "root-2",
+      "root-3",
+      "root-4",
+      "root-5",
+      "root-6",
+      "root-7",
+    ]);
+  });
+
+  test("runs faster than serial traversal on a delayed fixture tree", async () => {
+    const workspace = await makeWorkspace(
+      Array.from({ length: 8 }, (_value, index) => ({
+        name: `root-${index}`,
+        tasks: minimalForgeFixtureTasks(),
+      })),
+    );
+
+    const serialStart = performance.now();
+    await discoverForgeRootsDownward(workspace.workspaceRoot, {
+      concurrency: 1,
+      readdir: createDelayedReaddir(12),
+    });
+    const serialDuration = performance.now() - serialStart;
+
+    const parallelStart = performance.now();
+    await discoverForgeRootsDownward(workspace.workspaceRoot, {
+      concurrency: 8,
+      readdir: createDelayedReaddir(12),
+    });
+    const parallelDuration = performance.now() - parallelStart;
+
+    expect(parallelDuration).toBeLessThan(serialDuration * 0.75);
+  });
 });
+
+function createDelayedReaddir(delayMs: number) {
+  let active = 0;
+  const readdir = async (dir: string): Promise<Dirent[]> => {
+    active += 1;
+    readdir.maxActive = Math.max(readdir.maxActive, active);
+    await delay(delayMs);
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    active -= 1;
+    return entries;
+  };
+  readdir.maxActive = 0;
+  return readdir;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

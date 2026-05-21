@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import {
@@ -63,6 +63,12 @@ const WORKSPACE_DISCOVERY_IGNORED_DIRS = new Set([
   "out",
   "target",
 ]);
+const DEFAULT_WORKSPACE_DISCOVERY_CONCURRENCY = 32;
+
+export interface ForgeRootDiscoveryOptions {
+  concurrency?: number;
+  readdir?: (dir: string) => Promise<Dirent[]>;
+}
 
 export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
   let currentDir = path.resolve(startDir);
@@ -89,34 +95,68 @@ export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
 
 export async function discoverForgeRootsDownward(
   startDir: string,
+  options: ForgeRootDiscoveryOptions = {},
 ): Promise<DiscoveredForgeRoot[]> {
   const resolvedStartDir = path.resolve(startDir);
   const roots: DiscoveredForgeRoot[] = [];
-  await walkForForgeRoots(resolvedStartDir, resolvedStartDir, roots);
+  const concurrency = Math.max(1, options.concurrency ?? DEFAULT_WORKSPACE_DISCOVERY_CONCURRENCY);
+  let currentDirs = [resolvedStartDir];
+  while (currentDirs.length > 0) {
+    const batches = await mapWithConcurrency(currentDirs, concurrency, (currentDir) =>
+      inspectForgeRootDirectory(resolvedStartDir, currentDir, roots, options),
+    );
+    currentDirs = batches.flat().sort();
+  }
   return roots.sort((left, right) => left.id.localeCompare(right.id));
 }
 
-async function walkForForgeRoots(
+async function inspectForgeRootDirectory(
   startDir: string,
   currentDir: string,
   roots: DiscoveredForgeRoot[],
-): Promise<void> {
-  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  options: ForgeRootDiscoveryOptions,
+): Promise<string[]> {
+  const entries = await readWorkspaceDirectory(currentDir, options);
   const hasForgeDir = entries.some((entry) => entry.isDirectory() && entry.name === ".forge");
 
   if (hasForgeDir) {
     roots.push(await toDiscoveredForgeRoot(startDir, currentDir));
-    return;
+    return [];
   }
 
-  const childDirs = entries
+  return entries
     .filter((entry) => entry.isDirectory() && !WORKSPACE_DISCOVERY_IGNORED_DIRS.has(entry.name))
     .map((entry) => path.join(currentDir, entry.name))
     .sort();
+}
 
-  for (const childDir of childDirs) {
-    await walkForForgeRoots(startDir, childDir, roots);
-  }
+async function readWorkspaceDirectory(
+  currentDir: string,
+  options: ForgeRootDiscoveryOptions,
+): Promise<Dirent[]> {
+  return options.readdir
+    ? options.readdir(currentDir)
+    : fs.readdir(currentDir, { withFileTypes: true });
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index]);
+      }
+    }),
+  );
+  return results;
 }
 
 async function toDiscoveredForgeRoot(
