@@ -2,19 +2,23 @@
 id: F-0100
 title: "Refresh only affected workspace root graphs"
 kind: task
-status: doing
+status: done
 priority: medium
 area: "web"
 parent: "F-0000"
 depends_on:
   - "F-0082"
-claimed_by: "codex"
+claimed_by: ""
 scope:
   - "packages/web/**"
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T17:46:37.150Z
-updated_at: 2026-05-21T19:06:01.821Z
+updated_at: 2026-05-21T19:07:18.228Z
+closed_at: 2026-05-21T19:07:18.228Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Refresh only affected workspace root graphs
 
