@@ -2,7 +2,7 @@
 id: F-0126
 title: "Add task creation DX dogfood harness"
 kind: task
-status: open
+status: done
 priority: urgent
 project: "forge"
 area: "test"
@@ -16,7 +16,11 @@ scope:
   - "package.json"
   - ".forge/tasks/**"
 created_at: 2026-05-21T22:33:31.764Z
-updated_at: 2026-05-21T22:34:06.828Z
+updated_at: 2026-05-21T22:51:25.753Z
+closed_at: 2026-05-21T22:51:25.753Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add task creation DX dogfood harness
 
@@ -74,6 +78,17 @@ Tracked in frontmatter: F-0121.
 ## Notes
 
 Measure first; follow-up tasks should improve CLI creation if the harness proves the current command path is clumsy.
+
+- Added `packages/cli/test/create-dx-harness.test.ts` as a deterministic dogfood harness for rich task creation.
+- Wired the new harness into `bun run harness:cli`.
+- The harness compares a realistic three-task plan created through Forge commands against direct Markdown fixture authoring, then checks graph parity, doctor diagnostics, required sections, command count, operation count, follow-up edits, and task count.
+- Current measured gap: structured path uses 6 commands and 3 follow-up plan edits; direct fixture authoring uses 1 operation. The report says `forge create loses one-step parity when rich Execution Plan content is required.`
+- Added regression coverage that `forge create ... --plan` is currently rejected with `unknown create option: --plan`, proving rich execution plans are not one-step creation fields yet.
+- The report uses direct Markdown only as a baseline measurement, not as recommended workflow guidance.
+Verification:
+- `bun test packages/cli/test/create-dx-harness.test.ts`
+- `bun run harness:cli`
+- `bun test packages/core/test/readability-ratchet.test.ts`
 
 ## History
 

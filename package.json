@@ -10,7 +10,7 @@
     "forge": "bun packages/cli/src/index.ts",
     "web": "bun packages/cli/src/index.ts web",
     "test": "bunx playwright install chromium && bun test packages/core packages/cli packages/web",
-    "harness:cli": "bun test packages/cli/test/harness.test.ts",
+    "harness:cli": "bun test packages/cli/test/harness.test.ts packages/cli/test/create-dx-harness.test.ts",
     "harness:web": "bunx playwright install chromium && bun test packages/web",
     "harness:web:layout": "bunx playwright install chromium && bun test packages/web/test/layout-harness.test.ts",
     "harness:check": "bun run test",
