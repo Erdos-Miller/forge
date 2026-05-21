@@ -69,6 +69,10 @@ describe("prompt command guidance", () => {
     expect(output).not.toContain("\nScope:\n");
     expect(output).toContain("Prefer structured Forge commands");
     expect(output).toContain("Direct Markdown edits are acceptable");
+    expect(output).toContain("Use Project for task organization");
+    expect(output).toContain('forge create "Title" --project <id> --area <area>');
+    expect(output).toContain("cwd can infer Project");
+    expect(output).toContain("task scope only as an edit-boundary refinement");
     expect(output).toContain("forge worktree-status --json");
     expect(output).toContain("continue on `non_blocking`");
     expect(output).toContain("pause on `review`");
@@ -142,6 +146,8 @@ describe("prompt command guidance", () => {
     expect(output).toContain("Command guidance:");
     expect(output).toContain("classify it with `forge worktree-status --json`");
     expect(output).toContain("task edit scope");
+    expect(output).toContain("Use Project for task organization");
+    expect(output).toContain("cwd can infer Project");
     expect(output).toContain("exceed edit scope");
     expect(output).toContain("continue on `non_blocking`");
     expect(output).toContain("pause on `review`");

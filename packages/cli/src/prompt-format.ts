@@ -151,6 +151,11 @@ function formatPromptCommandGuidance(): string {
       "prefer a dependency write command when one exists.",
     "- Direct Markdown edits are acceptable for rich task body content that no command " +
       "owns, but preserve frontmatter and canonical sections.",
+    "- Use Project for task organization. `forge create \"Title\" --project <id> " +
+      "--area <area>` sets it explicitly; cwd can infer Project when exactly one " +
+      "configured Project path matches.",
+    "- Use task scope only as an edit-boundary refinement, not as the primary " +
+      "organization mechanism.",
     "- Use repo-local testing or harness guidance, when present, to decide " +
       "whether a failure needs a fixture, harness, doctor warning, or smoke test.",
     "- For web UI, Vite server, or `/api/tasks` changes, run `bun run harness:web`.",

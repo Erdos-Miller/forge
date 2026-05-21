@@ -143,6 +143,12 @@ web Projects. Projects are user-facing slices of work inside a Worktree. They
 are separate from task frontmatter `scope`, which remains edit-boundary data for
 agents.
 
+Use Project for normal task organization. `forge create "Title" --project <id>
+--area <area>` records the Project explicitly, and `forge create "Title"` can
+infer Project from cwd when the current directory is inside exactly one
+configured Project path. Use `--scope` only when the edit boundary needs to be
+narrower than the Project.
+
 When `.forge/projects.yml` or the legacy `.forge/scopes.yml` exists, configured
 Projects take precedence over the web UI's inferred fallback navigation. Repos
 without either file continue to use fallback inference until explicit Project
@@ -314,8 +320,8 @@ When work is blocked:
 ```markdown
 ## Notes
 
-Blocked: the API contract for persisted claims is not decided. Stop until the
-planning agent records whether claims are local-only or shared.
+Blocked: the API contract for persisted claims is not decided. Stop until
+planning mode records whether claims are local-only or shared.
 ```
 
 Then set `status: blocked` and write the same short reason in `blocked_reason`.

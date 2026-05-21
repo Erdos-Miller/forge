@@ -194,10 +194,11 @@ export const COMMANDS = [
     supportsJson: true,
     examples: [
       'forge create "Add web queue" --project web --area web --json',
+      'forge create "Tighten CLI help" --area cli --json',
       'forge create F-0006 --title "Add task creation" --why "New tasks need context."',
-      'forge create F-0007 --title "Wire smoke test" --acceptance "Test fails before fix."',
     ],
-    agentPurpose: "Add planned work with the standard task shape.",
+    agentPurpose:
+      "Add planned work by Project or cwd context; use scope only for edit-boundary narrowing.",
   },
   {
     name: "prompt",

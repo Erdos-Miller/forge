@@ -4,12 +4,14 @@ Forge is built from its own task files. Treat `.forge/tasks/*.md` as the coordin
 
 ## Roles
 
-Forge currently targets a two-agent workflow.
+Forge currently works with one builder or multiple cooperating agents. Treat
+planning and execution as workflow modes, not required separate people.
 
-- The planning agent works ahead: refines specs, breaks down tasks, adjusts dependencies, and records decisions.
-- The execution agent works the goal loop: picks ready tasks, implements them, updates task notes, and flags review when blocked or uncertain.
+- Planning mode works ahead: refines specs, breaks down tasks, adjusts dependencies, and records decisions.
+- Execution mode works the goal loop: picks ready tasks, implements them, updates task notes, and flags review when blocked or uncertain.
 
-One agent may do both roles in a small session, but keep the distinction clear in the task notes.
+A single builder may do both modes in one session. Keep the distinction clear in
+task notes when switching between planning and implementation.
 
 ## Operating Loop
 

@@ -11,7 +11,8 @@ The core idea is simple: work is stored as plain Markdown files in git. The CLI 
 - Let agents claim, execute, and close tasks without a server.
 - Prefer boring formats over proprietary state.
 - Support a Storybook-like local web app for browsing tasks, specs, branches, and dependency state.
-- Support a two-agent loop: one agent plans ahead, another executes ready tasks.
+- Support a loop where planning and execution can be done by one builder or by
+  cooperating agents.
 
 ## Non-Goals
 
@@ -111,7 +112,7 @@ directory from the current working directory.
 ```sh
 bun packages/cli/src/index.ts list
 bun packages/cli/src/index.ts ready
-bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --acceptance "The task has observable acceptance criteria." --verification "bun run harness:cli" --notes "Keep rich task context in Markdown." --area cli --scope "packages/cli/**"
+bun packages/cli/src/index.ts create "Add task creation" --project cli --area cli --why "New tasks should start with enough context." --success "The task is ready to pick up." --acceptance "The task has observable acceptance criteria." --verification "bun run harness:cli" --notes "Keep rich task context in Markdown." --json
 bun packages/cli/src/index.ts loop-prompt
 bun packages/cli/src/index.ts prompt next
 bun packages/cli/src/index.ts user-guidance
@@ -138,6 +139,12 @@ bun link
 ```
 
 Then run `forge list`, `forge ready`, or `forge web` from any directory inside a repo that has a `.forge` directory.
+
+Use Project for task organization. `forge create "Title" --project <id>
+--area <area>` sets Project explicitly, and `forge create "Title"` can infer
+Project from cwd when that directory is inside exactly one configured Project
+path. Use task `scope` only when the edit boundary needs to be narrower than the
+Project.
 
 ## Web Board
 

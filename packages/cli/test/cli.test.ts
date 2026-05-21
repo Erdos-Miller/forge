@@ -224,6 +224,8 @@ describe("forge cli", () => {
     const createCommand = payload.commands.find((command: any) => command.name === "create");
     expect(createCommand.usage).toContain("[--acceptance <text>]");
     expect(createCommand.description).toContain("expected Markdown fields");
+    expect(createCommand.agentPurpose).toContain("Project or cwd context");
+    expect(createCommand.agentPurpose).toContain("edit-boundary");
     expect(payload.commands.find((command: any) => command.name === "doctor").workflow).toBe(
       "verify",
     );
@@ -250,6 +252,7 @@ describe("forge cli", () => {
     expect(text).toContain("continue on non_blocking, pause on review, stop on blocking");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
     expect(text).toContain("Plan:\n- forge create <id> --title <title>");
+    expect(text).toContain("Add planned work by Project or cwd context");
     expect(text).toContain("[--why <text>] [--success <text>]");
     expect(text).toContain("Mutate:\n- forge projects --json");
     expect(text).toContain("- forge scopes --json");
