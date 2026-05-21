@@ -229,6 +229,9 @@ A task is ready when:
 Forge keeps internal developer and agent checks as package scripts, not as
 customer-facing `forge` CLI commands.
 
+See `.forge/harness-engineering.md` for the concise doctrine behind these
+checks and when to add a new fixture, harness, doctor warning, or smoke test.
+
 - `bun run harness:cli` runs the focused CLI workflow harness.
 - `bun run harness:web` runs the current web harness checks.
 - `bun run harness:check` runs the aggregate in-repo harness and test suite.

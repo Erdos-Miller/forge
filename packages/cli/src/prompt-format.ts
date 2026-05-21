@@ -63,6 +63,8 @@ function formatPromptCommandGuidance(): string {
       "prefer a dependency write command when one exists.",
     "- Direct Markdown edits are acceptable for rich task body content that no command " +
       "owns, but preserve frontmatter and canonical sections.",
+    "- Use `.forge/harness-engineering.md` when deciding whether a failure needs " +
+      "a fixture, harness, doctor warning, or smoke test.",
     "- For web UI, Vite server, or `/api/tasks` changes, run `bun run harness:web`.",
     "- For CLI workflow, command, prompt, or robot JSON changes, run `bun run harness:cli`.",
     "- For broad behavior, graph, task-store, or cross-surface changes, run " +
