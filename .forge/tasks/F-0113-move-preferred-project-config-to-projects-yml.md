@@ -2,7 +2,7 @@
 id: F-0113
 title: "Move preferred project config to projects.yml"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "core"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:18:51.346Z
+closed_at: 2026-05-21T21:18:51.346Z
+close_reason: "Moved preferred Project config reads/writes to projects.yml with legacy scopes.yml compatibility."
+blocked_reason: ""
+review_reason: ""
 ---
 # Move preferred project config to projects.yml
 
@@ -76,6 +80,17 @@ Tracked in frontmatter: F-0111.
 This task changes the preferred file path only. It should not backfill task `project`.
 
 Decision: `.forge/projects.yml` is the preferred Project config file. `.forge/scopes.yml` remains legacy read compatibility only.
+
+Implemented preferred Project config path:
+- `readScopeConfig` now reads `.forge/projects.yml` first, falls back to legacy `.forge/scopes.yml`, and reports which source was used.
+- Project config writes now go to `.forge/projects.yml` for both `forge projects` and the legacy-compatible `forge scopes` command surface.
+- Doctor warns when both preferred and legacy config files exist instead of silently merging them.
+- CLI JSON includes config `source`, `sourcePath`, and optional `legacySourcePath`.
+- Updated docs to describe `.forge/projects.yml` as the write target and `.forge/scopes.yml` as read compatibility.
+
+Verification:
+- `bun test packages/core/test/scope-config.test.ts packages/cli/test/projects.test.ts packages/cli/test/scopes.test.ts packages/cli/test/scope-doctor.test.ts packages/web/test/api.test.ts packages/core/test/readability-ratchet.test.ts`
+- `bun run harness:cli`
 
 ## History
 

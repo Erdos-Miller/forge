@@ -165,9 +165,9 @@ Inside a Worktree, a Project is an explicit user-facing slice of work. It is
 separate from Area, which is a task category such as `web` or `docs`, and from
 the task frontmatter `scope` globs that agents use as edit boundaries.
 
-Repos can optionally define explicit Projects in `.forge/projects.yml`. Current
-compatibility commands may still read or write `.forge/scopes.yml` until the
-Project migration is complete:
+Repos can optionally define explicit Projects in `.forge/projects.yml`. Forge
+still reads legacy `.forge/scopes.yml` when the preferred file is absent, but
+new Project writes use `.forge/projects.yml`:
 
 ```yaml
 version: 1
@@ -186,7 +186,7 @@ scopes:
 Configured Projects take precedence over inferred fallback navigation. The task
 frontmatter `scope` field remains the edit-boundary data for agents.
 
-Maintain the compatibility config with structured commands:
+Maintain Project config with structured commands:
 
 ```sh
 forge scopes --json

@@ -134,9 +134,9 @@ cuts across that hierarchy as edit-boundary metadata.
 ## Project Configuration
 
 Forge's preferred term is Project. The user store contract names
-`.forge/projects.yml`. Existing tools may still read `.forge/scopes.yml` and
-support `forge scopes ...` commands as the compatibility surface until the
-Project migration is complete.
+`.forge/projects.yml`. Forge still reads legacy `.forge/scopes.yml` when the
+preferred file is absent, and `forge scopes ...` remains a compatibility
+command surface.
 
 `.forge/projects.yml` is the optional repo-local configuration file for explicit
 web Projects. Projects are user-facing slices of work inside a Worktree. They
@@ -165,8 +165,9 @@ projects:
 ```
 
 Legacy files that use `.forge/scopes.yml` or a `scopes:` root key are still
-supported and are normalized to Projects by Forge. New user-facing docs should
-describe `.forge/projects.yml` as the contract.
+supported and are normalized to Projects by Forge. New writes use
+`.forge/projects.yml`, and user-facing docs should describe that file as the
+contract.
 
 Fields:
 

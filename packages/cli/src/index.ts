@@ -490,7 +490,9 @@ async function writeScopeConfigPayload(
       repoRoot,
       config: {
         exists: result.exists,
+        source: result.source,
         sourcePath: result.sourcePath,
+        legacySourcePath: result.legacySourcePath ?? null,
         projects: result.config.projects,
         scopes: result.config.scopes,
       },

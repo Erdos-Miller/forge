@@ -22,7 +22,7 @@ describe("project config commands", () => {
     expect(payload).toMatchObject({
       ok: true,
       version: 1,
-      config: { exists: false, projects: [], scopes: [] },
+      config: { exists: false, source: "missing", projects: [], scopes: [] },
       resolved: {
         source: "inferred",
         projects: expect.arrayContaining([
@@ -51,6 +51,9 @@ describe("project config commands", () => {
     expect(payload.scopes).toEqual(payload.projects);
     await expect(
       fs.stat(path.join(repo.repoRoot, ".forge", "scopes.yml")),
+    ).rejects.toThrow();
+    await expect(
+      fs.stat(path.join(repo.repoRoot, ".forge", "projects.yml")),
     ).rejects.toThrow();
   });
 
@@ -92,8 +95,13 @@ describe("project config commands", () => {
       "--json",
     ]);
     expect(removed.config.projects).toEqual([]);
-    expect(await fs.readFile(path.join(repo.repoRoot, ".forge", "scopes.yml"), "utf8"))
+    expect(removed.config.source).toBe("preferred");
+    expect(removed.config.sourcePath).toBe(path.join(repo.repoRoot, ".forge", "projects.yml"));
+    expect(await fs.readFile(path.join(repo.repoRoot, ".forge", "projects.yml"), "utf8"))
       .toContain("projects:\n");
+    await expect(
+      fs.stat(path.join(repo.repoRoot, ".forge", "scopes.yml")),
+    ).rejects.toThrow();
   });
 
   test("returns project command errors for invalid input", async () => {

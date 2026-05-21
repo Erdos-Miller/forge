@@ -48,7 +48,7 @@ describe("project config doctor diagnostics", () => {
 
     expect(diagnostic).toMatchObject({
       severity: "warning",
-      sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      sourcePath: path.join(repo.repoRoot, ".forge", "projects.yml"),
       taskIds: ["F-0002", "F-0003"],
     });
     expect(diagnostic.repairHint).toContain("forge projects infer --json");
@@ -85,7 +85,7 @@ describe("project config doctor diagnostics", () => {
   test("warns for an empty configured Project file", async () => {
     const repo = await makeRepo();
     await fs.writeFile(
-      path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      path.join(repo.repoRoot, ".forge", "projects.yml"),
       ["version: 1", "projects:", ""].join("\n"),
     );
 
@@ -94,7 +94,7 @@ describe("project config doctor diagnostics", () => {
 
     expect(diagnostic).toMatchObject({
       severity: "warning",
-      sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      sourcePath: path.join(repo.repoRoot, ".forge", "projects.yml"),
     });
     expect(diagnostic.repairHint).toContain("forge projects infer --json");
   });
@@ -115,6 +115,27 @@ describe("project config doctor diagnostics", () => {
       sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
     });
     expect(diagnostic.repairHint).toContain("forge projects");
+  });
+
+  test("warns when preferred and legacy Project config files both exist", async () => {
+    const repo = await makeRepo();
+    await writeProjectConfig(repo.repoRoot, [
+      scopeConfigEntry("web", "Web", ["packages/web/**"]),
+      scopeConfigEntry("cli", "CLI", ["packages/cli/**"]),
+      scopeConfigEntry("docs", "Docs", ["docs/**"]),
+    ]);
+    await writeScopeConfig(repo.repoRoot, [
+      scopeConfigEntry("legacy", "Legacy", ["legacy/**"]),
+    ]);
+
+    const payload = await runDoctor(repo.repoRoot);
+    const diagnostic = findDiagnostic(payload, "project_config_preferred_and_legacy");
+
+    expect(diagnostic).toMatchObject({
+      severity: "warning",
+      sourcePath: path.join(repo.repoRoot, ".forge", "projects.yml"),
+    });
+    expect(diagnostic.repairHint).toContain("Forge reads .forge/projects.yml");
   });
 
   test("reports malformed project config as doctor errors", async () => {
@@ -147,7 +168,7 @@ describe("project config doctor diagnostics", () => {
     for (const testCase of cases) {
       const repo = await makeRepo();
       await fs.writeFile(
-        path.join(repo.repoRoot, ".forge", "scopes.yml"),
+        path.join(repo.repoRoot, ".forge", "projects.yml"),
         ["version: 1", "projects:", ...testCase.body, ""].join("\n"),
       );
 
@@ -157,7 +178,7 @@ describe("project config doctor diagnostics", () => {
       expect(payload.summary.errors).toBe(1);
       expect(diagnostic).toMatchObject({
         severity: "error",
-        sourcePath: path.join(repo.repoRoot, ".forge", "scopes.yml"),
+        sourcePath: path.join(repo.repoRoot, ".forge", "projects.yml"),
       });
       expect(diagnostic.message).toContain(testCase.message);
       expect(diagnostic.repairHint).toContain("forge projects infer --json");
@@ -197,12 +218,17 @@ async function writeScopeConfig(repoRoot: string, entries: string[][]) {
 }
 
 async function writeProjectConfig(repoRoot: string, entries: string[][]) {
-  await writeConfig(repoRoot, "projects", entries);
+  await writeConfig(repoRoot, "projects", entries, "projects.yml");
 }
 
-async function writeConfig(repoRoot: string, key: "projects" | "scopes", entries: string[][]) {
+async function writeConfig(
+  repoRoot: string,
+  key: "projects" | "scopes",
+  entries: string[][],
+  filename = "scopes.yml",
+) {
   await fs.writeFile(
-    path.join(repoRoot, ".forge", "scopes.yml"),
+    path.join(repoRoot, ".forge", filename),
     ["version: 1", `${key}:`, ...entries.flat(), ""].join("\n"),
   );
 }

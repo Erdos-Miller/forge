@@ -22,7 +22,7 @@ describe("scope config commands", () => {
     expect(payload).toMatchObject({
       ok: true,
       version: 1,
-      config: { exists: false, scopes: [] },
+      config: { exists: false, source: "missing", scopes: [] },
       resolved: {
         source: "inferred",
         projects: expect.arrayContaining([
@@ -60,6 +60,7 @@ describe("scope config commands", () => {
     const payload = await runJson(repo.repoRoot, ["scopes", "--json"]);
 
     expect(payload.config.exists).toBe(true);
+    expect(payload.config.source).toBe("legacy");
     expect(payload.config.scopes).toEqual([
       { id: "web", label: "Web", paths: ["packages/web/**"] },
     ]);
@@ -73,7 +74,7 @@ describe("scope config commands", () => {
   test("reads preferred projects config and exposes legacy scope aliases", async () => {
     const repo = await makeRepo();
     await fs.writeFile(
-      path.join(repo.repoRoot, ".forge", "scopes.yml"),
+      path.join(repo.repoRoot, ".forge", "projects.yml"),
       [
         "version: 1",
         "projects:",
@@ -89,6 +90,8 @@ describe("scope config commands", () => {
     expect(payload.config.projects).toEqual([
       { id: "docs", label: "Docs", paths: ["docs/**"] },
     ]);
+    expect(payload.config.source).toBe("preferred");
+    expect(payload.config.sourcePath).toBe(path.join(repo.repoRoot, ".forge", "projects.yml"));
     expect(payload.config.scopes).toEqual(payload.config.projects);
     expect(payload.resolved.projects).toEqual(payload.resolved.scopes);
   });
@@ -106,6 +109,9 @@ describe("scope config commands", () => {
     );
     await expect(
       fs.stat(path.join(repo.repoRoot, ".forge", "scopes.yml")),
+    ).rejects.toThrow();
+    await expect(
+      fs.stat(path.join(repo.repoRoot, ".forge", "projects.yml")),
     ).rejects.toThrow();
   });
 
@@ -138,8 +144,13 @@ describe("scope config commands", () => {
       "packages/web/**",
       "packages/web/test/**",
     ]);
-    expect(await fs.readFile(path.join(repo.repoRoot, ".forge", "scopes.yml"), "utf8"))
+    expect(added.config.source).toBe("preferred");
+    expect(added.config.sourcePath).toBe(path.join(repo.repoRoot, ".forge", "projects.yml"));
+    expect(await fs.readFile(path.join(repo.repoRoot, ".forge", "projects.yml"), "utf8"))
       .toContain('projects:\n  - id: web\n    label: "Web"\n    paths:\n      - "packages/web/**"');
+    await expect(
+      fs.stat(path.join(repo.repoRoot, ".forge", "scopes.yml")),
+    ).rejects.toThrow();
   });
 
   test("rejects invalid ids and duplicate paths", async () => {

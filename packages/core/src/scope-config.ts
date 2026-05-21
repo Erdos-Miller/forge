@@ -23,6 +23,8 @@ export type ScopeConfig = ProjectConfig;
 export interface ScopeConfigReadResult {
   exists: boolean;
   sourcePath: string;
+  source: "preferred" | "legacy" | "missing";
+  legacySourcePath?: string;
   config: ScopeConfig;
 }
 
@@ -32,17 +34,36 @@ export interface ScopeConfigAddInput {
   paths: string[];
 }
 
+const projectConfigRelativePath = path.join(".forge", "projects.yml");
 const scopeConfigRelativePath = path.join(".forge", "scopes.yml");
 const scopeIdPattern = /^[a-z][a-z0-9-]*$/;
 
 export async function readScopeConfig(repoRoot: string): Promise<ScopeConfigReadResult> {
-  const sourcePath = getScopeConfigPath(repoRoot);
+  const preferredPath = getProjectConfigPath(repoRoot);
+  const legacyPath = getScopeConfigPath(repoRoot);
+  const legacyExists = await fileExists(legacyPath);
+
   try {
-    const config = parseScopeConfig(await fs.readFile(sourcePath, "utf8"), sourcePath);
-    return { exists: true, sourcePath, config };
+    const config = parseScopeConfig(await fs.readFile(preferredPath, "utf8"), preferredPath);
+    return {
+      exists: true,
+      source: "preferred",
+      sourcePath: preferredPath,
+      legacySourcePath: legacyExists ? legacyPath : undefined,
+      config,
+    };
   } catch (error) {
     if ((error as { code?: string }).code === "ENOENT") {
-      return { exists: false, sourcePath, config: createProjectConfig([]) };
+      if (legacyExists) {
+        const config = parseScopeConfig(await fs.readFile(legacyPath, "utf8"), legacyPath);
+        return { exists: true, source: "legacy", sourcePath: legacyPath, config };
+      }
+      return {
+        exists: false,
+        source: "missing",
+        sourcePath: preferredPath,
+        config: createProjectConfig([]),
+      };
     }
     throw error;
   }
@@ -64,9 +85,10 @@ export async function addScopeConfigEntry(
     ...result.config.projects,
     { id: input.id, label: input.label, paths: input.paths },
   ]);
-  validateScopeConfig(config, result.sourcePath);
-  await writeScopeConfig(result.sourcePath, config);
-  return { exists: true, sourcePath: result.sourcePath, config };
+  const sourcePath = getProjectConfigPath(repoRoot);
+  validateScopeConfig(config, sourcePath);
+  await writeScopeConfig(sourcePath, config);
+  return { exists: true, source: "preferred", sourcePath, config };
 }
 
 export async function updateScopeConfigEntry(
@@ -84,9 +106,10 @@ export async function updateScopeConfigEntry(
 
   project.paths = Array.from(new Set([...project.paths, ...paths]));
   result.config.scopes = result.config.projects;
-  validateScopeConfig(result.config, result.sourcePath);
-  await writeScopeConfig(result.sourcePath, result.config);
-  return { exists: true, sourcePath: result.sourcePath, config: result.config };
+  const sourcePath = getProjectConfigPath(repoRoot);
+  validateScopeConfig(result.config, sourcePath);
+  await writeScopeConfig(sourcePath, result.config);
+  return { exists: true, source: "preferred", sourcePath, config: result.config };
 }
 
 export async function removeScopeConfigEntry(
@@ -101,9 +124,10 @@ export async function removeScopeConfigEntry(
   }
 
   const config = createProjectConfig(projects);
-  validateScopeConfig(config, result.sourcePath);
-  await writeScopeConfig(result.sourcePath, config);
-  return { exists: true, sourcePath: result.sourcePath, config };
+  const sourcePath = getProjectConfigPath(repoRoot);
+  validateScopeConfig(config, sourcePath);
+  await writeScopeConfig(sourcePath, config);
+  return { exists: true, source: "preferred", sourcePath, config };
 }
 
 export async function inferScopeConfigEntries(repoRoot: string): Promise<ScopeConfigEntry[]> {
@@ -333,6 +357,22 @@ function isFileLike(part: string) {
 
 export function getScopeConfigPath(repoRoot: string): string {
   return path.join(repoRoot, scopeConfigRelativePath);
+}
+
+export function getProjectConfigPath(repoRoot: string): string {
+  return path.join(repoRoot, projectConfigRelativePath);
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function createProjectConfig(projects: ProjectConfigEntry[]): ProjectConfig {

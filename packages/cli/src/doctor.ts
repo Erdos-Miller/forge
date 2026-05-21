@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
+  getProjectConfigPath,
   getScopeConfigPath,
   parseTaskFile,
   readScopeConfig,
@@ -491,11 +492,13 @@ export async function getScopeConfigDoctorDiagnostics(
   repoRoot: string,
   tasks: Task[],
 ): Promise<DoctorDiagnostic[]> {
-  const sourcePath = getScopeConfigPath(repoRoot);
   let result;
   try {
     result = await readScopeConfig(repoRoot);
   } catch (error) {
+    const sourcePath = (await fileExists(getProjectConfigPath(repoRoot)))
+      ? getProjectConfigPath(repoRoot)
+      : getScopeConfigPath(repoRoot);
     return [toProjectConfigParseDiagnostic(sourcePath, error)];
   }
   if (!result.exists) {
@@ -505,6 +508,7 @@ export async function getScopeConfigDoctorDiagnostics(
   const activeTasks = tasks.filter((task) => task.status !== "done" && task.status !== "canceled");
   const projects = result.config.projects;
   const diagnostics: DoctorDiagnostic[] = [];
+  diagnostics.push(...getProjectConfigConflictDiagnostics(result));
   diagnostics.push(...(await getLegacyProjectConfigDiagnostics(result.sourcePath)));
   diagnostics.push(...getEmptyProjectConfigDiagnostics(result.sourcePath, projects));
   diagnostics.push(...getUnmatchedTaskDiagnostics(result.sourcePath, projects, activeTasks));
@@ -512,6 +516,25 @@ export async function getScopeConfigDoctorDiagnostics(
   diagnostics.push(...getUnusedProjectPathDiagnostics(result.sourcePath, projects, activeTasks));
   diagnostics.push(...getOverlappingProjectDiagnostics(result.sourcePath, projects));
   return diagnostics;
+}
+
+function getProjectConfigConflictDiagnostics(
+  result: Awaited<ReturnType<typeof readScopeConfig>>,
+): DoctorDiagnostic[] {
+  if (!result.legacySourcePath) {
+    return [];
+  }
+  return [
+    {
+      code: "project_config_preferred_and_legacy",
+      severity: "warning",
+      message: "Both .forge/projects.yml and legacy .forge/scopes.yml exist",
+      sourcePath: result.sourcePath,
+      repairHint:
+        "Forge reads .forge/projects.yml. Remove or migrate .forge/scopes.yml " +
+        "after confirming the preferred config is correct.",
+    },
+  ];
 }
 
 export async function getWorkspaceConfigDoctorDiagnostics(
@@ -534,7 +557,7 @@ function toProjectConfigParseDiagnostic(
     message,
     sourcePath,
     repairHint:
-      "Fix .forge/scopes.yml, or regenerate Projects with forge projects infer --json and forge projects add.",
+      "Fix the Project config file, or regenerate Projects with forge projects infer --json and forge projects add.",
   };
 }
 
@@ -831,6 +854,18 @@ function normalizeAdvisoryLines(rawBlock: string): string[] {
 
 function stringIfPresent(value: string | undefined): string[] {
   return value?.trim() ? [value.trim()] : [];
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function toParseDoctorDiagnostic(error: unknown, sourcePath: string): DoctorDiagnostic {
