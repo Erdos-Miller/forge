@@ -525,7 +525,7 @@ describe("App", () => {
     expect(html).toContain("All projects</option>");
     expect(html).toContain('<option value="ui">UI</option>');
     expect(html).toContain('<option value="backend">Backend</option>');
-    expect(html).toContain("packages/web/**");
+    expect(html).toContain("Edit scope packages/web/**");
   });
 
   test("uses configured Project matching when selecting after refresh", () => {
@@ -539,6 +539,25 @@ describe("App", () => {
 
     expect(selectTaskAfterRefresh("missing", configuredPayload, "ui")).toBe("F-0002");
     expect(selectTaskAfterRefresh("missing", configuredPayload, "unknown")).toBe("F-0002");
+  });
+
+  test("keeps unmatched tasks visible under All projects only", () => {
+    const unmatchedPayload = graphPayload("/workspace", [
+      { ...payload.tasks[1], id: "F-web", scope: ["packages/web/**"] },
+      { ...payload.tasks[2], id: "F-docs", scope: ["docs/**"] },
+    ]);
+    const configuredPayload: TaskGraphPayload = {
+      ...unmatchedPayload,
+      scopeConfig: {
+        source: "configured",
+        projects: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+        scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+      },
+    };
+
+    expect(selectTaskAfterRefresh("missing", configuredPayload, "all")).toBe("F-web");
+    expect(selectTaskAfterRefresh("F-docs", configuredPayload, "all")).toBe("F-docs");
+    expect(selectTaskAfterRefresh("F-docs", configuredPayload, "ui")).toBe("F-web");
   });
 
   test("ignores stale Project filters for repos without project config", () => {

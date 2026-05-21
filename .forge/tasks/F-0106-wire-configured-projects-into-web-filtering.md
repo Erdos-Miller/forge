@@ -2,7 +2,7 @@
 id: F-0106
 title: "Wire configured Projects into web filtering"
 kind: task
-status: open
+status: done
 priority: high
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:27:58.626Z
+closed_at: 2026-05-21T20:27:58.626Z
+close_reason: "Wired configured Project filtering and labeled raw task globs as Edit scope."
+blocked_reason: ""
+review_reason: ""
 ---
 # Wire configured Projects into web filtering
 
@@ -72,6 +76,28 @@ Tracked in frontmatter: F-0103, F-0105.
 ## Notes
 
 This task should not reintroduce inferred folder Projects.
+
+Implemented and audited configured Project filtering.
+
+Changes:
+- The task detail footer now labels raw task globs as `Edit scope ...`, keeping Project filtering separate from edit-boundary data.
+- Added coverage for unmatched tasks: they remain visible under `All projects` and are hidden when a specific configured Project filter is selected.
+
+Audit against acceptance criteria:
+- Configured Projects are the header Project filter source from the project-compatible payload.
+- Worktree selection remains independent from Project selection.
+- Area and Priority remain queue grouping controls.
+- Task matching uses configured path overlap against task edit scopes.
+- Aggregate all-worktree Project IDs remain root-qualified and stable via existing `root::project` IDs.
+
+Closeout trigger review:
+- Stop condition did not fire: aggregate Project IDs are already stable and covered by all-worktree tests.
+- Human review trigger did not fire: unmatched tasks stay visible under `All projects`; no separate visible bucket was added.
+
+Verification:
+- `bun test packages/web/test/app.test.tsx packages/web/test/scopes.test.ts` passed: 42 tests.
+- `bun test packages/web/test/api.test.ts` passed: 15 tests.
+- `bun run harness:web` passed: 70 tests.
 
 ## History
 
