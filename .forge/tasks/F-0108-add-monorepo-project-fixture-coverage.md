@@ -2,7 +2,7 @@
 id: F-0108
 title: "Add monorepo project fixture coverage"
 kind: task
-status: open
+status: done
 priority: high
 area: "test"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:35:32.887Z
+closed_at: 2026-05-21T20:35:32.887Z
+close_reason: "Added synthetic monorepo Project fixture coverage for web filtering and Area grouping."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add monorepo project fixture coverage
 
@@ -74,6 +78,29 @@ Tracked in frontmatter: F-0106.
 Do not use the developer's real monorepo as a test fixture.
 
 Decision capture required: if the fixture establishes canonical example Projects for monorepos, record that choice in task Notes or a durable `.forge/decisions/` record before closeout.
+
+Implemented monorepo Project fixture coverage using synthetic test data only.
+
+Fixture choices:
+- Product paths: `product/toolhub/src/app/wells/**`, `product/toolhub/src/app/travelers/**`, and `product/toolhub/docs/wells/**`.
+- Shared library paths: `lib/typescript/fluxchart/**`, `lib/typescript/fluxchart/comparisons/**`, `lib/typescript/travelers/**`, and `lib/typescript/ui/**`.
+- Canonical example Projects for tests: Toolhub Wells, Toolhub Travelers, Fluxchart, and Shared UI.
+- Example Areas covered: web, core, docs, test, and harness.
+
+Assertions added:
+- Configured Projects render as header Project options.
+- Area grouping remains independent from Project filtering.
+- Raw edit-scope globs do not become header Project options.
+- Project filtering uses configured path overlap and leaves `All projects` as the all-work view.
+
+Closeout trigger review:
+- Decision capture is in these Notes.
+- Stop condition did not fire: the fixture is synthetic and does not scan the real `~/Work/repo` tree.
+- Human review trigger did not fire: the requested Toolhub, Travelers, Fluxchart, and Shared UI examples were enough for the fixture.
+
+Verification:
+- `bun test packages/web/test/monorepo-projects.test.tsx` passed: 2 tests.
+- `bun run harness:web` passed: 72 tests.
 
 ## History
 
