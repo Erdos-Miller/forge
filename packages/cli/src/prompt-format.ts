@@ -13,9 +13,9 @@ export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
     `Goal: Complete Forge task ${task.id} - ${task.title}`,
     "",
     "Follow the repository's AGENTS.md instructions and the Forge operating loop.",
-    "Before editing code or docs, claim the task. Keep work inside the declared scope, " +
-      "update task notes with decisions and verification, and mark the task done only " +
-      "when acceptance criteria are satisfied.",
+    "Before editing code or docs, claim the task. Keep work inside the declared " +
+      "edit scope, update task notes with decisions and verification, and mark the " +
+      "task done only when acceptance criteria are satisfied.",
     "If the work changes conventions, architecture, or public semantics, record the " +
       "decision in task Notes or a durable `.forge/decisions/` record.",
     "If dirty worktree state affects whether to continue, run " +
@@ -27,7 +27,7 @@ export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
     `Priority: ${task.priority}`,
     `Area: ${task.area ?? "-"}`,
     `Depends on: ${task.depends_on.length ? task.depends_on.join(", ") : "none"}`,
-    "Scope:",
+    "Edit scope:",
     ...task.scope.map((scope) => `- ${scope}`),
     "",
     formatTaskContent(task.body),
@@ -48,10 +48,10 @@ export function formatLoopPrompt(personalGuidance = ""): string {
       "highest-ranked ready task. Claim it before editing. Follow the repository's " +
       "AGENTS.md instructions and the Forge operating loop.",
     "",
-    "For each task, keep edits inside the task scope. Update the task notes with " +
-      "decisions, blockers, and verification. Mark the task done only when its " +
-      "acceptance criteria are satisfied and concrete evidence supports completion. " +
-      "Commit the code and task-file updates together.",
+    "For each task, keep edits inside the task edit scope. Update the task notes " +
+      "with decisions, blockers, and verification. Mark the task done only when " +
+      "its acceptance criteria are satisfied and concrete evidence supports " +
+      "completion. Commit the code and task-file updates together.",
     "When a task changes conventions, architecture, or public semantics, capture " +
       "the durable decision in task Notes or `.forge/decisions/` before closeout.",
     "When the worktree is dirty, classify it with `forge worktree-status --json` " +
@@ -61,7 +61,7 @@ export function formatLoopPrompt(personalGuidance = ""): string {
     "After committing, start the next iteration with `forge prompt next` again.",
     "",
     "Stop when no task is ready, the selected task is ambiguous, required changes " +
-      "exceed scope, verification cannot run, or you need user judgment before " +
+      "exceed edit scope, verification cannot run, or you need user judgment before " +
     "continuing. Report the blocker plus the next input needed.",
     "",
     ...(personalGuidanceBlock ? [personalGuidanceBlock, ""] : []),

@@ -621,7 +621,7 @@ describe("App", () => {
     );
   });
 
-  test("renders stable header controls for long worktree and scope labels", () => {
+  test("renders stable header controls for long worktree and project labels", () => {
     const longGraph = graphPayload("/workspace/very-long-worktree", [
       {
         ...payload.tasks[1],
@@ -646,7 +646,8 @@ describe("App", () => {
     const html = renderToStaticMarkup(<App initialData={longPayload} />);
 
     expect(html).toContain('class="headerControls"');
-    expect(html.indexOf(">Worktree<")).toBeLessThan(html.indexOf(">Scope<"));
+    expect(html.indexOf(">Worktree<")).toBeLessThan(html.indexOf(">Project<"));
+    expect(html).not.toContain(">Scope<");
     expect(html.indexOf('class="headerControls"')).toBeLessThan(
       html.indexOf('class="topNav"'),
     );

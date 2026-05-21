@@ -285,7 +285,7 @@ export function App({ initialData }: AppProps) {
             </label>
           ) : null}
           <label className="headerControl">
-            <span>Scope</span>
+            <span>Project</span>
             <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)}>
               <option value="all">All</option>
               {scopeOptions.map((scope) => (

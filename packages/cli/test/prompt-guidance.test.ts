@@ -65,6 +65,8 @@ describe("prompt command guidance", () => {
     const output = await run(repoRoot, ["prompt", "next"]);
 
     expect(output).toContain("Command guidance:");
+    expect(output).toContain("Edit scope:");
+    expect(output).not.toContain("\nScope:\n");
     expect(output).toContain("Prefer structured Forge commands");
     expect(output).toContain("Direct Markdown edits are acceptable");
     expect(output).toContain("forge worktree-status --json");
@@ -139,6 +141,8 @@ describe("prompt command guidance", () => {
 
     expect(output).toContain("Command guidance:");
     expect(output).toContain("classify it with `forge worktree-status --json`");
+    expect(output).toContain("task edit scope");
+    expect(output).toContain("exceed edit scope");
     expect(output).toContain("continue on `non_blocking`");
     expect(output).toContain("pause on `review`");
     expect(output).toContain("stop on `blocking`");

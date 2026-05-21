@@ -120,7 +120,7 @@ export const COMMANDS = [
       "forge scopes --json | forge scopes infer --json | " +
       "forge scopes add <id> --label <label> --path <glob> --json | " +
       "forge scopes update <id> --path <glob> --json",
-    description: "Inspect or maintain UI Scope configuration.",
+    description: "Inspect or maintain Project compatibility configuration.",
     classification: "write",
     supportsJson: true,
     examples: [
@@ -129,7 +129,7 @@ export const COMMANDS = [
       'forge scopes add web --label "Web" --path "packages/web/**" --json',
       'forge scopes update web --path "packages/web/test/**" --json',
     ],
-    agentPurpose: "Maintain .forge/scopes.yml without hand-editing YAML.",
+    agentPurpose: "Maintain .forge/scopes.yml Project config without hand-editing YAML.",
   },
   {
     name: "deps",

@@ -2,7 +2,7 @@
 id: F-0102
 title: "Rename UI Scope language to Project"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:08:35.127Z
+closed_at: 2026-05-21T20:08:05.946Z
+close_reason: "Renamed user-facing Scope language to Project while preserving task scope semantics and compatibility."
+blocked_reason: ""
+review_reason: ""
 ---
 # Rename UI Scope language to Project
 
@@ -71,6 +75,23 @@ Tracked in frontmatter: F-0101.
 ## Notes
 
 This task is a language rename. It should not remove inferred filter behavior yet.
+
+Renamed the visible web header label from Scope to Project and kept filtering behavior/data payload names unchanged for compatibility.
+
+Updated prompt/help language where it referred to user-facing or agent-facing scope concepts:
+- `forge prompt` now labels task globs as `Edit scope:`.
+- `forge loop-prompt` says task edit scope and exceed edit scope.
+- `forge scopes` command metadata now describes Project compatibility configuration while preserving the existing command name.
+
+No public JSON payload migration was introduced. The only visible label besides Scope touched was the task prompt's `Scope:` field, renamed to `Edit scope:` to clarify it is task frontmatter `scope`, not Project navigation.
+
+Verification:
+- `bun test packages/web/test/app.test.tsx packages/cli/test/prompt-guidance.test.ts packages/cli/test/cli.test.ts` passed: 94 tests.
+- `bun run harness:web` passed: 67 tests.
+- `bun run harness:cli` passed: 8 tests.
+
+Additional verification:
+- `bun run quality:check` passed: 263 tests across 34 files, then production web build completed successfully.
 
 ## History
 
