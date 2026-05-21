@@ -16,6 +16,8 @@ export function formatAgentPrompt(task: Task, personalGuidance = ""): string {
     "Before editing code or docs, claim the task. Keep work inside the declared scope, " +
       "update task notes with decisions and verification, and mark the task done only " +
       "when acceptance criteria are satisfied.",
+    "If the work changes conventions, architecture, or public semantics, record the " +
+      "decision in task Notes or a durable `.forge/decisions/` record.",
     "If dirty worktree state affects whether to continue, run " +
       "`forge worktree-status --json`: continue on `non_blocking`, pause on `review`, " +
       "and stop on `blocking`.",
@@ -50,6 +52,8 @@ export function formatLoopPrompt(personalGuidance = ""): string {
       "decisions, blockers, and verification. Mark the task done only when its " +
       "acceptance criteria are satisfied and concrete evidence supports completion. " +
       "Commit the code and task-file updates together.",
+    "When a task changes conventions, architecture, or public semantics, capture " +
+      "the durable decision in task Notes or `.forge/decisions/` before closeout.",
     "When the worktree is dirty, classify it with `forge worktree-status --json` " +
       "before deciding whether to continue or stop: continue on `non_blocking`, " +
       "pause on `review`, and stop on `blocking`.",

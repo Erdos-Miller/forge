@@ -71,6 +71,13 @@ describe("closeout guidance", () => {
       blockers: [],
       review: [],
       stop_conditions: [],
+      decision_capture: {
+        advisory: true,
+        questions: [
+          "Did this task change conventions, architecture, or public semantics?",
+          "If yes, is the decision recorded in task Notes or `.forge/decisions/`?",
+        ],
+      },
       findings: [],
     });
   });

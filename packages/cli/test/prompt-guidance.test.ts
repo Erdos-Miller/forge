@@ -71,6 +71,8 @@ describe("prompt command guidance", () => {
     expect(output).toContain("continue on `non_blocking`");
     expect(output).toContain("pause on `review`");
     expect(output).toContain("stop on `blocking`");
+    expect(output).toContain("changes conventions, architecture, or public semantics");
+    expect(output).toContain("`.forge/decisions/` record");
     expect(output).toContain(".forge/harness-engineering.md");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");
@@ -140,6 +142,8 @@ describe("prompt command guidance", () => {
     expect(output).toContain("continue on `non_blocking`");
     expect(output).toContain("pause on `review`");
     expect(output).toContain("stop on `blocking`");
+    expect(output).toContain("changes conventions, architecture, or public semantics");
+    expect(output).toContain("`.forge/decisions/` before closeout");
     expect(output).toContain(".forge/harness-engineering.md");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");

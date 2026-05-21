@@ -65,6 +65,9 @@ decisions; promote cross-cutting rules into a decision record.
 5. Mark it done when the acceptance criteria are met.
 6. Commit the code and task update together.
 
+If a task changes conventions, architecture, or public semantics, record the
+decision in task `Notes` or promote it to `.forge/decisions/` before closeout.
+
 Forge should build itself by following this loop from the beginning.
 
 ## CLI

@@ -320,7 +320,18 @@ export async function getTaskCloseoutGuidance(
     blockers,
     review,
     stop_conditions: stopConditions,
+    decision_capture: getDecisionCaptureGuidance(),
     findings,
+  };
+}
+
+function getDecisionCaptureGuidance() {
+  return {
+    advisory: true,
+    questions: [
+      "Did this task change conventions, architecture, or public semantics?",
+      "If yes, is the decision recorded in task Notes or `.forge/decisions/`?",
+    ],
   };
 }
 

@@ -2,7 +2,7 @@
 id: F-0089
 title: "Add decision capture to prompts and closeout"
 kind: task
-status: open
+status: done
 priority: medium
 area: "cli"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:43:03.221Z
+closed_at: 2026-05-21T18:43:03.221Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add decision capture to prompts and closeout
 
@@ -69,6 +73,11 @@ Tracked in frontmatter: F-0080.
 ## Notes
 
 This task adds reminders only. It should not add doctor warnings yet.
+
+- Added concise decision-capture reminders to `forge prompt` and `forge loop-prompt`.
+- Added non-blocking closeout questions for conventions, architecture, and public semantics.
+- Documented the same closeout reminder in the README first-loop flow.
+- Verification: `bun test packages/cli/test/prompt-guidance.test.ts packages/cli/test/closeout.test.ts`, `bun run harness:cli`, `bun run quality:check`.
 
 ## History
 
