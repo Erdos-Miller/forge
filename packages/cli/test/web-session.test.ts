@@ -8,7 +8,9 @@ import { runCli } from "../src";
 import {
   discoverWebSession,
   getWebSessionPath,
+  removeWebSession,
   writeWebSession,
+  writeWorkspaceWebSessions,
 } from "../src/web-session";
 
 const fixtureRepos: ForgeFixtureRepo[] = [];
@@ -64,6 +66,56 @@ describe("web session discovery", () => {
       startedAt: "2026-05-15T12:00:00.000Z",
     });
     expect(discovered).toEqual(written);
+  });
+
+  test("writes a workspace session into each indexed root", async () => {
+    const first = await makeRepo();
+    const second = await makeRepo();
+
+    await writeWorkspaceWebSessions(
+      [
+        { id: "first", displayName: "first", path: first.repoRoot },
+        { id: "second", displayName: "second", path: second.repoRoot },
+      ],
+      {
+        host: "127.0.0.1",
+        port: 5199,
+        pid: process.pid,
+        startedAt: "2026-05-15T12:00:00.000Z",
+      },
+    );
+
+    await expect(discoverWebSession(second.repoRoot, {})).resolves.toMatchObject({
+      repoRoot: second.repoRoot,
+      baseUrl: "http://127.0.0.1:5199/",
+      workspaceRoots: [
+        { id: "first", path: first.repoRoot },
+        { id: "second", path: second.repoRoot },
+      ],
+    });
+  });
+
+  test("removing a workspace session clears every indexed root", async () => {
+    const first = await makeRepo();
+    const second = await makeRepo();
+
+    await writeWorkspaceWebSessions(
+      [
+        { id: "first", displayName: "first", path: first.repoRoot },
+        { id: "second", displayName: "second", path: second.repoRoot },
+      ],
+      {
+        host: "127.0.0.1",
+        port: 5199,
+        pid: process.pid,
+        startedAt: "2026-05-15T12:00:00.000Z",
+      },
+    );
+
+    await removeWebSession(first.repoRoot, process.pid);
+
+    await expect(discoverWebSession(first.repoRoot, {})).resolves.toBeNull();
+    await expect(discoverWebSession(second.repoRoot, {})).resolves.toBeNull();
   });
 
   test("removes stale session files when the recorded pid is gone", async () => {

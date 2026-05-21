@@ -67,7 +67,8 @@ import {
 import {
   discoverWebSession,
   removeWebSession,
-  writeWebSession,
+  writeWorkspaceWebSessions,
+  type WebSession,
 } from "./web-session";
 import { findAvailablePort } from "./web-port";
 
@@ -197,8 +198,8 @@ async function listTasks(options: CliOptions, args: string[]): Promise<number> {
 
   const repoRoot = await findForgeRoot(options.cwd);
   const tasks = await loadTasksFrom(repoRoot);
-  const linkBaseUrl = await getTaskLinkBaseUrl(options, repoRoot, parsed.links);
-  writeTaskLines(options, filterListTasks(tasks, parsed.mode), linkBaseUrl);
+  const linkTarget = await getTaskLinkTarget(options, repoRoot, parsed.links);
+  writeTaskLines(options, filterListTasks(tasks, parsed.mode), linkTarget);
   return 0;
 }
 
@@ -211,8 +212,8 @@ async function listReadyTasks(options: CliOptions, args: string[]): Promise<numb
 
   const repoRoot = await findForgeRoot(options.cwd);
   const tasks = await loadTasksFrom(repoRoot);
-  const linkBaseUrl = await getTaskLinkBaseUrl(options, repoRoot, parsed.links);
-  writeTaskLines(options, getReadyTasks(tasks), linkBaseUrl);
+  const linkTarget = await getTaskLinkTarget(options, repoRoot, parsed.links);
+  writeTaskLines(options, getReadyTasks(tasks), linkTarget);
   return 0;
 }
 
@@ -681,9 +682,10 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
   }
 
   let demoRepo: DemoForgeRepo | null = null;
-  const repoRoot = webOptions.demo
-    ? (demoRepo = await createDemoForgeRepo()).repoRoot
-    : (await resolveWebStartRepoRoot(webOptions.startDir)).repoRoot;
+  const webRootInfo = webOptions.demo
+    ? await resolveDemoWebRootInfo((demoRepo = await createDemoForgeRepo()).repoRoot)
+    : await resolveWebStartRepoRoot(webOptions.startDir);
+  const repoRoot = webRootInfo.repoRoot;
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
   const actualPort = await findAvailablePort(webOptions.host, webOptions.port);
   const url = `http://${webOptions.host}:${actualPort}/`;
@@ -714,7 +716,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
       stdout: "inherit",
     },
   );
-  await writeWebSession(repoRoot, {
+  await writeWorkspaceWebSessions(webRootInfo.discoveredRoots, {
     host: webOptions.host,
     port: actualPort,
     pid: child.pid,
@@ -803,14 +805,27 @@ function writeDependencyEditError(options: CliOptions, error: unknown): number {
   return 1;
 }
 
-function writeTaskLines(options: CliOptions, tasks: Task[], linkBaseUrl: string | null): void {
+async function resolveDemoWebRootInfo(
+  repoRoot: string,
+): Promise<{ repoRoot: string; discoveredRoots: DiscoveredForgeRoot[] }> {
+  return {
+    repoRoot,
+    discoveredRoots: await discoverForgeRootsDownward(repoRoot),
+  };
+}
+
+function writeTaskLines(
+  options: CliOptions,
+  tasks: Task[],
+  linkTarget: TaskLinkTarget | null,
+): void {
   for (const task of tasks) {
-    options.stdout(formatTaskLine(task, linkBaseUrl));
+    options.stdout(formatTaskLine(task, linkTarget));
   }
 }
 
-function formatTaskLine(task: Task, linkBaseUrl: string | null): string {
-  const fields = [formatTaskId(task.id, linkBaseUrl), task.status, task.claimed_by || "-"];
+function formatTaskLine(task: Task, linkTarget: TaskLinkTarget | null): string {
+  const fields = [formatTaskId(task.id, linkTarget), task.status, task.claimed_by || "-"];
   if (task.area) {
     fields.push(task.area);
   }
@@ -818,22 +833,42 @@ function formatTaskLine(task: Task, linkBaseUrl: string | null): string {
   return fields.join("\t");
 }
 
-async function getTaskLinkBaseUrl(
+interface TaskLinkTarget {
+  baseUrl: string;
+  repoId: string | null;
+}
+
+async function getTaskLinkTarget(
   options: CliOptions,
   repoRoot: string,
   mode: LinkMode,
-): Promise<string | null> {
+): Promise<TaskLinkTarget | null> {
   if (mode === "never" || (mode === "auto" && !options.stdoutIsTTY)) {
     return null;
   }
-  return (await discoverWebSession(repoRoot, options.env))?.baseUrl ?? null;
+  const session = await discoverWebSession(repoRoot, options.env);
+  return session
+    ? { baseUrl: session.baseUrl, repoId: getSessionRepoId(session, repoRoot) }
+    : null;
 }
 
-function formatTaskId(taskId: string, linkBaseUrl: string | null): string {
-  if (!linkBaseUrl) {
+function getSessionRepoId(session: WebSession, repoRoot: string): string | null {
+  const roots = session.workspaceRoots ?? [];
+  if (roots.length <= 1) {
+    return null;
+  }
+  const resolvedRepoRoot = path.resolve(repoRoot);
+  return roots.find((root) => path.resolve(root.path) === resolvedRepoRoot)?.id ?? null;
+}
+
+function formatTaskId(taskId: string, linkTarget: TaskLinkTarget | null): string {
+  if (!linkTarget) {
     return taskId;
   }
-  const url = new URL(linkBaseUrl);
+  const url = new URL(linkTarget.baseUrl);
+  if (linkTarget.repoId) {
+    url.searchParams.set("repo", linkTarget.repoId);
+  }
   url.searchParams.set("task", taskId);
   return `\u001B]8;;${url.toString()}\u0007${taskId}\u001B]8;;\u0007`;
 }

@@ -9,6 +9,13 @@ export interface WebSession {
   pid: number | null;
   startedAt: string | null;
   source: "env" | "file";
+  workspaceRoots?: WebSessionRoot[];
+}
+
+export interface WebSessionRoot {
+  id: string;
+  displayName: string;
+  path: string;
 }
 
 export interface WriteWebSessionInput {
@@ -16,6 +23,7 @@ export interface WriteWebSessionInput {
   port: number;
   pid: number;
   startedAt: string;
+  workspaceRoots?: WebSessionRoot[];
 }
 
 const sessionRelativePath = path.join(".forge", "local", "web-session.json");
@@ -23,6 +31,34 @@ const sessionRelativePath = path.join(".forge", "local", "web-session.json");
 export async function writeWebSession(
   repoRoot: string,
   input: WriteWebSessionInput,
+): Promise<WebSession> {
+  return writeSessionFile(repoRoot, input, input.workspaceRoots);
+}
+
+export async function writeWorkspaceWebSessions(
+  roots: WebSessionRoot[],
+  input: WriteWebSessionInput,
+): Promise<WebSession> {
+  const workspaceRoots = roots.map((root) => ({
+    id: root.id,
+    displayName: root.displayName,
+    path: root.path,
+  }));
+  const [primaryRoot] = workspaceRoots;
+  if (!primaryRoot) {
+    throw new Error("cannot write workspace web session without roots");
+  }
+
+  const sessions = await Promise.all(
+    workspaceRoots.map((root) => writeSessionFile(root.path, input, workspaceRoots)),
+  );
+  return sessions.find((session) => session.repoRoot === primaryRoot.path) ?? sessions[0];
+}
+
+async function writeSessionFile(
+  repoRoot: string,
+  input: WriteWebSessionInput,
+  workspaceRoots?: WebSessionRoot[],
 ): Promise<WebSession> {
   const session: WebSession = {
     repoRoot,
@@ -32,6 +68,7 @@ export async function writeWebSession(
     pid: input.pid,
     startedAt: input.startedAt,
     source: "file",
+    ...(workspaceRoots && workspaceRoots.length > 0 ? { workspaceRoots } : {}),
   };
   const sessionPath = getWebSessionPath(repoRoot);
   await fs.mkdir(path.dirname(sessionPath), { recursive: true });
@@ -62,7 +99,7 @@ export async function discoverWebSession(
     return null;
   }
   if (!session.pid || !pidIsAlive(session.pid)) {
-    await fs.rm(sessionPath, { force: true });
+    await removeSessionFiles(repoRoot, session);
     return null;
   }
   return { ...session, source: "file" };
@@ -75,7 +112,7 @@ export async function removeWebSession(
   const sessionPath = getWebSessionPath(repoRoot);
   const session = await readSessionFile(sessionPath);
   if (session?.pid === pid) {
-    await fs.rm(sessionPath, { force: true });
+    await removeSessionFiles(repoRoot, session);
   }
 }
 
@@ -89,6 +126,13 @@ function toBaseUrl(host: string, port: number): string {
 
 function normalizeBaseUrl(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
+}
+
+async function removeSessionFiles(repoRoot: string, session: WebSession): Promise<void> {
+  const roots = new Set([repoRoot, ...(session.workspaceRoots ?? []).map((root) => root.path)]);
+  await Promise.all(
+    Array.from(roots).map((root) => fs.rm(getWebSessionPath(root), { force: true })),
+  );
 }
 
 async function readSessionFile(sessionPath: string): Promise<WebSession | null> {
@@ -111,11 +155,28 @@ function isSessionFile(value: unknown): value is WebSession {
     return false;
   }
   const candidate = value as Partial<WebSession>;
+  const workspaceRootsValid =
+    candidate.workspaceRoots === undefined ||
+    (Array.isArray(candidate.workspaceRoots) &&
+      candidate.workspaceRoots.every(isSessionRoot));
   return (
     typeof candidate.repoRoot === "string" &&
     typeof candidate.baseUrl === "string" &&
     typeof candidate.pid === "number" &&
-    typeof candidate.startedAt === "string"
+    typeof candidate.startedAt === "string" &&
+    workspaceRootsValid
+  );
+}
+
+function isSessionRoot(value: unknown): value is WebSessionRoot {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<WebSessionRoot>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.displayName === "string" &&
+    typeof candidate.path === "string"
   );
 }
 
