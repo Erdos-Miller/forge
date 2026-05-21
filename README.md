@@ -56,6 +56,18 @@ Durable product and architecture choices live in `.forge/decisions/`. Task
 `Notes` are for implementation evidence, verification, blockers, and local task
 decisions; promote cross-cutting rules into a decision record.
 
+Workspace discovery can be tuned with an optional `forge.workspace.yml` file at
+the directory passed to `forge web --dir`. Ignore paths are relative to that
+directory and prune downward discovery only:
+
+```yaml
+version: 1
+discovery:
+  ignore:
+    - "sandbox-output"
+    - "fixtures/generated/**"
+```
+
 ## First Loop
 
 1. Pick a ready task from `.forge/tasks`.

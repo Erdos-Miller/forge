@@ -99,6 +99,29 @@ describe("discoverForgeRootsDownward", () => {
     expect(roots.map((root) => root.id)).toEqual(["app"]);
   });
 
+  test("applies configured workspace discovery ignores", async () => {
+    const workspace = await makeWorkspace([
+      { name: "app", tasks: minimalForgeFixtureTasks() },
+    ]);
+    await workspace.writeIgnoredRoot(["sandbox-output", "ignored"], [
+      { id: "F-9901", title: "Ignored configured root" },
+    ]);
+    await fs.writeFile(
+      path.join(workspace.workspaceRoot, "forge.workspace.yml"),
+      [
+        "version: 1",
+        "discovery:",
+        "  ignore:",
+        '    - "sandbox-output/**"',
+        "",
+      ].join("\n"),
+    );
+
+    const roots = await discoverForgeRootsDownward(workspace.workspaceRoot);
+
+    expect(roots.map((root) => root.id)).toEqual(["app"]);
+  });
+
   test("uses bounded concurrent traversal while preserving stable output", async () => {
     const workspace = await makeWorkspace(
       Array.from({ length: 8 }, (_value, index) => ({

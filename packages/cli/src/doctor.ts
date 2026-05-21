@@ -8,6 +8,7 @@ import {
   type Task,
   type TaskGraphAnalysis,
 } from "@forge/core";
+import { getWorkspaceDiscoveryConfigDiagnostics } from "../../core/src/workspace-config.ts";
 import { parseMarkdownSections } from "./robot";
 import {
   getWorktreeStatusPayload,
@@ -499,6 +500,15 @@ export async function getScopeConfigDoctorDiagnostics(
   diagnostics.push(...getUnusedScopePathDiagnostics(result.sourcePath, result.config.scopes, activeTasks));
   diagnostics.push(...getOverlappingScopeDiagnostics(result.sourcePath, result.config.scopes));
   return diagnostics;
+}
+
+export async function getWorkspaceConfigDoctorDiagnostics(
+  repoRoot: string,
+): Promise<DoctorDiagnostic[]> {
+  return (await getWorkspaceDiscoveryConfigDiagnostics(repoRoot)).map((diagnostic) => ({
+    ...diagnostic,
+    severity: "warning" as const,
+  }));
 }
 
 function getEmptyScopeConfigDiagnostics(

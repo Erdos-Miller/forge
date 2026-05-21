@@ -12,6 +12,10 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "./types.ts";
+import {
+  matchesWorkspaceIgnorePattern,
+  readWorkspaceDiscoveryConfig,
+} from "./workspace-config.ts";
 
 const TASK_STATUSES = new Set<TaskStatus>([
   "open",
@@ -79,6 +83,7 @@ const DEFAULT_WORKSPACE_DISCOVERY_CONCURRENCY = 32;
 
 export interface ForgeRootDiscoveryOptions {
   concurrency?: number;
+  ignore?: string[];
   readdir?: (dir: string) => Promise<Dirent[]>;
 }
 
@@ -112,10 +117,14 @@ export async function discoverForgeRootsDownward(
   const resolvedStartDir = path.resolve(startDir);
   const roots: DiscoveredForgeRoot[] = [];
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_WORKSPACE_DISCOVERY_CONCURRENCY);
+  const configuredIgnore = options.ignore ?? (await readWorkspaceIgnorePatterns(resolvedStartDir));
   let currentDirs = [resolvedStartDir];
   while (currentDirs.length > 0) {
     const batches = await mapWithConcurrency(currentDirs, concurrency, (currentDir) =>
-      inspectForgeRootDirectory(resolvedStartDir, currentDir, roots, options),
+      inspectForgeRootDirectory(resolvedStartDir, currentDir, roots, {
+        ...options,
+        ignore: configuredIgnore,
+      }),
     );
     currentDirs = batches.flat().sort();
   }
@@ -137,16 +146,32 @@ async function inspectForgeRootDirectory(
   }
 
   return entries
-    .filter(shouldTraverseWorkspaceDirectory)
+    .filter((entry) => shouldTraverseWorkspaceDirectory(startDir, currentDir, entry, options))
     .map((entry) => path.join(currentDir, entry.name))
     .sort();
 }
 
-function shouldTraverseWorkspaceDirectory(entry: Dirent): boolean {
+function shouldTraverseWorkspaceDirectory(
+  startDir: string,
+  currentDir: string,
+  entry: Dirent,
+  options: ForgeRootDiscoveryOptions,
+): boolean {
   if (!entry.isDirectory() || WORKSPACE_DISCOVERY_IGNORED_DIRS.has(entry.name)) {
     return false;
   }
-  return !entry.name.startsWith(".");
+  if (entry.name.startsWith(".")) {
+    return false;
+  }
+  const relativePath = normalizeRootId(path.relative(startDir, path.join(currentDir, entry.name)));
+  return !(options.ignore ?? []).some((pattern) =>
+    matchesWorkspaceIgnorePattern(relativePath, pattern),
+  );
+}
+
+async function readWorkspaceIgnorePatterns(startDir: string): Promise<string[]> {
+  const result = await readWorkspaceDiscoveryConfig(startDir);
+  return result.config.discovery.ignore;
 }
 
 async function readWorkspaceDirectory(

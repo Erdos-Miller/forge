@@ -53,6 +53,7 @@ import {
   getGraphDoctorDiagnostics,
   getScopeConfigDoctorDiagnostics,
   getTaskCloseoutGuidance,
+  getWorkspaceConfigDoctorDiagnostics,
   getWorktreeDoctorDiagnostics,
   inspectTaskStore,
 } from "./doctor";
@@ -550,6 +551,7 @@ async function doctor(options: CliOptions, args: string[]): Promise<number> {
     diagnostics.push(...getGraphDoctorDiagnostics(analyzeTasks(tasks)));
     diagnostics.push(...(await getWorktreeDoctorDiagnostics(repoRoot, tasks)));
     diagnostics.push(...(await getScopeConfigDoctorDiagnostics(repoRoot, tasks)));
+    diagnostics.push(...(await getWorkspaceConfigDoctorDiagnostics(repoRoot)));
   }
 
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
