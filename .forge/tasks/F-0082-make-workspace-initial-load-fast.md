@@ -2,20 +2,21 @@
 id: F-0082
 title: "Make workspace initial load fast"
 kind: task
-status: open
+status: doing
 priority: urgent
 area: "web"
 parent: "F-0000"
 depends_on:
   - "F-0081"
-claimed_by: ""
+claimed_by: "codex"
 scope:
   - "packages/web/**"
   - "packages/core/**"
   - "packages/cli/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T17:28:01.554Z
+review_reason: "Needs human decision before changing visible loading/default workspace flow for lazy all-repos loading."
 ---
 # Make workspace initial load fast
 
@@ -71,6 +72,12 @@ Tracked in frontmatter: F-0081.
 ## Notes
 
 The target is perceived speed and responsiveness, not just faster total load of all workspace data.
+
+Review needed: F-0082 changes the visible loading/default workspace behavior if implemented fully. The likely implementation is to return a cached root index plus only the selected/default root graph first, then load all-repos aggregate data lazily when the user chooses All repos. That means the initial multi-root view would no longer default to the all-repos queue. Need human decision on whether that product behavior is acceptable before implementation.
+
+Decision context from F-0081:
+- Real `/Users/ken/Work/repo_worktrees` timing showed downward root discovery around 6.4s.
+- Per-root task loading and graph construction were milliseconds, so the first optimization should reuse cached/seeded discovery and avoid blocking on all-root work.
 
 ## History
 
