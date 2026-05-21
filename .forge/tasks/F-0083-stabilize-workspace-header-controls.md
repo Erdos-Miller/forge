@@ -2,7 +2,7 @@
 id: F-0083
 title: "Stabilize workspace header controls"
 kind: task
-status: open
+status: done
 priority: high
 area: "web"
 parent: "F-0000"
@@ -13,7 +13,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:27:11.895Z
+closed_at: 2026-05-21T18:27:11.895Z
+close_reason: "Stabilized header control order, widths, and truncation with focused web tests, web harness, and Chrome desktop/mobile smoke passing."
+blocked_reason: ""
+review_reason: ""
 ---
 # Stabilize workspace header controls
 
@@ -69,6 +73,16 @@ Tracked in frontmatter: F-0080.
 ## Notes
 
 This task should not change scope matching behavior.
+
+Stabilized the web header by separating brand, controls, and view nav. Worktree now appears before Scope, selectors use clamped widths with truncation, and the Queue / Analytics nav is pinned independently of control label length.
+
+Visual smoke:
+- Desktop Chrome screenshot at 1440x900 rendered Worktree, Scope, and pinned Queue / Analytics nav without shifting.
+- Mobile Chrome screenshot at 390x844 rendered Worktree and Scope as stacked full-width controls with nav below them.
+
+Verification:
+- `bun test packages/web/test/app.test.tsx` passed: 28 tests, 111 expects.
+- `bun run harness:web` passed: 53 tests, 208 expects.
 
 ## History
 

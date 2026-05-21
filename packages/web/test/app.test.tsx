@@ -445,6 +445,39 @@ describe("App", () => {
     expect(html).toContain('class="badge">web</span>');
   });
 
+  test("renders stable header controls for long worktree and scope labels", () => {
+    const longGraph = graphPayload("/workspace/very-long-worktree", [
+      {
+        ...payload.tasks[1],
+        id: "F-long",
+        title: "Long label task",
+        scope: ["packages/web/src/components/very/deep/feature/**"],
+      },
+    ]);
+    const longPayload: WorkspaceTaskGraphPayload = {
+      ...longGraph,
+      workspace: {
+        startDir: "/workspace",
+        roots: [
+          {
+            ...workspaceRoot("long-worktree", longGraph),
+            displayName: "very-long-worktree-name-for-header-truncation",
+          },
+          workspaceRoot("api", apiGraph),
+        ],
+      },
+    };
+    const html = renderToStaticMarkup(<App initialData={longPayload} />);
+
+    expect(html).toContain('class="headerControls"');
+    expect(html.indexOf(">Worktree<")).toBeLessThan(html.indexOf(">Scope<"));
+    expect(html.indexOf('class="headerControls"')).toBeLessThan(
+      html.indexOf('class="topNav"'),
+    );
+    expect(html).toContain("very-long-worktree-name-for-header-truncation");
+    expect(html).toContain("packages/web");
+  });
+
   test("selects a repo and task from URL params", () => {
     const html = withMockWindow("?repo=web&task=F-web", () =>
       renderToStaticMarkup(<App initialData={workspacePayload} />),

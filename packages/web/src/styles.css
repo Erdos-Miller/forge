@@ -34,9 +34,9 @@ button {
 .topbar {
   align-items: center;
   border-bottom: 1px solid #24262a;
-  display: flex;
+  display: grid;
   gap: 18px;
-  justify-content: flex-start;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   margin-bottom: 14px;
   padding-bottom: 12px;
 }
@@ -79,31 +79,47 @@ button {
   align-items: center;
   display: flex;
   gap: 12px;
+  min-width: 0;
 }
 
-.scopeFilter {
+.headerControls {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.headerControl {
   align-items: center;
   color: #8f949b;
   display: flex;
   font-size: 12px;
   gap: 6px;
+  min-width: 0;
 }
 
-.scopeFilter select {
+.headerControl select {
   appearance: none;
   background: #101113;
   border: 1px solid #2a2d31;
   border-radius: 4px;
   color: #f2f2f2;
   font: inherit;
-  max-width: 220px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 4px 24px 4px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: clamp(150px, 16vw, 220px);
 }
 
 .topNav {
   display: inline-flex;
   gap: 18px;
-  margin-left: 4px;
+  justify-self: end;
+  min-width: max-content;
 }
 
 .topNav button {
@@ -889,7 +905,8 @@ button {
   .queueFooter,
   .appFooter,
   .analyticsStats,
-  .brandBlock {
+  .brandBlock,
+  .headerControls {
     grid-template-columns: 1fr;
   }
 
@@ -903,9 +920,18 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .brandBlock {
+  .brandBlock,
+  .headerControls {
     align-items: start;
     display: grid;
+  }
+
+  .headerControl select {
+    width: min(100%, 260px);
+  }
+
+  .topNav {
+    justify-self: start;
   }
 
   .appFooter {

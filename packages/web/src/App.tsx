@@ -260,20 +260,11 @@ export function App({ initialData }: AppProps) {
       <header className="topbar">
         <div className="brandBlock">
           <h1>Forge</h1>
-          <label className="scopeFilter">
-            <span>Scope</span>
-            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)}>
-              <option value="all">All</option>
-              {scopeOptions.map((scope) => (
-                <option key={scope} value={scope}>
-                  {scope}
-                </option>
-              ))}
-            </select>
-          </label>
+        </div>
+        <div className="headerControls">
           {workspaceGraphs.length > 1 ? (
-            <label className="scopeFilter">
-              <span>Repo</span>
+            <label className="headerControl">
+              <span>Worktree</span>
               <select value={resolvedRepoId} onChange={(event) => selectRepo(event.target.value)}>
                 <option value="all">All repos</option>
                 {workspaceGraphs.map((root) => (
@@ -284,6 +275,17 @@ export function App({ initialData }: AppProps) {
               </select>
             </label>
           ) : null}
+          <label className="headerControl">
+            <span>Scope</span>
+            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)}>
+              <option value="all">All</option>
+              {scopeOptions.map((scope) => (
+                <option key={scope} value={scope}>
+                  {scope}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <nav className="topNav" aria-label="Forge views">
           <button
