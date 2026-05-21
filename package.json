@@ -9,10 +9,14 @@
   "scripts": {
     "forge": "bun packages/cli/src/index.ts",
     "web": "bun packages/cli/src/index.ts web",
-    "test": "bun test packages/core packages/cli packages/web",
+    "test": "bunx playwright install chromium && bun test packages/core packages/cli packages/web",
     "harness:cli": "bun test packages/cli/test/harness.test.ts",
-    "harness:web": "bun test packages/web",
+    "harness:web": "bunx playwright install chromium && bun test packages/web",
+    "harness:web:layout": "bunx playwright install chromium && bun test packages/web/test/layout-harness.test.ts",
     "harness:check": "bun run test",
     "quality:check": "bun run harness:check && bun run --cwd packages/web build"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   }
 }

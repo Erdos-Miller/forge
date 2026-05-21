@@ -3,6 +3,7 @@ import { marked } from "marked";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import type { TaskCoordinationPayload, TaskGraphPayload } from "./api";
+import { ForgeHeader, type ForgeView } from "./ForgeHeader";
 import { shouldShowDoneInQueue } from "./queue-visibility";
 import { getProjectOptions, taskMatchesScope } from "./scopes";
 import { organizeTaskMarkdown, type MarkdownSection } from "./sections";
@@ -41,7 +42,7 @@ export function App({ initialData }: AppProps) {
   const [data, setData] = useState<AppData | null>(initialData ?? null);
   const [selectedRepoId, setSelectedRepoId] = useState<string>(initialUrlRepoId ?? "all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialUrlTaskId ?? null);
-  const [activeTab, setActiveTab] = useState<"queue" | "analytics">("queue");
+  const [activeTab, setActiveTab] = useState<ForgeView>("queue");
   const [groupBy, setGroupBy] = useState<"area" | "priority">("area");
   const [scopeFilter, setScopeFilter] = useState("all");
   const [showDone, setShowDone] = useState(false);
@@ -332,59 +333,17 @@ export function App({ initialData }: AppProps) {
   }
 
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div className="brandBlock">
-          <h1>Forge</h1>
-        </div>
-        <div className="headerControls">
-          {workspaceGraphs.length > 1 ? (
-            <label className="headerControl">
-              <span>Worktree</span>
-              <select value={resolvedRepoId} onChange={(event) => selectRepo(event.target.value)}>
-                <option value="all">All repos</option>
-                {workspaceGraphs.map((root) => (
-                  <option key={root.id} value={root.id}>
-                    {root.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {scopeOptions.length > 0 ? (
-            <label className="headerControl">
-              <span>Project</span>
-              <select
-                value={projectFilter}
-                onChange={(event) => setScopeFilter(event.target.value)}
-              >
-                <option value="all">All projects</option>
-                {scopeOptions.map((scope) => (
-                  <option key={scope.id} value={scope.id}>
-                    {scope.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-        </div>
-        <nav className="topNav" aria-label="Forge views">
-          <button
-            className={activeTab === "queue" ? "active" : ""}
-            type="button"
-            onClick={() => setActiveTab("queue")}
-          >
-            Queue
-          </button>
-          <button
-            className={activeTab === "analytics" ? "active" : ""}
-            type="button"
-            onClick={() => setActiveTab("analytics")}
-          >
-            Analytics
-          </button>
-        </nav>
-      </header>
+    <main className="shell" data-testid="forge-shell">
+      <ForgeHeader
+        activeTab={activeTab}
+        projectFilter={projectFilter}
+        resolvedRepoId={resolvedRepoId}
+        scopeOptions={scopeOptions}
+        workspaceGraphs={workspaceGraphs}
+        onProjectChange={setScopeFilter}
+        onRepoChange={selectRepo}
+        onTabChange={setActiveTab}
+      />
 
       {error ? (
         <section className="errorBanner">
