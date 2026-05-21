@@ -264,7 +264,7 @@ export function parseSetArgs(args: string[]):
 export function parseCreateArgs(args: string[]): CreateTaskInput {
   const [id, ...rest] = args;
   if (!id) {
-    throw new Error("usage: forge create <id> --title <title> [options]");
+    throw new Error(CREATE_USAGE);
   }
 
   const input: CreateTaskInput = { id, title: "" };
@@ -323,6 +323,11 @@ export function parseCreateArgs(args: string[]): CreateTaskInput {
 
   return input;
 }
+
+export const CREATE_USAGE =
+  "usage: forge create <id> --title <title> " +
+  "[--why <text>] [--success <text>] [--acceptance <text>] " +
+  "[--verification <text>] [--notes <text>] [options]";
 
 function parsePriority(value: string): TaskPriority {
   if (value === "urgent" || value === "high" || value === "medium" || value === "low") {

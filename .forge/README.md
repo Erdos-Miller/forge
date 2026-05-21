@@ -110,6 +110,9 @@ These are expected fields, not frontmatter schema. Missing fields should be
 reported as quality warnings by tools, not task parse errors. Direct Markdown
 edits are valid for rich task body changes as long as frontmatter stays intact.
 
+Use `forge create` with `--why`, `--success`, repeated `--acceptance`,
+repeated `--verification`, and `--notes` to create these fields up front.
+
 Forge also supports these standard sections when the task needs them:
 
 - `Execution Plan`

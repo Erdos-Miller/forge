@@ -1,3 +1,5 @@
+import { CREATE_USAGE } from "./args";
+
 export type CommandClassification = "read" | "write" | "serve";
 export type CommandWorkflow = "inspect" | "claim" | "plan" | "mutate" | "verify" | "close";
 
@@ -129,11 +131,14 @@ export const COMMANDS = [
   },
   {
     name: "create",
-    usage: "forge create <id> --title <title> [options]",
-    description: "Create a canonical task file.",
+    usage: CREATE_USAGE.replace(/^usage: /, ""),
+    description: "Create a canonical task file with expected Markdown fields.",
     classification: "write",
     supportsJson: false,
-    examples: ['forge create F-0006 --title "Add task creation"'],
+    examples: [
+      'forge create F-0006 --title "Add task creation" --why "New tasks need context."',
+      'forge create F-0007 --title "Wire smoke test" --acceptance "Test fails before fix."',
+    ],
     agentPurpose: "Add planned work with the standard task shape.",
   },
   {

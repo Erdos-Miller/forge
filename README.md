@@ -71,7 +71,7 @@ directory from the current working directory.
 ```sh
 bun packages/cli/src/index.ts list
 bun packages/cli/src/index.ts ready
-bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --area cli --scope "packages/cli/**"
+bun packages/cli/src/index.ts create F-0006 --title "Add task creation" --why "New tasks should start with enough context." --success "The task is ready to pick up." --acceptance "The task has observable acceptance criteria." --verification "bun run harness:cli" --notes "Keep rich task context in Markdown." --area cli --scope "packages/cli/**"
 bun packages/cli/src/index.ts loop-prompt
 bun packages/cli/src/index.ts prompt next
 bun packages/cli/src/index.ts claim F-0005 --by codex

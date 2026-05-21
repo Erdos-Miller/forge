@@ -2,7 +2,7 @@
 id: F-0069
 title: "Improve task creation around expected fields"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - ".forge/**"
   - "README.md"
 created_at: 2026-05-20T15:37:10.598Z
-updated_at: 2026-05-20T15:38:09.656Z
+updated_at: 2026-05-21T15:36:05.021Z
+closed_at: 2026-05-21T15:36:05.021Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Improve task creation around expected fields
 
@@ -69,6 +73,18 @@ Tracked in frontmatter: F-0068.
 ## Notes
 
 Some create options already exist; this task should verify, document, and close any gaps rather than duplicate behavior.
+
+Audited `forge create` and confirmed core generation already emitted the expected Markdown fields with TODO fallbacks. Completed the first-class create surface by tightening command usage/metadata, examples, docs, and tests around the existing `--why`, `--success`, repeated `--acceptance`, repeated `--verification`, and `--notes` flags.
+
+Decisions:
+- Kept rich task text in Markdown body sections and did not add any new frontmatter schema.
+- Did not add stdin or section patching behavior; that would be a separate body-editing feature.
+- Reused the same create usage string for parser errors and command metadata so help, prompts, and `commands --json` stay aligned.
+
+Verification:
+- `bun test packages/cli/test/cli.test.ts packages/core/test/parser.test.ts packages/core/test/write.test.ts`: 82 pass, 434 expect() calls.
+- `bun run harness:cli`: 7 pass, 89 expect() calls.
+- `bun run quality:check`: 195 pass, 958 expect() calls, web production build passed.
 
 ## History
 

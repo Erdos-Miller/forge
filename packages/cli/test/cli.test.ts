@@ -191,6 +191,9 @@ describe("forge cli", () => {
     expect(payload.commands.find((command: any) => command.name === "done").classification).toBe(
       "write",
     );
+    const createCommand = payload.commands.find((command: any) => command.name === "create");
+    expect(createCommand.usage).toContain("[--acceptance <text>]");
+    expect(createCommand.description).toContain("expected Markdown fields");
     expect(payload.commands.find((command: any) => command.name === "doctor").workflow).toBe(
       "verify",
     );
@@ -213,7 +216,8 @@ describe("forge cli", () => {
     expect(result.code).toBe(0);
     expect(text).toContain("Inspect:\n- forge commands --json [read]");
     expect(text).toContain("Claim:\n- forge next [--claim] [--by <name>] --json [write]");
-    expect(text).toContain("Plan:\n- forge create <id> --title <title> [options] [write]");
+    expect(text).toContain("Plan:\n- forge create <id> --title <title>");
+    expect(text).toContain("[--why <text>] [--success <text>]");
     expect(text).toContain("Mutate:\n- forge deps <id> --json");
     expect(text).toContain("- forge note <id> --stdin [write]");
     expect(text).toContain("Verify:\n- forge doctor --json [read]");
@@ -962,8 +966,14 @@ describe("forge cli", () => {
       "F-0002",
       "--acceptance",
       "The generated file has canonical Markdown sections.",
+      "--acceptance",
+      "The generated file keeps rich text in Markdown.",
       "--verification",
       "bun test packages/cli",
+      "--verification",
+      "bun run harness:cli",
+      "--notes",
+      "Keep the generated task readable.",
     ]);
 
     const taskPath = path.join(
@@ -985,8 +995,14 @@ describe("forge cli", () => {
     expect(parsed.task.body).toContain("## Why");
     expect(parsed.task.body).toContain("## What success looks like");
     expect(parsed.task.body).toContain("## Acceptance Criteria");
+    expect(parsed.task.body).toContain("- The generated file has canonical Markdown sections.");
+    expect(parsed.task.body).toContain("- The generated file keeps rich text in Markdown.");
     expect(parsed.task.body).toContain("## Dependencies");
     expect(parsed.task.body).toContain("## Verification");
+    expect(parsed.task.body).toContain("- bun test packages/cli");
+    expect(parsed.task.body).toContain("- bun run harness:cli");
+    expect(parsed.task.body).toContain("## Notes");
+    expect(parsed.task.body).toContain("Keep the generated task readable.");
     expect(parsed.task.body).toContain("## History");
   });
 
