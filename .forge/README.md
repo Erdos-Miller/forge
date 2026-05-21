@@ -220,6 +220,26 @@ Decision records should stay short and use this shape:
 - `Consequences`: follow-up work, tradeoffs, or compatibility notes.
 - `Related tasks`: task ids that introduced or depend on the decision.
 
+## Dirty Worktree Coordination
+
+Forge's planner/worker workflow allows a planner to create future tasks while a
+worker continues a claimed task. Dirty files are classified relative to the
+worker's current claimed task:
+
+- `blocking`: dirty implementation or docs files inside the claimed task scope
+  that the worker did not intentionally create or edit during this task.
+- `non_blocking`: unrelated future task files, unclaimed planning notes, or
+  docs outside the claimed task scope.
+- `review`: dirty files that affect coordination or shared behavior, including
+  the claimed task file, dependency task files, package manifests, root config,
+  generated files, and central exports.
+
+Workers should continue through `non_blocking` dirty files, stop for `blocking`
+dirty files, and ask for review or record a clear task note before changing
+`review` files. Shared files may still be edited by a coordinating task that
+explicitly owns them; the task Notes should explain why that shared edit belongs
+with the current work.
+
 ## Storage Model
 
 Use one tracked `.forge/` directory at the git repository root.

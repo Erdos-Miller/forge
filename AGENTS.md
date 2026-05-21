@@ -50,6 +50,25 @@ One agent may do both roles in a small session, but keep the distinction clear i
 - Put app-specific review rules in routed repo guidance. Keep Forge's generic
   task schema focused on common lifecycle state.
 
+## Dirty Worktree Policy
+
+Dirty files are evaluated relative to the current claimed task, not as one
+global stop signal.
+
+- `blocking`: dirty implementation or docs files inside the claimed task scope
+  that this worker did not intentionally create or edit. Stop before touching
+  them.
+- `non_blocking`: unrelated future task files, unclaimed planning notes, or
+  docs outside the claimed task scope. Continue, but do not commit them with
+  worker changes.
+- `review`: dirty files that affect coordination or shared behavior, including
+  the claimed task file, dependency task files, package manifests, root config,
+  generated files, and central exports. Pause or record a clear task note before
+  editing them unless the current task explicitly owns that surface.
+
+Planner-created future tasks are not a worker stop condition by themselves.
+Workers stop for relevant conflicts, not for all dirty worktree state.
+
 ## File Ownership
 
 Tasks may declare a `scope` field. Treat it as the allowed edit area for that task.
