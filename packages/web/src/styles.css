@@ -36,7 +36,8 @@ button {
   border-bottom: 1px solid #24262a;
   display: grid;
   gap: 18px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto auto;
+  justify-content: start;
   margin-bottom: 14px;
   padding-bottom: 12px;
 }

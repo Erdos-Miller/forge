@@ -2,7 +2,7 @@
 id: F-0124
 title: "Fix header tab positioning under layout harness"
 kind: task
-status: open
+status: done
 priority: urgent
 project: "forge"
 area: "web"
@@ -14,8 +14,8 @@ scope:
   - "packages/web/**"
   - ".forge/tasks/**"
 created_at: 2026-05-21T17:26:34-05:00
-updated_at: 2026-05-21T17:26:34-05:00
-closed_at: ""
+updated_at: 2026-05-21T22:47:37.266Z
+closed_at: 2026-05-21T22:47:37.266Z
 close_reason: ""
 blocked_reason: ""
 review_reason: ""
@@ -74,6 +74,16 @@ Tracked in frontmatter: F-0123.
 ## Notes
 
 This is the first task in the sequence that should change the actual header layout.
+
+- Fixed the header tab drift by changing the desktop topbar grid from a stretching middle column to adjacent auto columns.
+- The F-0123 adjacent-lane contracts now pass: Queue/Analytics stay next to the Worktree/Project controls instead of being pushed to the far right.
+- Preserved Worktree before Project order, fixed control widths, long-label truncation, keyboard shortcut behavior, and narrow/mobile wrapping.
+- No screenshot-based verification was added.
+Verification:
+- `bun run harness:web:layout`
+- `bun run harness:web`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun run --cwd packages/web build`
 
 ## History
 
