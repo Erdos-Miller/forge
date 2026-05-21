@@ -57,6 +57,11 @@ export interface WorkspaceTaskGraphPayload extends TaskGraphPayload {
   };
 }
 
+export interface WorkspaceTaskGraphPayloadOptions {
+  roots?: DiscoveredForgeRoot[];
+  discoverRoots?: (startDir: string) => Promise<DiscoveredForgeRoot[]>;
+}
+
 export async function getTaskGraphPayload(
   startDir = process.cwd(),
 ): Promise<TaskGraphPayload> {
@@ -69,14 +74,17 @@ export async function getTaskGraphPayload(
 
 export async function getWorkspaceTaskGraphPayload(
   startDir = process.cwd(),
+  options: WorkspaceTaskGraphPayloadOptions = {},
 ): Promise<WorkspaceTaskGraphPayload> {
   const loadTimings: WorkspaceLoadTiming[] = [];
-  const roots = await measureWorkspaceLoadPhase(
-    loadTimings,
-    "workspace.discover_roots",
-    () => discoverForgeRootsDownward(startDir),
-    { rootPath: startDir },
-  );
+  const roots = options.roots
+    ? measureCachedWorkspaceRoots(loadTimings, startDir, options.roots)
+    : await measureWorkspaceLoadPhase(
+        loadTimings,
+        "workspace.discover_roots",
+        () => (options.discoverRoots ?? discoverForgeRootsDownward)(startDir),
+        { rootPath: startDir },
+      );
   const rootPayloads = await measureWorkspaceLoadPhase(
     loadTimings,
     "workspace.roots_payload",
@@ -101,6 +109,20 @@ export async function getWorkspaceTaskGraphPayload(
     }),
     { rootCount: rootPayloads.length },
   );
+}
+
+function measureCachedWorkspaceRoots(
+  timings: WorkspaceLoadTiming[],
+  startDir: string,
+  roots: DiscoveredForgeRoot[],
+): DiscoveredForgeRoot[] {
+  timings.push({
+    phase: "workspace.discover_roots_cache",
+    durationMs: 0,
+    rootPath: startDir,
+    rootCount: roots.length,
+  });
+  return roots;
 }
 
 type CompatibleTaskGraphAnalysis =

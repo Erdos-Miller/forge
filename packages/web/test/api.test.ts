@@ -262,6 +262,37 @@ describe("getWorkspaceTaskGraphPayload", () => {
     );
   });
 
+  test("uses cached discovered roots without scanning downward again", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-cached-workspace-",
+      roots: [{ name: "app", tasks: minimalForgeFixtureTasks() }],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [root] = workspace.roots;
+    const rootPath = await fs.realpath(root.repoRoot);
+    let discoverCalls = 0;
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot, {
+      roots: [{ id: "app", displayName: "app", path: rootPath, taskCount: 1 }],
+      discoverRoots: async () => {
+        discoverCalls += 1;
+        return [];
+      },
+    });
+
+    expect(discoverCalls).toBe(0);
+    expect(payload.workspace.roots.map((cachedRoot) => cachedRoot.id)).toEqual(["app"]);
+    expect(payload.workspace.diagnostics.loadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "workspace.discover_roots_cache",
+          durationMs: 0,
+          rootCount: 1,
+        }),
+      ]),
+    );
+  });
+
   test("includes summaries for multiple discovered roots", async () => {
     const workspace = await createForgeFixtureWorkspace({
       prefix: "forge-web-many-workspace-",

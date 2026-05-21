@@ -105,6 +105,15 @@ describe("live Forge web smoke harness", () => {
         }),
       }),
     ]);
+    expect(api.workspace.diagnostics.loadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "workspace.discover_roots_cache",
+          durationMs: 0,
+          rootCount: 1,
+        }),
+      ]),
+    );
 
     const html = await fetchTextWithRetry(serverUrl(server), server);
     expect(html).toContain('<div id="root"></div>');
@@ -146,6 +155,15 @@ describe("live Forge web smoke harness", () => {
     ]);
     expect(api.workspace.roots[0].graph.readyTaskIds).toEqual(["F-0001"]);
     expect(api.workspace.roots[1].graph.readyTaskIds).toEqual(["F-1001"]);
+    expect(api.workspace.diagnostics.loadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "workspace.discover_roots_cache",
+          durationMs: 0,
+          rootCount: 2,
+        }),
+      ]),
+    );
 
     const html = await fetchTextWithRetry(
       `${serverUrl(server)}/?repo=web&task=F-1001`,

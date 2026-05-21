@@ -737,6 +737,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
         FORGE_START_DIR: webOptions.demo
           ? demoWorkspace?.workspaceRoot ?? repoRoot
           : path.resolve(webOptions.startDir),
+        FORGE_WORKSPACE_ROOTS: JSON.stringify(webRootInfo.discoveredRoots),
       },
       stderr: "inherit",
       stdin: "inherit",

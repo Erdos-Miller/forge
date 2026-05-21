@@ -6,8 +6,10 @@ import {
   type ForgeFixtureWorkspace,
 } from "../../core/test/fixture-repo";
 import {
+  createWorkspaceRootCache,
   getWorkspaceRefreshReason,
   isTaskMarkdownFile,
+  parseWorkspaceRootsEnv,
   setupForgeWorkspaceWatcher,
   type WatchedTaskDir,
 } from "../vite.config";
@@ -25,6 +27,32 @@ const fixtureWorkspaces: ForgeFixtureWorkspace[] = [];
 afterEach(async () => {
   await Promise.all(fixtureWorkspaces.splice(0).map((workspace) => workspace.cleanup()));
 });
+
+function fakeServer() {
+  const watchedPaths: string[] = [];
+  const watchedEvents: string[] = [];
+  const handlers = new Map<string, (filePath: string) => void>();
+  const sentEvents: unknown[] = [];
+  const server = {
+    watcher: {
+      add: (filePath: string) => {
+        watchedPaths.push(filePath);
+      },
+      unwatch: () => {},
+      on: (eventName: string, handler: (filePath: string) => void) => {
+        watchedEvents.push(eventName);
+        handlers.set(eventName, handler);
+      },
+    },
+    ws: {
+      send: (event: unknown) => {
+        sentEvents.push(event);
+      },
+    },
+    config: { logger: { info: () => {}, warn: () => {} } },
+  } as any;
+  return { handlers, sentEvents, server, watchedEvents, watchedPaths };
+}
 
 describe("workspace task watcher helpers", () => {
   test("matches task markdown changes across multiple roots", () => {
@@ -92,21 +120,7 @@ describe("workspace task watcher helpers", () => {
       ],
     });
     fixtureWorkspaces.push(workspace);
-    const watchedPaths: string[] = [];
-    const watchedEvents: string[] = [];
-    const server = {
-      watcher: {
-        add: (filePath: string) => {
-          watchedPaths.push(filePath);
-        },
-        unwatch: () => {},
-        on: (eventName: string) => {
-          watchedEvents.push(eventName);
-        },
-      },
-      ws: { send: () => {} },
-      config: { logger: { info: () => {}, warn: () => {} } },
-    } as any;
+    const { server, watchedEvents, watchedPaths } = fakeServer();
 
     const setup = await setupForgeWorkspaceWatcher(server, workspace.workspaceRoot);
 
@@ -132,4 +146,99 @@ describe("workspace task watcher helpers", () => {
     expect(watchedPaths.length).toBeGreaterThanOrEqual(3);
     expect(watchedEvents).toEqual(["add", "change", "unlink", "addDir", "unlinkDir"]);
   });
+
+  test("uses seeded roots for watcher setup without rediscovering", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-watch-cache-",
+      roots: [{ name: "api", tasks: minimalForgeFixtureTasks() }],
+    });
+    fixtureWorkspaces.push(workspace);
+    const root = {
+      id: "api",
+      displayName: "api",
+      path: workspace.roots[0].repoRoot,
+      taskCount: 1,
+    };
+    const rootCache = createWorkspaceRootCache([root]);
+    const { server } = fakeServer();
+    let discoverCalls = 0;
+
+    const setup = await setupForgeWorkspaceWatcher(server, workspace.workspaceRoot, {
+      rootCache,
+      discoverRoots: async () => {
+        discoverCalls += 1;
+        return [];
+      },
+    });
+
+    expect(discoverCalls).toBe(0);
+    expect(setup.roots.map((cachedRoot) => cachedRoot.id)).toEqual(["api"]);
+    expect(setup.timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "watcher.discover_roots_cache",
+          durationMs: 0,
+          rootCount: 1,
+        }),
+      ]),
+    );
+  });
+
+  test("invalidates cached roots for Forge structure changes", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-watch-cache-refresh-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        { name: "web", tasks: minimalForgeFixtureTasks() },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [apiRoot, webRoot] = workspace.roots.map((root) => ({
+      id: path.basename(root.repoRoot),
+      displayName: path.basename(root.repoRoot),
+      path: root.repoRoot,
+      taskCount: 1,
+    }));
+    const rootCache = createWorkspaceRootCache([apiRoot]);
+    const { handlers, sentEvents, server } = fakeServer();
+    let discoverCalls = 0;
+
+    const setup = await setupForgeWorkspaceWatcher(server, workspace.workspaceRoot, {
+      rootCache,
+      discoverRoots: async () => {
+        discoverCalls += 1;
+        return [apiRoot, webRoot];
+      },
+    });
+
+    handlers.get("addDir")?.(path.join(setup.workspaceRoot, "web", ".forge"));
+    await delay(100);
+
+    expect(discoverCalls).toBe(1);
+    expect(rootCache.get()?.map((root) => root.id)).toEqual(["api", "web"]);
+    expect(sentEvents).toEqual([
+      expect.objectContaining({
+        event: "forge:tasks-changed",
+        data: expect.objectContaining({ reason: "roots", roots: ["api", "web"] }),
+      }),
+    ]);
+  });
+
+  test("parses seeded workspace roots from the environment", () => {
+    const roots = parseWorkspaceRootsEnv(
+      JSON.stringify([
+        { id: "api", displayName: "api", path: "/repo/api", taskCount: 1 },
+        { id: "bad", displayName: "bad", path: "/repo/bad" },
+      ]),
+    );
+
+    expect(roots).toEqual([
+      { id: "api", displayName: "api", path: "/repo/api", taskCount: 1 },
+    ]);
+    expect(parseWorkspaceRootsEnv("not json")).toEqual([]);
+  });
 });
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -11,8 +11,11 @@ export default defineConfig({
       name: "forge-api",
       configureServer(server) {
         const startDir = process.env.FORGE_START_DIR ?? process.cwd();
+        const rootCache = createWorkspaceRootCache(
+          parseWorkspaceRootsEnv(process.env.FORGE_WORKSPACE_ROOTS),
+        );
 
-        setupForgeWorkspaceWatcher(server, startDir)
+        setupForgeWorkspaceWatcher(server, startDir, { rootCache })
           .then((setup) => {
             const total = setup.timings.find((timing) => timing.phase === "watcher.setup");
             const duration = total ? `${total.durationMs}ms` : "unknown duration";
@@ -30,7 +33,9 @@ export default defineConfig({
 
         server.middlewares.use("/api/tasks", async (_request, response) => {
           try {
-            const payload = await getWorkspaceTaskGraphPayload(startDir);
+            const payload = await getWorkspaceTaskGraphPayload(startDir, {
+              roots: rootCache.get() ?? undefined,
+            });
             response.writeHead(200, { "content-type": "application/json" });
             response.end(JSON.stringify(payload));
           } catch (error) {
@@ -60,11 +65,40 @@ export interface ForgeWorkspaceWatcherSetup {
   timings: WorkspaceLoadTiming[];
 }
 
+export interface WorkspaceRootCache {
+  get(): DiscoveredForgeRoot[] | null;
+  set(roots: DiscoveredForgeRoot[]): void;
+  clear(): void;
+}
+
+export interface ForgeWorkspaceWatcherOptions {
+  rootCache?: WorkspaceRootCache;
+  discoverRoots?: (startDir: string) => Promise<DiscoveredForgeRoot[]>;
+}
+
+export function createWorkspaceRootCache(
+  initialRoots: DiscoveredForgeRoot[] = [],
+): WorkspaceRootCache {
+  let cachedRoots = initialRoots.length > 0 ? initialRoots : null;
+  return {
+    get: () => cachedRoots,
+    set: (roots) => {
+      cachedRoots = roots;
+    },
+    clear: () => {
+      cachedRoots = null;
+    },
+  };
+}
+
 export async function setupForgeWorkspaceWatcher(
   server: ViteDevServer,
   startDir: string,
+  options: ForgeWorkspaceWatcherOptions = {},
 ): Promise<ForgeWorkspaceWatcherSetup> {
   const timings: WorkspaceLoadTiming[] = [];
+  const rootCache = options.rootCache ?? createWorkspaceRootCache();
+  const discoverRoots = options.discoverRoots ?? discoverForgeRootsDownward;
   return measureWatcherSetupPhase(timings, "watcher.setup", async () => {
     const workspaceRoot = await measureWatcherSetupPhase(
       timings,
@@ -75,13 +109,23 @@ export async function setupForgeWorkspaceWatcher(
     const watchedTaskDirs = new Map<string, WatchedTaskDir>();
     server.watcher.add(normalizePath(workspaceRoot));
 
-    const syncWatchedRoots = async () => {
-      const roots = await measureWatcherSetupPhase(
-        timings,
-        "watcher.discover_roots",
-        () => discoverForgeRootsDownward(startDir),
-        { rootPath: startDir },
-      );
+    const syncWatchedRoots = async (forceDiscover = false) => {
+      if (forceDiscover) {
+        rootCache.clear();
+      }
+
+      const cachedRoots = rootCache.get();
+      const roots = cachedRoots
+        ? measureCachedWatcherRoots(timings, startDir, cachedRoots)
+        : await measureWatcherSetupPhase(
+            timings,
+            "watcher.discover_roots",
+            () => discoverRoots(startDir),
+            { rootPath: startDir },
+          );
+      if (!cachedRoots) {
+        rootCache.set(roots);
+      }
       const currentRootPaths = new Set(roots.map((root) => root.path));
 
       for (const root of roots) {
@@ -121,7 +165,7 @@ export async function setupForgeWorkspaceWatcher(
         clearTimeout(refreshTimer);
       }
       refreshTimer = setTimeout(async () => {
-        const roots = await syncWatchedRoots();
+        const roots = await syncWatchedRoots(reason === "roots");
         server.ws.send({
           type: "custom",
           event: "forge:tasks-changed",
@@ -142,6 +186,21 @@ export async function setupForgeWorkspaceWatcher(
 
     return { workspaceRoot, roots: setupRoots, timings };
   });
+}
+
+export function parseWorkspaceRootsEnv(value: string | undefined): DiscoveredForgeRoot[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(isDiscoveredForgeRoot);
+  } catch {
+    return [];
+  }
 }
 
 export function getWorkspaceRefreshReason(
@@ -177,6 +236,33 @@ function isForgeStructurePath(workspaceRoot: string, filePath: string) {
     return false;
   }
   return relativePath.split(path.sep).includes(".forge");
+}
+
+function isDiscoveredForgeRoot(value: unknown): value is DiscoveredForgeRoot {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<DiscoveredForgeRoot>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.displayName === "string" &&
+    typeof candidate.path === "string" &&
+    typeof candidate.taskCount === "number"
+  );
+}
+
+function measureCachedWatcherRoots(
+  timings: WorkspaceLoadTiming[],
+  startDir: string,
+  roots: DiscoveredForgeRoot[],
+): DiscoveredForgeRoot[] {
+  timings.push({
+    phase: "watcher.discover_roots_cache",
+    durationMs: 0,
+    rootPath: startDir,
+    rootCount: roots.length,
+  });
+  return roots;
 }
 
 async function measureWatcherSetupPhase<T>(
