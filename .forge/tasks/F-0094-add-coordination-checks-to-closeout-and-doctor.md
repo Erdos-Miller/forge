@@ -2,7 +2,7 @@
 id: F-0094
 title: "Add coordination checks to closeout and doctor"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T12:03:14-05:00
-updated_at: 2026-05-21T12:03:14-05:00
+updated_at: 2026-05-21T18:19:17.316Z
+closed_at: 2026-05-21T18:19:17.316Z
+close_reason: "Added advisory dirty-worktree diagnostics to doctor and closeout with focused, CLI harness, and quality checks passing."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add coordination checks to closeout and doctor
 
@@ -70,6 +74,18 @@ Tracked in frontmatter: F-0092.
 ## Notes
 
 This task should not make unrelated planner work a doctor failure.
+
+Implemented advisory dirty-worktree coordination diagnostics in `forge doctor --json` and `forge closeout <id> --json`. Both surfaces reuse the existing worktree classifier and emit machine-readable `dirty_worktree_blocking` / `dirty_worktree_review` warnings while ignoring non-blocking future task files.
+
+The checks are non-mutating and best-effort: non-git fixtures or unavailable git status do not break doctor or closeout.
+
+Review trigger resolved: diagnostics remain advisory warnings, not command failures.
+
+Verification:
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/closeout.test.ts packages/cli/test/worktree-status.test.ts` passed: 65 tests, 415 expects.
+- `bun test packages/cli/test/doctor-worktree.test.ts packages/cli/test/cli.test.ts packages/cli/test/closeout.test.ts packages/core/test/readability-ratchet.test.ts` passed: 65 tests, 407 expects.
+- `bun run harness:cli` passed: 7 tests, 89 expects.
+- `bun run quality:check` passed: 234 tests, 1140 expects, and `packages/web` production build completed.
 
 ## History
 

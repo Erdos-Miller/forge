@@ -7,6 +7,10 @@ import {
   type TaskGraphAnalysis,
 } from "@forge/core";
 import { parseMarkdownSections } from "./robot";
+import {
+  getWorktreeStatusPayload,
+  type WorktreeStatusFile,
+} from "./worktree-status";
 
 export interface DoctorDiagnostic {
   code: string;
@@ -15,6 +19,8 @@ export interface DoctorDiagnostic {
   taskId?: string;
   sourcePath?: string;
   repairHint?: string;
+  reason?: string;
+  classification?: string;
 }
 
 export async function inspectTaskStore(
@@ -270,6 +276,7 @@ function escapeRegExp(value: string): string {
 export async function getTaskCloseoutGuidance(
   repoRoot: string,
   task: Task,
+  tasks: Task[] = [task],
 ): Promise<Record<string, unknown>> {
   const sections = parseMarkdownSections(task.body);
   const executionPlan = findSection(sections, "Execution Plan");
@@ -289,12 +296,14 @@ export async function getTaskCloseoutGuidance(
     ...humanReviewTriggers,
     ...extractPrefixedLines(notes?.body ?? "", "Review needed:"),
   ];
+  const worktreeFindings = await getCloseoutWorktreeFindings(repoRoot, tasks, task);
   const findings = getCloseoutFindings(task, {
     executionPlanPresent: Boolean(executionPlan),
     verificationNotesPresent,
     blockers,
     review,
     stopConditions,
+    worktreeFindings,
   });
 
   return {
@@ -317,9 +326,10 @@ function getCloseoutFindings(
     blockers: string[];
     review: string[];
     stopConditions: string[];
+    worktreeFindings: CloseoutFinding[];
   },
-): Array<{ code: string; severity: "warning"; message: string }> {
-  const findings: Array<{ code: string; severity: "warning"; message: string }> = [];
+): CloseoutFinding[] {
+  const findings: CloseoutFinding[] = [...input.worktreeFindings];
   if (!input.executionPlanPresent) {
     findings.push({
       code: "missing_execution_plan",
@@ -356,6 +366,88 @@ function getCloseoutFindings(
     });
   }
   return findings;
+}
+
+interface CloseoutFinding {
+  code: string;
+  severity: "warning";
+  message: string;
+  path?: string;
+  reason?: string;
+  classification?: string;
+}
+
+export async function getWorktreeDoctorDiagnostics(
+  repoRoot: string,
+  tasks: Task[],
+): Promise<DoctorDiagnostic[]> {
+  const diagnostics: DoctorDiagnostic[] = [];
+  const activeClaimedTasks = tasks.filter((task) => {
+    return task.claimed_by && task.status !== "done" && task.status !== "canceled";
+  });
+
+  for (const task of activeClaimedTasks) {
+    const files = await getWorktreeConflictFiles(repoRoot, tasks, task);
+    diagnostics.push(...files.map((file) => toWorktreeDoctorDiagnostic(repoRoot, task, file)));
+  }
+
+  return diagnostics;
+}
+
+async function getCloseoutWorktreeFindings(
+  repoRoot: string,
+  tasks: Task[],
+  task: Task,
+): Promise<CloseoutFinding[]> {
+  const files = await getWorktreeConflictFiles(repoRoot, tasks, task);
+  return files.map((file) => ({
+    code: toWorktreeDiagnosticCode(file.classification),
+    severity: "warning",
+    message: `dirty worktree file ${file.path} is ${file.classification} for task ${task.id}`,
+    path: file.path,
+    reason: file.reason,
+    classification: file.classification,
+  }));
+}
+
+async function getWorktreeConflictFiles(
+  repoRoot: string,
+  tasks: Task[],
+  task: Task,
+): Promise<WorktreeStatusFile[]> {
+  try {
+    const payload = await getWorktreeStatusPayload({ repoRoot, tasks, taskId: task.id });
+    return payload.files.filter((file) => file.classification !== "non_blocking");
+  } catch {
+    return [];
+  }
+}
+
+function toWorktreeDoctorDiagnostic(
+  repoRoot: string,
+  task: Task,
+  file: WorktreeStatusFile,
+): DoctorDiagnostic {
+  return {
+    code: toWorktreeDiagnosticCode(file.classification),
+    severity: "warning",
+    message: `dirty worktree file ${file.path} is ${file.classification} for active task ${task.id}`,
+    taskId: task.id,
+    sourcePath: path.join(repoRoot, file.path),
+    repairHint: getWorktreeRepairHint(file),
+    reason: file.reason,
+    classification: file.classification,
+  };
+}
+
+function toWorktreeDiagnosticCode(classification: WorktreeStatusFile["classification"]) {
+  return `dirty_worktree_${classification}`;
+}
+
+function getWorktreeRepairHint(file: WorktreeStatusFile) {
+  return file.classification === "blocking"
+    ? "Finish, commit, stash, or revert this task-scoped change before moving on."
+    : "Review this dirty file before closing or continuing the active task.";
 }
 
 async function getExpectedQualityCommand(repoRoot: string): Promise<string | null> {

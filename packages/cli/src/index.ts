@@ -52,6 +52,7 @@ import {
 import {
   getGraphDoctorDiagnostics,
   getTaskCloseoutGuidance,
+  getWorktreeDoctorDiagnostics,
   inspectTaskStore,
 } from "./doctor";
 import {
@@ -546,6 +547,7 @@ async function doctor(options: CliOptions, args: string[]): Promise<number> {
 
   if (tasks.length > 0) {
     diagnostics.push(...getGraphDoctorDiagnostics(analyzeTasks(tasks)));
+    diagnostics.push(...(await getWorktreeDoctorDiagnostics(repoRoot, tasks)));
   }
 
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
@@ -581,7 +583,8 @@ async function closeout(options: CliOptions, args: string[]): Promise<number> {
     }
     throw error;
   }
-  const guidance = await getTaskCloseoutGuidance(repoRoot, task);
+  const tasks = await loadTasksFrom(repoRoot);
+  const guidance = await getTaskCloseoutGuidance(repoRoot, task, tasks);
 
   options.stdout(
     stringifyJson({

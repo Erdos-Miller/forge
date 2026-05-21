@@ -22,6 +22,28 @@ async function makeRepo(): Promise<{ repoRoot: string; tasksDir: string }> {
   return { repoRoot, tasksDir };
 }
 
+async function initGit(repoRoot: string) {
+  await runGit(repoRoot, ["init"]);
+  await runGit(repoRoot, ["add", "."]);
+  await runGit(repoRoot, [
+    "-c",
+    "user.email=forge@example.test",
+    "-c",
+    "user.name=Forge Test",
+    "commit",
+    "-m",
+    "initial",
+  ]);
+}
+
+async function runGit(cwd: string, args: string[]) {
+  const proc = Bun.spawn(["git", ...args], { cwd, stderr: "pipe", stdout: "pipe" });
+  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `git ${args.join(" ")} failed`);
+  }
+}
+
 async function runCloseout(repoRoot: string, taskId: string): Promise<any> {
   const stdout: string[] = [];
   const code = await runCli(["closeout", taskId, "--json"], {
@@ -86,25 +108,69 @@ describe("closeout guidance", () => {
     expect(codes).toContain("review_needed");
     expect(codes).toContain("stop_condition_present");
   });
+
+  test("reports dirty worktree closeout findings and ignores future task files", async () => {
+    const { repoRoot, tasksDir } = await makeRepo();
+    const dependencyPath = path.join(tasksDir, "F-0000.md");
+    await fs.mkdir(path.join(repoRoot, "packages", "cli"), { recursive: true });
+    await fs.writeFile(dependencyPath, taskFile("F-0000", readyBody(), { status: "done" }));
+    await fs.writeFile(
+      path.join(tasksDir, "F-0001.md"),
+      taskFile("F-0001", readyBody(), {
+        dependsOn: ["F-0000"],
+        scope: ["packages/**"],
+      }),
+    );
+    await initGit(repoRoot);
+
+    await fs.writeFile(path.join(repoRoot, "packages", "cli", "dirty.ts"), "dirty\n");
+    await fs.appendFile(dependencyPath, "\nDependency note.\n");
+    await fs.writeFile(
+      path.join(tasksDir, "F-9999.md"),
+      taskFile("F-9999", readyBody(), { status: "open" }),
+    );
+
+    const payload = await runCloseout(repoRoot, "F-0001");
+    const dirtyFindings = payload.closeout.findings.filter((finding: any) =>
+      finding.code.startsWith("dirty_worktree_"),
+    );
+
+    expect(payload.closeout.ready_to_close).toBe(false);
+    expect(dirtyFindings.map((finding: any) => finding.code).sort()).toEqual([
+      "dirty_worktree_blocking",
+      "dirty_worktree_review",
+    ]);
+    expect(dirtyFindings.map((finding: any) => finding.path)).not.toContain(
+      ".forge/tasks/F-9999.md",
+    );
+  });
 });
 
 function taskFile(
   id: string,
   body: string,
-  options: { reviewReason?: string; blockedReason?: string } = {},
+  options: {
+    blockedReason?: string;
+    dependsOn?: string[];
+    reviewReason?: string;
+    scope?: string[];
+    status?: string;
+  } = {},
 ): string {
   return [
     "---",
     `id: ${id}`,
     "title: Test",
     "kind: task",
-    "status: doing",
+    `status: ${options.status ?? "doing"}`,
     "priority: medium",
     'parent: ""',
-    "depends_on: []",
+    ...(options.dependsOn?.length
+      ? ["depends_on:", ...options.dependsOn.map((id) => `  - ${id}`)]
+      : ["depends_on: []"]),
     'claimed_by: "codex"',
     "scope:",
-    "  - '**'",
+    ...(options.scope ?? ["**"]).map((scope) => `  - ${JSON.stringify(scope)}`),
     "created_at: 2026-05-14T00:00:00-05:00",
     "updated_at: 2026-05-14T00:00:00-05:00",
     ...(options.blockedReason ? [`blocked_reason: ${JSON.stringify(options.blockedReason)}`] : []),
