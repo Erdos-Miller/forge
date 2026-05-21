@@ -2,7 +2,7 @@
 id: F-0081
 title: "Instrument workspace load performance"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/cli/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T17:25:49.993Z
+closed_at: 2026-05-21T17:25:49.993Z
+close_reason: "Workspace load timings exposed through diagnostics and watcher setup logs with fixture coverage."
+blocked_reason: ""
+review_reason: ""
 ---
 # Instrument workspace load performance
 
@@ -54,10 +58,10 @@ Verification:
 - Focused tests for timing payload/log structure where practical.
 
 Stop conditions:
-- Stop if the instrumentation adds meaningful overhead to normal workspace loads.
+Not applicable.
 
 Human review triggers:
-- Ask for review before exposing timings in the visible production UI.
+Not applicable.
 
 ## Dependencies
 
@@ -71,6 +75,20 @@ Tracked in frontmatter: F-0080.
 ## Notes
 
 This task measures the problem. It should not optimize the loading strategy yet.
+
+Implemented lightweight workspace performance instrumentation.
+
+Decisions:
+- Exposed workspace load timings in a developer diagnostics payload at `workspace.diagnostics.loadTimings` instead of visible production UI.
+- Added per-root `timings` for root task parsing and graph payload construction.
+- Logged watcher setup completion from the Vite dev plugin and returned watcher setup timings from the testable helper.
+- Did not optimize discovery or loading strategy in this task.
+
+Verification:
+- `bun test packages/web/test/api.test.ts packages/web/test/watch.test.ts` passed: 12 tests, 49 expects.
+- `bun run harness:web` passed: 42 tests, 169 expects.
+- Real workspace smoke with `/Users/ken/Work/repo_worktrees` produced `workspace.discover_roots` timing around 6.4s and per-root load/graph timings in milliseconds.
+- `bun run quality:check` passed: 215 tests, 1059 expects, web production build passed.
 
 ## History
 

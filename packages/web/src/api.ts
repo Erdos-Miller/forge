@@ -24,9 +24,19 @@ export interface TaskGraphPayload {
   };
 }
 
+export interface WorkspaceLoadTiming {
+  phase: string;
+  durationMs: number;
+  rootId?: string;
+  rootPath?: string;
+  rootCount?: number;
+  taskCount?: number;
+}
+
 export interface WorkspaceRootPayload extends DiscoveredForgeRoot {
   status: "ok" | "error";
   graph?: TaskGraphPayload;
+  timings?: WorkspaceLoadTiming[];
   summary?: {
     totalTasks: number;
     readyTaskIds: string[];
@@ -41,6 +51,9 @@ export interface WorkspaceTaskGraphPayload extends TaskGraphPayload {
   workspace: {
     startDir: string;
     roots: WorkspaceRootPayload[];
+    diagnostics: {
+      loadTimings: WorkspaceLoadTiming[];
+    };
   };
 }
 
@@ -57,18 +70,37 @@ export async function getTaskGraphPayload(
 export async function getWorkspaceTaskGraphPayload(
   startDir = process.cwd(),
 ): Promise<WorkspaceTaskGraphPayload> {
-  const roots = await discoverForgeRootsDownward(startDir);
-  const rootPayloads = await Promise.all(roots.map(toWorkspaceRootPayload));
+  const loadTimings: WorkspaceLoadTiming[] = [];
+  const roots = await measureWorkspaceLoadPhase(
+    loadTimings,
+    "workspace.discover_roots",
+    () => discoverForgeRootsDownward(startDir),
+    { rootPath: startDir },
+  );
+  const rootPayloads = await measureWorkspaceLoadPhase(
+    loadTimings,
+    "workspace.roots_payload",
+    () => Promise.all(roots.map((root) => toWorkspaceRootPayload(root, loadTimings))),
+    { rootCount: roots.length },
+  );
   const selectedRoot = rootPayloads.find((root) => root.status === "ok");
   const selectedGraph = selectedRoot?.graph ?? emptyTaskGraphPayload(startDir);
 
-  return {
-    ...selectedGraph,
-    workspace: {
-      startDir,
-      roots: rootPayloads,
-    },
-  };
+  return measureWorkspaceLoadPhase(
+    loadTimings,
+    "workspace.aggregate_payload",
+    () => ({
+      ...selectedGraph,
+      workspace: {
+        startDir,
+        roots: rootPayloads,
+        diagnostics: {
+          loadTimings,
+        },
+      },
+    }),
+    { rootCount: rootPayloads.length },
+  );
 }
 
 type CompatibleTaskGraphAnalysis =
@@ -113,14 +145,29 @@ function deriveAvailabilityByTaskId(
 
 async function toWorkspaceRootPayload(
   root: DiscoveredForgeRoot,
+  workspaceTimings: WorkspaceLoadTiming[] = [],
 ): Promise<WorkspaceRootPayload> {
+  const timings: WorkspaceLoadTiming[] = [];
+  const rootContext = { rootId: root.id, rootPath: root.path };
   try {
-    const tasks = await loadTasks(root.path);
-    const graph = toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks));
+    const tasks = await measureWorkspaceLoadPhase(
+      timings,
+      "root.load_tasks",
+      () => loadTasks(root.path),
+      rootContext,
+    );
+    const graph = await measureWorkspaceLoadPhase(
+      timings,
+      "root.graph_payload",
+      () => toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks)),
+      { ...rootContext, taskCount: tasks.length },
+    );
+    workspaceTimings.push(...timings);
     return {
       ...root,
       graph,
       status: "ok",
+      timings,
       summary: {
         totalTasks: tasks.length,
         readyTaskIds: graph.readyTaskIds,
@@ -130,12 +177,36 @@ async function toWorkspaceRootPayload(
       },
     };
   } catch (error) {
+    workspaceTimings.push(...timings);
     return {
       ...root,
       status: "error",
+      timings,
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function measureWorkspaceLoadPhase<T>(
+  timings: WorkspaceLoadTiming[],
+  phase: string,
+  run: () => T | Promise<T>,
+  context: Omit<WorkspaceLoadTiming, "phase" | "durationMs"> = {},
+): Promise<T> {
+  const start = performance.now();
+  try {
+    return await run();
+  } finally {
+    timings.push({
+      phase,
+      durationMs: roundDurationMs(performance.now() - start),
+      ...context,
+    });
+  }
+}
+
+function roundDurationMs(durationMs: number) {
+  return Math.round(durationMs * 100) / 100;
 }
 
 function emptyTaskGraphPayload(repoRoot: string): TaskGraphPayload {

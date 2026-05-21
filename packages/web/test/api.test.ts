@@ -164,6 +164,18 @@ describe("getWorkspaceTaskGraphPayload", () => {
     expect(payload.workspace).toEqual({
       startDir: workspace.workspaceRoot,
       roots: [],
+      diagnostics: {
+        loadTimings: expect.arrayContaining([
+          expect.objectContaining({
+            phase: "workspace.discover_roots",
+            durationMs: expect.any(Number),
+          }),
+          expect.objectContaining({
+            phase: "workspace.aggregate_payload",
+            durationMs: expect.any(Number),
+          }),
+        ]),
+      },
     });
   });
 
@@ -215,6 +227,39 @@ describe("getWorkspaceTaskGraphPayload", () => {
         },
       }),
     ]);
+    expect(payload.workspace.diagnostics.loadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "workspace.discover_roots",
+          durationMs: expect.any(Number),
+          rootPath: workspace.workspaceRoot,
+        }),
+        expect.objectContaining({
+          phase: "root.load_tasks",
+          durationMs: expect.any(Number),
+          rootId: "app",
+          rootPath,
+        }),
+        expect.objectContaining({
+          phase: "root.graph_payload",
+          durationMs: expect.any(Number),
+          rootId: "app",
+          rootPath,
+          taskCount: 2,
+        }),
+        expect.objectContaining({
+          phase: "workspace.aggregate_payload",
+          durationMs: expect.any(Number),
+          rootCount: 1,
+        }),
+      ]),
+    );
+    expect(payload.workspace.roots[0].timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "root.load_tasks" }),
+        expect.objectContaining({ phase: "root.graph_payload" }),
+      ]),
+    );
   });
 
   test("includes summaries for multiple discovered roots", async () => {
