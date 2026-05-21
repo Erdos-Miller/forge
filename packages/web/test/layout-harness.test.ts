@@ -14,6 +14,7 @@ import {
   type LiveForgeWebServer,
 } from "./live-server";
 import {
+  expectAdjacentLane,
   expectInside,
   expectLeftToRight,
   expectNoOverlap,
@@ -78,6 +79,12 @@ describe("Forge web layout harness", () => {
     await expectLeftToRight(page, "Worktree before Project", layout.worktree!, layout.project!);
     await expectLeftToRight(page, "Queue before Analytics", layout.queueTab, layout.analyticsTab);
     await expectHeaderLabels(page);
+
+    const navXBeforeProjectChange = layout.nav.x;
+    await page.getByTestId("forge-project-control").locator("select").selectOption("ui");
+    const changedProject = await measureHeaderLayout(page);
+    expect(Math.abs(changedProject.nav.x - navXBeforeProjectChange)).toBeLessThanOrEqual(1);
+    await expectAdjacentLane(page, "Project and navigation", changedProject.project!, changedProject.nav, 48);
   });
 
   test("reports conditional controls and narrow wrapping without screenshots", async () => {
@@ -97,6 +104,41 @@ describe("Forge web layout harness", () => {
     expect(layout.project).toBeUndefined();
     await expectWrappedBelow(page, "narrow navigation after brand", layout.brand, layout.nav);
     await expectLeftToRight(page, "Queue before Analytics", layout.queueTab, layout.analyticsTab);
+  });
+
+  test("contracts desktop navigation lane without a Project selector", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-layout-no-project-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        {
+          name: "web-client-with-a-long-layout-name",
+          tasks: [
+            {
+              id: "F-1001",
+              title: "Header layout fixture without project",
+              priority: "urgent",
+              scope: ["packages/web/**"],
+            },
+          ],
+        },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+
+    const server = await startLiveForgeWeb(workspace.workspaceRoot);
+    servers.push(server);
+    const page = await openFixturePage(
+      server,
+      "/?repo=web-client-with-a-long-layout-name",
+    );
+
+    const layout = await measureHeaderLayout(page);
+
+    expect(layout.worktree).toBeDefined();
+    expect(layout.project).toBeUndefined();
+    await expectSameRow(page, "desktop brand and navigation", layout.brand, layout.nav);
+    await expectAdjacentLane(page, "Worktree and navigation", layout.worktree!, layout.nav, 48);
   });
 });
 

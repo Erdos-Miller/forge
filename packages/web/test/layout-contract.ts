@@ -102,6 +102,25 @@ export async function expectWrappedBelow(
   }
 }
 
+export async function expectAdjacentLane(
+  page: Page,
+  label: string,
+  left: Rect,
+  right: Rect,
+  maxGap: number,
+): Promise<void> {
+  const gap = right.x - (left.x + left.width);
+  if (gap < -tolerance || gap > maxGap) {
+    throw new Error(
+      await layoutFailure(page, `${label} adjacent-lane placement failed`, {
+        left,
+        right,
+        gap: { x: gap, y: 0, width: maxGap, height: 0 },
+      }),
+    );
+  }
+}
+
 async function measure(locator: Locator, name: string, page: Page): Promise<Rect> {
   await locator.waitFor({ state: "visible", timeout: 5_000 });
   const box = await locator.boundingBox();
