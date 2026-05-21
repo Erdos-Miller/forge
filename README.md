@@ -41,9 +41,14 @@ repos keep automation and collaboration metadata in directories such as
 `.github/` or `.vscode/`.
 
 Keep canonical tasks and specs in `.forge/` so they branch, diff, merge, and
-travel with the code they describe. Use task `scope` globs for edit boundaries
-and optional `area` labels for task categories such as `web`, `cli`, `core`,
-`docs`, or `test` without creating nested task stores.
+travel with the code they describe. Use Projects for human navigation inside a
+worktree, task `scope` globs for edit boundaries, and optional `area` labels for
+task categories such as `web`, `cli`, `core`, `docs`, `test`, or `harness`
+without creating nested task stores.
+
+Do not create nested `.forge/` stores inside packages, apps, or modules in v0.
+One canonical task graph per repo or worktree keeps dependencies, ranking, and
+agent ownership understandable.
 
 Generated indexes, caches, or local UI state should stay ignored by git. The
 Markdown files remain the source of truth.
@@ -138,11 +143,15 @@ forge web --dir /path/to/repo --port 5175
 
 When Forge serves multiple `.forge` roots from one parent directory, the web UI
 calls each selectable root a Worktree. A Worktree may be a git repository, a git
-worktree, or any directory that owns a `.forge` store. The UI Scope filter is a
-user-facing slice of work inside the selected Worktree; it is separate from the
-task frontmatter `scope` globs that agents use as edit boundaries.
+worktree, or any directory that owns a `.forge` store. The parent view is a
+Workspace.
 
-Repos can optionally define explicit UI Scopes in `.forge/scopes.yml`:
+Inside a Worktree, a Project is an explicit user-facing slice of work. It is
+separate from Area, which is a task category such as `web` or `docs`, and from
+the task frontmatter `scope` globs that agents use as edit boundaries.
+
+Repos can optionally define explicit Projects in `.forge/scopes.yml`. The file
+and current CLI commands still use `scope` naming for compatibility:
 
 ```yaml
 version: 1
@@ -158,11 +167,10 @@ scopes:
       - README.md
 ```
 
-Configured UI Scopes are intended to take precedence over inferred fallback
-scopes once the config is wired into the web UI. The task frontmatter `scope`
-field remains the edit-boundary data for agents.
+Configured Projects take precedence over inferred fallback navigation. The task
+frontmatter `scope` field remains the edit-boundary data for agents.
 
-Maintain scope config with structured commands:
+Maintain the compatibility config with structured commands:
 
 ```sh
 forge scopes --json

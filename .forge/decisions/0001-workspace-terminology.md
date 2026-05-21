@@ -1,30 +1,43 @@
-# Decision 0001: Workspace Terminology
+# Decision 0001: Workspace, Worktree, Project, Area, and Scope Terminology
 
 ## Context
 
 Forge now serves multiple `.forge` roots from one local web process. The UI also
 has a filter labeled `Scope`, while task frontmatter already has a `scope` field
 that means edit-boundary globs. Using the same word for both concepts makes
-agent instructions, UI design, and future configuration work ambiguous.
+agent instructions, UI design, and future configuration work ambiguous. Monorepo
+work also needs a human concept for product or package slices without implying
+that those slices are separate task stores.
 
 ## Decision
 
 Use these terms consistently:
 
-- `Worktree`: a selectable Forge root in the web UI. This may be a git
+- `Workspace`: the multi-root view launched from a parent directory. A Workspace
+  is a web browsing context, not a task store.
+- `Worktree`: one discovered Forge root in a Workspace. This may be a git
   repository, a git worktree, or another directory that owns a `.forge` store.
-- `UI Scope`: a user-facing slice of work inside the selected Worktree. It is a
-  product navigation concept, not a task schema field.
+- `Project`: an explicit user-facing slice of work inside a Worktree. It is a
+  navigation and planning concept, not a task schema field. Examples include
+  `Web`, `CLI`, `Shared UI`, or `ToolHub Wells`.
 - `Area`: a task category or work type such as `web`, `cli`, `core`, `docs`, or
-  `test`.
+  `test`. Area answers what kind of work a task is.
+- `Task`: one Markdown work item in the Worktree's canonical `.forge/tasks`
+  graph.
 - `task scope`: the `scope` frontmatter field on a task. It contains file globs
-  that describe the expected edit boundary for that task.
+  that describe the expected edit boundary for that task. It does not define a
+  Project.
 - `Priority`: the urgency ordering used by Forge ranking. It is independent of
-  Worktree, UI Scope, Area, and task scope.
+  Worktree, Project, Area, and task scope.
 
-The current UI label may still say `Scope` until the web controls are renamed,
-but docs and task plans should call that concept `UI Scope` when precision
-matters.
+The current UI and config may still say `Scope` until the web and CLI controls
+are renamed, but docs and task plans should call the user-facing navigation
+concept `Project`.
+
+Keep one canonical `.forge` store per repo or worktree root. Nested `.forge`
+stores inside packages, apps, or modules remain out of scope for now because they
+split the dependency graph, make cross-project blocking relationships harder to
+rank, and create unclear ownership for agents working from a parent Workspace.
 
 ## Decision Records
 
@@ -47,21 +60,27 @@ agent workflow rules across multiple tasks.
 ## Alternatives
 
 - Keep using `scope` for both the UI filter and task edit-boundary globs.
-  Rejected because it made workspace planning and agent prompts hard to read.
+  Rejected because it made Workspace planning and agent prompts hard to read.
 - Rename task frontmatter `scope`. Rejected because existing tasks and tools
   already use it as edit-boundary data.
+- Allow nested `.forge` stores for packages or apps. Rejected for v0 because a
+  single graph per Worktree keeps dependencies, ranking, and agent ownership
+  understandable.
 - Store decisions only in task `Notes`. Rejected because cross-cutting decisions
   are hard to rediscover after the task closes.
 
 ## Consequences
 
-Future UI and CLI work should prefer `Worktree` for the repo selector and should
-avoid presenting task edit globs as user-facing project scopes. Later scope
-configuration work can define explicit UI Scopes without changing task
-frontmatter.
+Future UI and CLI work should use `Workspace` for the parent multi-root view,
+`Worktree` for each selectable root, and `Project` for explicit work slices
+inside a Worktree. They should avoid presenting task edit globs as user-facing
+Projects. Later config work can expose Project language while preserving
+backward compatibility with existing `.forge/scopes.yml` files and without
+renaming task frontmatter `scope`.
 
 ## Related Tasks
 
 - F-0080
 - F-0083
 - F-0085
+- F-0101

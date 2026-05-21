@@ -72,5 +72,11 @@ Workers stop for relevant conflicts, not for all dirty worktree state.
 ## File Ownership
 
 Tasks may declare a `scope` field. Treat it as the allowed edit area for that task.
+This is task edit-boundary scope, not the user-facing Project concept.
+
+Use the terminology from `.forge/README.md`: a Workspace is the parent multi-root
+view, a Worktree is one discovered `.forge` root, a Project is an explicit work
+slice inside a Worktree, Area is the task category, and task `scope` is only
+edit-boundary globs.
 
 Shared files such as package manifests, root config, generated files, and central exports should be changed by a coordinating task, not casually by multiple agents in parallel.

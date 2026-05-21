@@ -2,7 +2,7 @@
 id: F-0101
 title: "Define workspace/worktree/project/area terminology"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "docs"
 parent: "F-0000"
@@ -13,7 +13,11 @@ scope:
   - "README.md"
   - "AGENTS.md"
 created_at: 2026-05-21T14:50:37-05:00
-updated_at: 2026-05-21T14:50:37-05:00
+updated_at: 2026-05-21T20:05:18.905Z
+closed_at: 2026-05-21T20:05:18.905Z
+close_reason: "Documented Workspace, Worktree, Project, Area, Task, and task scope terminology with quality checks passing."
+blocked_reason: ""
+review_reason: ""
 ---
 # Define workspace/worktree/project/area terminology
 
@@ -70,6 +74,27 @@ None.
 ## Notes
 
 This task is terminology-only. It should not change runtime filtering behavior.
+
+Updated the terminology foundation in README.md, AGENTS.md, .forge/README.md, and decision records 0001 and 0003.
+
+Decisions:
+- Project is now the preferred name for explicit user-facing work slices inside a Worktree.
+- Task frontmatter `scope` remains edit-boundary globs only and is not a schema migration.
+- `.forge/scopes.yml` and `forge scopes ...` remain the compatibility surface until follow-up Project-named commands/UI land.
+- Nested `.forge` stores stay out of scope because they split the dependency graph, make cross-Project blocking harder to rank, and blur agent ownership from a parent Workspace.
+
+Verification:
+- Reviewed README.md, AGENTS.md, .forge/README.md, .forge/decisions/0001-workspace-terminology.md, and .forge/decisions/0003-explicit-ui-scope-config.md for terminology consistency.
+- Ran `rg -n "UI Scope|web UI Scope|Project|Workspace|Worktree|task scope|Storage Model|Project Configuration" README.md AGENTS.md .forge/README.md .forge/decisions` to confirm active docs now use Project terminology where intended.
+- Ran `forge doctor --json`; it reported no parse or graph errors, only expected dirty-worktree warnings for this active docs task.
+- No focused tests were run because this task changed docs and decision records only, not prompt output or checked docs behavior.
+
+Additional verification:
+- `bun run quality:check` passed: 263 tests across 34 files, then production web build completed successfully.
+
+Closeout review:
+- Stop condition did not trigger: no task frontmatter schema migration was introduced.
+- Human review trigger did not trigger: nested `.forge` stores were explicitly kept out of scope rather than proposed.
 
 ## History
 

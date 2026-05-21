@@ -87,9 +87,9 @@ None.
 - `depends_on`: task ids that must finish first.
 - `claimed_by`: optional human or agent identifier.
 - `area`: optional task category or work type, such as `web`, `cli`, `core`,
-  `docs`, or `test`.
+  `docs`, `test`, or `harness`.
 - `scope`: optional file globs the task expects to touch. This is the task edit
-  boundary, not the web UI Scope filter.
+  boundary, not the web Project filter.
 - `created_at`: ISO timestamp.
 - `updated_at`: ISO timestamp.
 - `closed_at`: optional ISO timestamp for completed or canceled work.
@@ -97,16 +97,41 @@ None.
 - `blocked_reason`: optional human-readable reason the task is blocked.
 - `review_reason`: optional human-readable reason the task needs review.
 
-## UI Scope Configuration
+## Terminology
+
+Forge uses these terms in docs, tasks, and UI planning:
+
+- `Workspace`: the multi-root web view launched from a parent directory, such as
+  `forge web --dir ~/Work`.
+- `Worktree`: one discovered Forge root inside a Workspace. It may be a git
+  repository, a git worktree, a checkout, or another directory that owns one
+  canonical `.forge` store.
+- `Project`: an explicit work slice inside a Worktree. Projects are for human
+  navigation and planning, such as `Web`, `CLI`, `Shared UI`, or a product
+  module.
+- `Area`: a task category or work type such as `web`, `core`, `docs`, `test`, or
+  `harness`.
+- `Task`: one Markdown work item in `.forge/tasks`.
+- `task scope`: the task frontmatter `scope` field. It contains edit-boundary
+  globs for agents and tools. It does not define a Project.
+
+The hierarchy is: Workspace > Worktree > Project > Area > Task. Task `scope`
+cuts across that hierarchy as edit-boundary metadata.
+
+## Project Configuration
+
+Forge's preferred term is Project. Existing tools still use `.forge/scopes.yml`
+and `forge scopes ...` commands as the compatibility surface until the Project
+command names are added.
 
 `.forge/scopes.yml` is an optional repo-local configuration file for explicit
-web UI Scopes. UI Scopes are user-facing slices of work inside a Worktree. They
+web Projects. Projects are user-facing slices of work inside a Worktree. They
 are separate from task frontmatter `scope`, which remains edit-boundary data for
 agents.
 
-When `.forge/scopes.yml` exists, configured UI Scopes take precedence over the
-web UI's inferred fallback scopes. Repos without the file continue to use
-fallback inference.
+When `.forge/scopes.yml` exists, configured Projects take precedence over the
+web UI's inferred fallback navigation. Repos without the file continue to use
+fallback inference until explicit Project config is added.
 
 Use this shape:
 
@@ -129,11 +154,11 @@ Fields:
 - `id`: stable machine id for URLs, CLI output, and future structured tools.
 - `label`: human-readable selector label.
 - `description`: optional context for humans and agents.
-- `paths`: task edit-boundary globs that belong to the UI Scope.
+- `paths`: task edit-boundary globs that belong to the Project.
 
-A task may belong to multiple configured UI Scopes when its frontmatter `scope`
+A task may belong to multiple configured Projects when its frontmatter `scope`
 globs overlap multiple entries. Tasks that do not match configured paths should
-fall back to inferred scopes such as `Other`.
+fall back to inferred navigation such as `Other`.
 
 Example for Forge itself:
 
@@ -183,7 +208,7 @@ forge scopes add web --label "Web" --path "packages/web/**" --json
 forge scopes update web --path "packages/web/test/**" --json
 ```
 
-Use `forge scopes infer --json` to suggest candidate UI Scopes from existing
+Use `forge scopes infer --json` to suggest candidate Projects from existing
 task edit-boundary globs without writing `.forge/scopes.yml`.
 
 ## Expected Task Markdown Fields
@@ -331,21 +356,23 @@ with the current work.
 
 ## Storage Model
 
-Use one tracked `.forge/` directory at the git repository root.
+Use one tracked `.forge/` directory at the git repository or Worktree root.
 
 Do not create nested `.forge/` directories inside packages, apps, or modules in v0.
-Nested stores split the task graph and make dependencies harder to reason about.
+Nested stores split the task graph, make cross-Project dependencies harder to
+rank, and create unclear ownership for agents working from a parent Workspace.
 
 Relate work to projects or directories with:
 
+- explicit Projects for human navigation inside a Worktree.
 - task `scope` for machine-readable edit-boundary file globs.
-- `area` for task categories such as `core`, `cli`, `web`, or `docs`.
+- `area` for task categories such as `core`, `cli`, `web`, `docs`, `test`, or
+  `harness`.
 
 When Forge serves several roots, call each selectable repo or worktree a
-`Worktree`. A Worktree is the selected `.forge` root in the web UI. Use `UI
-Scope` for a user-facing slice of work inside a selected Worktree. UI Scope is a
-navigation concept and may later be backed by explicit config; it is not the
-same thing as task frontmatter `scope`.
+`Worktree`. Use `Project` for a user-facing slice of work inside a selected
+Worktree. Project is a navigation concept backed by explicit config when
+available; it is not the same thing as task frontmatter `scope`.
 
 ## Derived Relationships
 
