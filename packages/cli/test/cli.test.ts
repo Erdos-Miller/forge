@@ -905,6 +905,8 @@ describe("forge cli", () => {
       "urgent",
       "--status",
       "blocked",
+      "--project",
+      "core",
       "--area",
       "core",
       "--scope",
@@ -920,10 +922,12 @@ describe("forge cli", () => {
     expect(payload.task.title).toBe("Open");
     expect(payload.task.priority).toBe("urgent");
     expect(payload.task.status).toBe("blocked");
+    expect(payload.task.project).toBe("core");
     expect(payload.task.area).toBe("core");
     expect(payload.task.scope).toEqual(["packages/core/**", "docs:notes"]);
     expect(parsed.task.priority).toBe("urgent");
     expect(parsed.task.status).toBe("blocked");
+    expect(parsed.task.project).toBe("core");
     expect(parsed.task.area).toBe("core");
     expect(parsed.task.scope).toEqual(["packages/core/**", "docs:notes"]);
     expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
@@ -1041,6 +1045,8 @@ describe("forge cli", () => {
       "The CLI creates a ready-to-edit task document.",
       "--area",
       "cli",
+      "--project",
+      "cli",
       "--priority",
       "high",
       "--scope",
@@ -1071,6 +1077,7 @@ describe("forge cli", () => {
     expect(result.stdout[0]).toContain("created F-0004");
     expect(parsed.task.title).toBe("Add task creation");
     expect(parsed.task.priority).toBe("high");
+    expect(parsed.task.project).toBe("cli");
     expect(parsed.task.area).toBe("cli");
     expect(parsed.task.scope).toEqual(["packages/cli/**"]);
     expect(parsed.task.depends_on).toEqual(["F-0002"]);

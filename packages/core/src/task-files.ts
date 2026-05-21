@@ -33,6 +33,7 @@ const TASK_PRIORITIES = new Set<TaskPriority>([
 ]);
 
 const TASK_KINDS = new Set<TaskKind>(["task", "spec"]);
+const TASK_PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 export const EXPECTED_TASK_MARKDOWN_FIELDS = [
   "Why",
@@ -308,6 +309,7 @@ export function createTaskFileContents(input: CreateTaskInput, now = new Date())
     "kind: task",
     "status: open",
     `priority: ${priority}`,
+    ...(input.project ? [`project: ${JSON.stringify(input.project)}`] : []),
     ...(input.area ? [`area: ${JSON.stringify(input.area)}`] : []),
     `parent: ${JSON.stringify(parent)}`,
     ...formatYamlArray("depends_on", dependsOn),
@@ -778,6 +780,7 @@ function serializeFrontmatterValue(field: string, value: string | string[]): str
 
   if (
     field === "claimed_by" ||
+    field === "project" ||
     field === "area" ||
     field === "close_reason" ||
     field === "blocked_reason" ||
@@ -858,6 +861,7 @@ export function validateTask(
   const kind = requireEnum(raw, sourcePath, "kind", TASK_KINDS);
   const status = requireEnum(raw, sourcePath, "status", TASK_STATUSES);
   const priority = requireEnum(raw, sourcePath, "priority", TASK_PRIORITIES);
+  const project = optionalProjectId(raw, sourcePath, "project");
   const area = optionalString(raw, sourcePath, "area");
   const parent = requireString(raw, sourcePath, "parent");
   const depends_on = requireStringArray(raw, sourcePath, "depends_on");
@@ -876,6 +880,7 @@ export function validateTask(
     kind,
     status,
     priority,
+    project,
     area,
     parent,
     depends_on,
@@ -890,6 +895,24 @@ export function validateTask(
     body,
     sourcePath,
   };
+}
+
+function optionalProjectId(
+  raw: Record<string, unknown>,
+  sourcePath: string,
+  field: string,
+): string | undefined {
+  const value = optionalString(raw, sourcePath, field);
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  if (!TASK_PROJECT_ID_PATTERN.test(value)) {
+    throw new TaskParseError(
+      sourcePath,
+      `field "${field}" must match ${TASK_PROJECT_ID_PATTERN}`,
+    );
+  }
+  return value;
 }
 
 function optionalString(

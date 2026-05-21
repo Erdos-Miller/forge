@@ -41,6 +41,7 @@ const payload: TaskGraphPayload = {
       kind: "task",
       status: "open",
       priority: "high",
+      project: "web",
       area: "web",
       parent: "",
       depends_on: ["F-0001"],
@@ -278,6 +279,7 @@ describe("App", () => {
     const html = renderToStaticMarkup(<App initialData={payload} />);
 
     expect(html).toContain("packages/web/**");
+    expect(html).toContain("project web");
     expect(html).toContain("Why");
     expect(html).toContain("What success looks like");
     expect(html).toContain("We need local visibility");

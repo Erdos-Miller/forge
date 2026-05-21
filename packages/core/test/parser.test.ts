@@ -28,6 +28,7 @@ describe("parseTaskFile", () => {
         id: "F-9998",
         title: "Create task",
         priority: "high",
+        project: "cli",
         area: "cli",
         scope: ["packages/cli/**"],
         why: "Task creation should be consistent.",
@@ -43,6 +44,7 @@ describe("parseTaskFile", () => {
     expect(parsed.task.id).toBe("F-9998");
     expect(parsed.task.title).toBe("Create task");
     expect(parsed.task.priority).toBe("high");
+    expect(parsed.task.project).toBe("cli");
     expect(parsed.task.area).toBe("cli");
     expect(parsed.task.scope).toEqual(["packages/cli/**"]);
     for (const field of EXPECTED_TASK_MARKDOWN_FIELDS) {
@@ -58,6 +60,7 @@ describe("parseTaskFile", () => {
       "kind: task",
       "status: open",
       "priority: medium",
+      "project: web",
       'parent: ""',
       "depends_on: []",
       'claimed_by: ""',
@@ -80,6 +83,7 @@ describe("parseTaskFile", () => {
     const parsed = parseTaskFile("example.md", source);
 
     expect(parsed.task.id).toBe("F-9999");
+    expect(parsed.task.project).toBe("web");
     expect(parsed.task.depends_on).toEqual([]);
     expect(parsed.task.closed_at).toBe("2026-05-14T06:00:00.000Z");
     expect(parsed.task.close_reason).toBe("Completed");
@@ -137,6 +141,12 @@ describe("validateTask", () => {
   test("rejects invalid scope shape", () => {
     expect(() => validateTask({ ...validTask, scope: [1] }, "bad-scope.md")).toThrow(
       /bad-scope\.md: field "scope" must be an array of strings/,
+    );
+  });
+
+  test("rejects invalid project ids", () => {
+    expect(() => validateTask({ ...validTask, project: "Bad_ID" }, "bad-project.md")).toThrow(
+      /bad-project\.md: field "project" must match/,
     );
   });
 

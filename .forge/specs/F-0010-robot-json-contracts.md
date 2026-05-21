@@ -39,6 +39,7 @@ type RobotTaskSummary = {
   title: string;
   status: "open" | "doing" | "blocked" | "done" | "canceled";
   priority: "urgent" | "high" | "medium" | "low";
+  project: string | null;
   area: string | null;
   claimed_by: string | null;
   scope: string[];
@@ -91,6 +92,7 @@ Returns ranked work plus diagnostics needed to explain whether each item is acti
       "title": "Define robot JSON contracts",
       "status": "open",
       "priority": "urgent",
+      "project": "cli",
       "area": "cli",
       "claimed_by": null,
       "scope": [".forge/**", "packages/cli/**", "packages/core/**"],
@@ -122,6 +124,7 @@ Returns the first ready task in Forge ranking order. No ready work is a successf
     "title": "Define robot JSON contracts",
     "status": "open",
     "priority": "urgent",
+    "project": "cli",
     "area": "cli",
     "claimed_by": null,
     "scope": [".forge/**", "packages/cli/**", "packages/core/**"],
@@ -160,6 +163,7 @@ Returns one full task document for agent context.
     "kind": "task",
     "status": "open",
     "priority": "urgent",
+    "project": "cli",
     "area": "cli",
     "parent": "F-0000",
     "depends_on": ["F-0004"],
@@ -191,6 +195,7 @@ Marks one task done and returns the updated task summary when `--json` is presen
     "title": "Define robot JSON contracts",
     "status": "done",
     "priority": "urgent",
+    "project": "cli",
     "area": "cli",
     "claimed_by": null,
     "scope": [".forge/**", "packages/cli/**", "packages/core/**"],

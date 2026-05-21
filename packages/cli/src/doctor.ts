@@ -593,7 +593,9 @@ function getUnmatchedTaskDiagnostics(
     {
       code: "project_config_unmatched_tasks",
       severity: "warning",
-      message: `${unmatchedTaskIds.length} active task${unmatchedTaskIds.length === 1 ? "" : "s"} do not match any configured Project`,
+      message:
+        `${unmatchedTaskIds.length} active task` +
+        `${unmatchedTaskIds.length === 1 ? "" : "s"} do not match any configured Project`,
       sourcePath,
       taskIds: unmatchedTaskIds,
       repairHint: "Run forge projects infer --json and update Projects for missing work areas.",

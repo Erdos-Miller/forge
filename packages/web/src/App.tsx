@@ -550,6 +550,7 @@ function TaskDetail({
       : `Status is ${task.status}.`;
   const detailMeta = [
     task.workspaceRootName ? `repo ${task.workspaceRootName}` : null,
+    task.project ? `project ${task.project}` : null,
     task.area ? `area ${task.area}` : null,
     task.scope.length ? `Edit scope ${task.scope.join(", ")}` : null,
     task.claimed_by ? `claimed by ${task.claimed_by}` : null,

@@ -272,7 +272,7 @@ export const COMMANDS = [
     name: "set",
     usage:
       "forge set <id> [--priority <value>] [--status <value>] " +
-      "[--area <value>] [--scope <glob>] [--closed-at <timestamp>] " +
+      "[--project <id>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] " +
       "[--close-reason <text>] --json",
     description: "Update common task metadata.",
     classification: "write",

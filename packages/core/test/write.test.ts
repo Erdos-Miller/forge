@@ -63,6 +63,7 @@ describe("updateTaskFileContents", () => {
     const original = taskFile();
     const updated = updateTaskFileContents(original, {
       status: "doing",
+      project: "cli",
       claimed_by: "codex",
       updated_at: "2026-05-14T12:00:00.000Z",
     });
@@ -70,6 +71,7 @@ describe("updateTaskFileContents", () => {
     const parsed = parseTaskFile("updated.md", updated);
 
     expect(parsed.task.status).toBe("doing");
+    expect(parsed.task.project).toBe("cli");
     expect(parsed.task.claimed_by).toBe("codex");
     expect(parsed.task.updated_at).toBe("2026-05-14T12:00:00.000Z");
     expect(parsed.task.body).toBe("\n# Example\n\nBody stays readable.\n");

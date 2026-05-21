@@ -2,7 +2,7 @@
 id: F-0112
 title: "Add first-class task project field"
 kind: task
-status: open
+status: done
 priority: urgent
 area: "core"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/web/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:13:24.493Z
+closed_at: 2026-05-21T21:13:24.493Z
+close_reason: "Implemented optional project metadata and verified core, CLI, web, and aggregate harnesses."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add first-class task project field
 
@@ -75,6 +79,23 @@ Tracked in frontmatter: F-0111.
 Project ID is the canonical task-to-project link. Project paths are only for inference, defaults, validation, and repair suggestions.
 
 Decision: Forge should link tasks to Projects with explicit task metadata, not by deriving Project membership from edit-scope paths.
+
+Implemented first-class optional task `project` metadata:
+- Added `project?: string` to the core task model, frontmatter parsing, validation, creation, and frontmatter update path.
+- Added structured CLI support with `forge create --project` and `forge set --project`.
+- Included `project` in robot task summaries/documents, queue/show/next/done contract examples, and command metadata.
+- Rendered Project in the web task detail footer when present.
+- Kept task `scope` unchanged as edit-boundary globs.
+
+Verification:
+- `bun test packages/core/test/parser.test.ts packages/core/test/write.test.ts`
+- `bun test packages/cli/test/cli.test.ts packages/cli/test/robot-contracts.test.ts`
+- `bun test packages/web/test/app.test.tsx packages/web/test/api.test.ts`
+- `bun run harness:cli`
+- `bun run harness:web`
+- `bun run harness:check`
+
+Incidental cleanup: split one pre-existing long line in `packages/cli/src/doctor.ts` so the aggregate readability ratchet passes.
 
 ## History
 

@@ -8,7 +8,7 @@ import type { CliOptions } from "./index";
 
 const SET_USAGE =
   "usage: forge set <id> [--priority <value>] [--status <value>] " +
-  "[--area <value>] [--scope <glob>] [--closed-at <timestamp>] " +
+  "[--project <id>] [--area <value>] [--scope <glob>] [--closed-at <timestamp>] " +
   "[--close-reason <text>] --json";
 
 export function parseClaimArgs(
@@ -178,7 +178,10 @@ export function parseSetArgs(args: string[]):
       ok: true;
       taskId: string;
       updates: Partial<
-        Pick<Task, "priority" | "status" | "area" | "scope" | "closed_at" | "close_reason">
+        Pick<
+          Task,
+          "priority" | "status" | "project" | "area" | "scope" | "closed_at" | "close_reason"
+        >
       >;
     }
   | { ok: false; message: string } {
@@ -192,7 +195,10 @@ export function parseSetArgs(args: string[]):
 
   let json = false;
   const updates: Partial<
-    Pick<Task, "priority" | "status" | "area" | "scope" | "closed_at" | "close_reason">
+    Pick<
+      Task,
+      "priority" | "status" | "project" | "area" | "scope" | "closed_at" | "close_reason"
+    >
   > = {};
   const scopes: string[] = [];
 
@@ -234,6 +240,15 @@ export function parseSetArgs(args: string[]):
           return { ok: false, message: "set option --area requires a value" };
         }
         updates.area = value;
+        index += 1;
+        break;
+      }
+      case "--project": {
+        const value = rest[index + 1];
+        if (!value) {
+          return { ok: false, message: "set option --project requires a value" };
+        }
+        updates.project = value;
         index += 1;
         break;
       }
@@ -315,6 +330,9 @@ export function parseCreateArgs(args: string[]): CreateTaskInput {
         break;
       case "--area":
         input.area = value;
+        break;
+      case "--project":
+        input.project = value;
         break;
       case "--priority":
         input.priority = parsePriority(value);

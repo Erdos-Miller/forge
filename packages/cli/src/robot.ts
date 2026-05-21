@@ -17,6 +17,7 @@ export function toRobotTaskSummary(task: Task): Record<string, unknown> {
     title: task.title,
     status: task.status,
     priority: task.priority,
+    project: task.project ?? null,
     area: task.area ?? null,
     claimed_by: task.claimed_by || null,
     scope: task.scope,

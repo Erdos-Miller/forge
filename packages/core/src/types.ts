@@ -9,6 +9,7 @@ export interface Task {
   kind: TaskKind;
   status: TaskStatus;
   priority: TaskPriority;
+  project?: string;
   area?: string;
   parent: string;
   depends_on: string[];
@@ -34,6 +35,7 @@ export type TaskFrontmatterUpdates = Partial<
     Task,
     | "status"
     | "priority"
+    | "project"
     | "area"
     | "depends_on"
     | "claimed_by"
@@ -50,6 +52,7 @@ export interface CreateTaskInput {
   id: string;
   title: string;
   priority?: TaskPriority;
+  project?: string;
   area?: string;
   parent?: string;
   depends_on?: string[];
