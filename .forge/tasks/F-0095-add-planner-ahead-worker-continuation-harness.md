@@ -2,7 +2,7 @@
 id: F-0095
 title: "Add planner-ahead worker-continuation harness"
 kind: task
-status: open
+status: done
 priority: high
 area: "test"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T12:03:14-05:00
-updated_at: 2026-05-21T12:03:14-05:00
+updated_at: 2026-05-21T18:30:20.265Z
+closed_at: 2026-05-21T18:30:20.265Z
+close_reason: "Added planner-ahead worker-continuation harness with focused, CLI harness, and quality checks passing."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add planner-ahead worker-continuation harness
 
@@ -71,6 +75,15 @@ Tracked in frontmatter: F-0092, F-0093.
 ## Notes
 
 This task should prevent regressions in the workflow that motivated the classifier.
+
+Added a CLI harness regression for the planner-ahead / worker-continuation workflow. The fixture uses disposable git repos and public CLI commands to prove future planner-created task files stay `non_blocking`, scoped implementation edits are `blocking`, and claimed/dependency task-file edits require `review`.
+
+Also documented the planner-ahead harness expectation in `.forge/harness-engineering.md`.
+
+Verification:
+- `bun test packages/cli/test/harness.test.ts packages/core/test/readability-ratchet.test.ts` passed: 12 tests, 108 expects.
+- `bun run harness:cli` passed: 8 tests, 102 expects.
+- `bun run quality:check` passed: 236 tests, 1158 expects, and `packages/web` production build completed.
 
 ## History
 

@@ -37,4 +37,7 @@ Forge so the next agent can verify its own work.
   real user workspaces.
 - Workspace discovery, API, navigation, live refresh, and terminal-link tasks
   should use the workspace fixture helpers in `packages/core/test/fixture-repo.ts`.
+- Planner-ahead / worker-continuation changes should include disposable git
+  fixtures proving future task files do not block the active worker, while
+  scoped implementation files and dependency task edits still get flagged.
 - Close tasks only after the task notes contain concrete verification evidence.

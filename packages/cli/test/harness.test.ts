@@ -68,6 +68,14 @@ async function runEntrypoint(cwd: string, args: string[]): Promise<RunResult> {
   };
 }
 
+async function runGit(cwd: string, args: string[]) {
+  const proc = Bun.spawn(["git", ...args], { cwd, stderr: "pipe", stdout: "pipe" });
+  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `git ${args.join(" ")} failed`);
+  }
+}
+
 function parseStdoutJson(result: RunResult): any {
   expect(result.stdout).toHaveLength(1);
   return JSON.parse(result.stdout[0]);
@@ -357,6 +365,68 @@ describe("Forge agent harness scenarios", () => {
     expect(doctorPayload.summary).toEqual({ errors: 0, warnings: 0 });
   });
 
+  test("keeps planner-ahead task files from blocking claimed worker tasks", async () => {
+    const futureRepo = await makePlannerWorkerRepo("forge-harness-planner-future-");
+    await futureRepo.writeTask({
+      id: "F-1000",
+      title: "Planner future task",
+      body: plannedBody("Planner future task"),
+    });
+
+    const futureStatus = parseStdoutJson(
+      await run(futureRepo.repoRoot, ["worktree-status", "--json"]),
+    );
+    expect(futureStatus).toMatchObject({
+      recommendation: "continue",
+      summary: { blocking: 0, review: 0, non_blocking: 1 },
+    });
+    expect(futureStatus.files[0]).toMatchObject({
+      classification: "non_blocking",
+      reason: "future_task_file",
+    });
+    expect(parseStdoutJson(await run(futureRepo.repoRoot, ["doctor", "--json"]))).toMatchObject({
+      summary: { errors: 0, warnings: 0 },
+    });
+
+    const prompt = await run(futureRepo.repoRoot, ["loop-prompt"]);
+    expect(prompt.stdout.join("\n")).toContain("forge worktree-status --json");
+    expect(prompt.stdout.join("\n")).toContain("continue on `non_blocking`");
+
+    await fs.writeFile(
+      path.join(futureRepo.repoRoot, "packages", "cli", "src", "dirty.ts"),
+      "dirty\n",
+    );
+    const blockingStatus = parseStdoutJson(
+      await run(futureRepo.repoRoot, ["worktree-status", "--json"]),
+    );
+    expect(blockingStatus).toMatchObject({
+      recommendation: "stop",
+      summary: { blocking: 1, review: 0, non_blocking: 1 },
+    });
+    expect(
+      blockingStatus.files.find((file: any) => file.path === "packages/cli/src/dirty.ts"),
+    ).toMatchObject({
+      classification: "blocking",
+      reason: "inside_task_scope",
+    });
+
+    const reviewRepo = await makePlannerWorkerRepo("forge-harness-planner-review-");
+    await fs.appendFile(reviewRepo.workerTaskPath, "\nWorker note.\n");
+    await fs.appendFile(reviewRepo.dependencyTaskPath, "\nDependency note.\n");
+    const reviewStatus = parseStdoutJson(
+      await run(reviewRepo.repoRoot, ["worktree-status", "--json"]),
+    );
+
+    expect(reviewStatus).toMatchObject({
+      recommendation: "review",
+      summary: { blocking: 0, review: 2, non_blocking: 0 },
+    });
+    expect(reviewStatus.files.map((file: any) => file.reason).sort()).toEqual([
+      "claimed_task_file",
+      "dependency_task_file",
+    ]);
+  });
+
   test("keeps 1k task queue and doctor performance within an explicit budget", async () => {
     const repo = await makeRepo("forge-harness-1k-");
     const repoRoot = repo.repoRoot;
@@ -389,3 +459,34 @@ describe("Forge agent harness scenarios", () => {
     expect(doctor.elapsedMs).toBeLessThan(30000);
   });
 });
+
+async function makePlannerWorkerRepo(prefix: string) {
+  const repo = await makeRepo(prefix);
+  await fs.mkdir(path.join(repo.repoRoot, "packages", "cli", "src"), { recursive: true });
+  await fs.writeFile(path.join(repo.repoRoot, "packages", "cli", "src", ".gitkeep"), "");
+  const dependencyTaskPath = await repo.writeTask({
+    id: "F-0001",
+    title: "Worker dependency",
+    status: "done",
+  });
+  const workerTaskPath = await repo.writeTask({
+    id: "F-0002",
+    title: "Claimed worker task",
+    claimed_by: "codex",
+    depends_on: ["F-0001"],
+    scope: ["packages/cli/**"],
+    body: plannedBody("Claimed worker task"),
+  });
+  await runGit(repo.repoRoot, ["init"]);
+  await runGit(repo.repoRoot, ["add", "."]);
+  await runGit(repo.repoRoot, [
+    "-c",
+    "user.email=forge@example.test",
+    "-c",
+    "user.name=Forge Test",
+    "commit",
+    "-m",
+    "initial",
+  ]);
+  return { ...repo, dependencyTaskPath, workerTaskPath };
+}
