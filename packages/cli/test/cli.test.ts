@@ -58,6 +58,32 @@ function taskFile(options: {
   ].join("\n");
 }
 
+function completeBriefBody(title: string): string {
+  return [
+    `# ${title}`,
+    "",
+    "## Why",
+    "",
+    "The task has concrete context.",
+    "",
+    "## What success looks like",
+    "",
+    "The expected outcome is clear.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    "- The task has observable criteria.",
+    "",
+    "## Verification",
+    "",
+    "- bun test",
+    "",
+    "## Notes",
+    "",
+    "",
+  ].join("\n");
+}
+
 async function makeRepo(): Promise<{
   repoRoot: string;
   nestedDir: string;
@@ -594,6 +620,25 @@ describe("forge cli", () => {
 
   test("doctor --json reports a clean task store", async () => {
     const { repoRoot } = await makeRepo();
+    const tasksDir = path.join(repoRoot, ".forge", "tasks");
+    await fs.writeFile(
+      path.join(tasksDir, "F-0002-open.md"),
+      taskFile({
+        id: "F-0002",
+        title: "Open",
+        depends_on: ["F-0001"],
+        body: completeBriefBody("Open"),
+      }),
+    );
+    await fs.writeFile(
+      path.join(tasksDir, "F-0003-blocked.md"),
+      taskFile({
+        id: "F-0003",
+        title: "Blocked",
+        depends_on: ["F-0002"],
+        body: completeBriefBody("Blocked"),
+      }),
+    );
     const result = await run(repoRoot, ["doctor", "--json"]);
     const payload = parseStdoutJson(result);
 

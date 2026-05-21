@@ -75,7 +75,7 @@ describe("execution plan doctor warnings", () => {
       taskFile({
         id: "F-0002",
         status: "doing",
-        body: ["# Planned", "", "## Execution Plan", "", "Use the plan.", ""].join("\n"),
+        body: completeBriefBody("Planned", ["## Execution Plan", "", "Use the plan.", ""]),
       }),
     );
 
@@ -109,6 +109,34 @@ function taskFile(options: {
     "updated_at: 2026-05-14T00:00:00-05:00",
     "---",
     "",
-    options.body ?? "# Test\n\nBody stays readable.\n",
+    options.body ?? completeBriefBody("Test"),
+  ].join("\n");
+}
+
+function completeBriefBody(title: string, extraSections: string[] = []): string {
+  return [
+    `# ${title}`,
+    "",
+    "## Why",
+    "",
+    "The task has enough context.",
+    "",
+    "## What success looks like",
+    "",
+    "The expected end state is clear.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    "- The task has observable criteria.",
+    "",
+    ...extraSections,
+    ...(extraSections.length ? [""] : []),
+    "## Verification",
+    "",
+    "- bun test",
+    "",
+    "## Notes",
+    "",
+    "",
   ].join("\n");
 }

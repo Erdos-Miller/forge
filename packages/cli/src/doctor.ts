@@ -97,6 +97,7 @@ function getFrontmatterDoctorDiagnostics(
 
   diagnostics.push(...getCompletionTimestampDoctorDiagnostics(parsed.task));
   diagnostics.push(...getExecutionPlanDoctorDiagnostics(parsed.task));
+  diagnostics.push(...getTaskBriefDoctorDiagnostics(parsed.task));
 
   return diagnostics;
 }
@@ -166,6 +167,96 @@ function getExecutionPlanDoctorDiagnostics(task: Task): DoctorDiagnostic[] {
 
 function taskIsActiveForPlanning(task: Task): boolean {
   return task.status === "doing" || Boolean(task.claimed_by);
+}
+
+function getTaskBriefDoctorDiagnostics(task: Task): DoctorDiagnostic[] {
+  if (task.status === "done" || task.status === "canceled") {
+    return [];
+  }
+
+  const sections = parseMarkdownSections(task.body);
+  return [
+    ...getRequiredTextSectionDiagnostic(task, sections, "Why", "why"),
+    ...getRequiredTextSectionDiagnostic(
+      task,
+      sections,
+      "What success looks like",
+      "success",
+    ),
+    ...getRequiredListSectionDiagnostic(
+      task,
+      sections,
+      "Acceptance Criteria",
+      "acceptance",
+    ),
+    ...getRequiredListSectionDiagnostic(task, sections, "Verification", "verification"),
+  ];
+}
+
+function getRequiredTextSectionDiagnostic(
+  task: Task,
+  sections: Array<{ title: string; body: string }>,
+  title: string,
+  codeName: string,
+): DoctorDiagnostic[] {
+  const section = findSection(sections, title);
+  if (!section) {
+    return [getTaskBriefDiagnostic(task, `missing_${codeName}`, title, "is missing")];
+  }
+  if (isPlaceholderText(section.body)) {
+    return [getTaskBriefDiagnostic(task, `placeholder_${codeName}`, title, "has placeholder text")];
+  }
+  return [];
+}
+
+function getRequiredListSectionDiagnostic(
+  task: Task,
+  sections: Array<{ title: string; body: string }>,
+  title: string,
+  codeName: string,
+): DoctorDiagnostic[] {
+  const section = findSection(sections, title);
+  if (!section) {
+    return [getTaskBriefDiagnostic(task, `missing_${codeName}`, title, "is missing")];
+  }
+  if (getMeaningfulSectionLines(section.body).length === 0) {
+    return [getTaskBriefDiagnostic(task, `placeholder_${codeName}`, title, "is empty or placeholder")];
+  }
+  return [];
+}
+
+function getTaskBriefDiagnostic(
+  task: Task,
+  codeSuffix: string,
+  sectionTitle: string,
+  problem: string,
+): DoctorDiagnostic {
+  return {
+    code: `task_brief_${codeSuffix}`,
+    severity: "warning",
+    message: `task ${task.id} ${sectionTitle} ${problem}`,
+    taskId: task.id,
+    sourcePath: task.sourcePath,
+    repairHint: `Fill in ## ${sectionTitle} with concrete task context.`,
+  };
+}
+
+function getMeaningfulSectionLines(body: string): string[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
+    .filter(Boolean)
+    .filter((line) => !isPlaceholderText(line));
+}
+
+function isPlaceholderText(value: string): boolean {
+  const normalized = value.trim().replace(/^[-*]\s+/, "");
+  return (
+    normalized.length === 0 ||
+    normalized === "..." ||
+    /^todo\b/i.test(normalized) ||
+    /placeholder/i.test(normalized)
+  );
 }
 
 function hasMarkdownSection(body: string, sectionTitle: string): boolean {

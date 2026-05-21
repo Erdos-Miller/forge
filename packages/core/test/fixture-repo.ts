@@ -184,7 +184,34 @@ export function createForgeFixtureTaskFile(task: ForgeFixtureTask): string {
     ...(includeOptionalFields ? ['blocked_reason: ""', 'review_reason: ""'] : []),
     "---",
     "",
-    task.body ?? [`# ${title}`, "", "Harness fixture.", ""].join("\n"),
+    task.body ?? fixtureTaskBody(title),
+  ].join("\n");
+}
+
+function fixtureTaskBody(title: string): string {
+  return [
+    `# ${title}`,
+    "",
+    "## Why",
+    "",
+    "Fixture tasks should exercise normal Forge task shape.",
+    "",
+    "## What success looks like",
+    "",
+    "The fixture remains parseable and useful in doctor tests.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    "- The task has expected Markdown fields.",
+    "",
+    "## Verification",
+    "",
+    "- bun test",
+    "",
+    "## Notes",
+    "",
+    "Harness fixture.",
+    "",
   ].join("\n");
 }
 
@@ -267,9 +294,29 @@ export function plannedBody(title: string): string {
   return [
     `# ${title}`,
     "",
+    "## Why",
+    "",
+    "The fixture needs enough context for doctor checks.",
+    "",
+    "## What success looks like",
+    "",
+    "The planned fixture has a complete task brief.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    "- The task includes an execution plan and expected fields.",
+    "",
     "## Execution Plan",
     "",
     "Summary: Fixture task has a plan.",
+    "",
+    "## Verification",
+    "",
+    "- bun test",
+    "",
+    "## Notes",
+    "",
+    "Planned fixture.",
     "",
   ].join("\n");
 }

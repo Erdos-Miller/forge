@@ -2,7 +2,7 @@
 id: F-0070
 title: "Add task brief quality warnings"
 kind: task
-status: open
+status: done
 priority: medium
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/cli/**"
   - ".forge/**"
 created_at: 2026-05-20T15:37:21.822Z
-updated_at: 2026-05-20T15:38:09.695Z
+updated_at: 2026-05-21T15:51:40.038Z
+closed_at: 2026-05-21T15:51:40.038Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Add task brief quality warnings
 
@@ -71,6 +75,13 @@ Tracked in frontmatter: F-0068, F-0069.
 ## Notes
 
 These should be advisory warnings only; do not turn expected fields into hard schema requirements.
+
+Decision: Task brief doctor warnings are advisory only. They warn on open/in-progress tasks with missing or placeholder Why, What success looks like, Acceptance Criteria, or Verification sections, but skip closed historical tasks to avoid noisy imported history. Notes may stay empty. Loading, queue ranking, and prompt generation are unchanged.
+
+Verification:
+- bun test packages/cli/test/cli.test.ts packages/cli/test/harness.test.ts packages/cli/test/execution-plan-doctor.test.ts: 67 pass, 482 expect() calls.
+- bun run harness:cli: 7 pass, 89 expect() calls.
+- bun run quality:check: 204 pass, 1004 expect() calls, web production build passed.
 
 ## History
 
