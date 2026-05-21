@@ -2,7 +2,7 @@
 id: F-0088
 title: "Wire configured scopes into web UI"
 kind: task
-status: open
+status: done
 priority: high
 area: "web"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:40:31.142Z
+closed_at: 2026-05-21T18:40:31.142Z
+close_reason: ""
+blocked_reason: ""
+review_reason: ""
 ---
 # Wire configured scopes into web UI
 
@@ -71,6 +75,12 @@ Tracked in frontmatter: F-0086, F-0087.
 ## Notes
 
 This task should make the UI Scope concept match the product intent without changing task frontmatter semantics.
+
+- Wired `.forge/scopes.yml` into the web task graph payload and workspace root payloads.
+- Updated the UI Scope selector to use configured labels and configured path matching, with cleaned inference as the fallback.
+- Preserved raw task `scope` globs in task detail as edit-boundary data.
+- Added coverage for configured scope labels, unmatched fallback, all-worktree qualified scopes, and per-root scope config payloads.
+- Verification: `bun test packages/web/test/scopes.test.ts packages/web/test/api.test.ts packages/web/test/app.test.tsx`, `bun run harness:web`, `bun run quality:check`.
 
 ## History
 

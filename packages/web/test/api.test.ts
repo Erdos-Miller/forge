@@ -81,6 +81,10 @@ async function makeRepo() {
   return { repoRoot, nestedDir };
 }
 
+async function writeScopeConfig(repoRoot: string, contents: string) {
+  await fs.writeFile(path.join(repoRoot, ".forge", "scopes.yml"), contents);
+}
+
 describe("getTaskGraphPayload", () => {
   test("returns tasks and graph analysis", async () => {
     const { repoRoot } = await makeRepo();
@@ -102,7 +106,34 @@ describe("getTaskGraphPayload", () => {
     expect(payload.blockersByTaskId["F-0003"]).toEqual([
       "dependency F-0002 is open",
     ]);
+    expect(payload.scopeConfig).toEqual({
+      source: "inferred",
+      scopes: [{ id: "packages", label: "packages", paths: ["packages/**"] }],
+    });
     expect(payload.diagnostics.missingDependencies).toEqual([]);
+  });
+
+  test("loads configured scope labels into the task graph payload", async () => {
+    const { repoRoot } = await makeRepo();
+    await writeScopeConfig(
+      repoRoot,
+      [
+        "version: 1",
+        "scopes:",
+        "  - id: app",
+        '    label: "Application"',
+        "    paths:",
+        '      - "packages/**"',
+        "",
+      ].join("\n"),
+    );
+
+    const payload = await getTaskGraphPayload(repoRoot);
+
+    expect(payload.scopeConfig).toEqual({
+      source: "configured",
+      scopes: [{ id: "app", label: "Application", paths: ["packages/**"] }],
+    });
   });
 
   test("works from nested directories via root discovery", async () => {
@@ -241,6 +272,12 @@ describe("getWorkspaceTaskGraphPayload", () => {
           rootPath,
         }),
         expect.objectContaining({
+          phase: "root.scope_config",
+          durationMs: expect.any(Number),
+          rootId: "app",
+          rootPath,
+        }),
+        expect.objectContaining({
           phase: "root.graph_payload",
           durationMs: expect.any(Number),
           rootId: "app",
@@ -257,9 +294,58 @@ describe("getWorkspaceTaskGraphPayload", () => {
     expect(payload.workspace.roots[0].timings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ phase: "root.load_tasks" }),
+        expect.objectContaining({ phase: "root.scope_config" }),
         expect.objectContaining({ phase: "root.graph_payload" }),
       ]),
     );
+  });
+
+  test("keeps configured scopes attached to their workspace roots", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-scope-workspace-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        { name: "web", tasks: blockedForgeFixtureTasks() },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+    await writeScopeConfig(
+      workspace.roots[0].repoRoot,
+      [
+        "version: 1",
+        "scopes:",
+        "  - id: server",
+        '    label: "Server"',
+        "    paths:",
+        '      - "packages/**"',
+        "",
+      ].join("\n"),
+    );
+    await writeScopeConfig(
+      workspace.roots[1].repoRoot,
+      [
+        "version: 1",
+        "scopes:",
+        "  - id: client",
+        '    label: "Client"',
+        "    paths:",
+        '      - "packages/**"',
+        "",
+      ].join("\n"),
+    );
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot);
+
+    expect(payload.workspace.roots.map((root) => root.graph?.scopeConfig)).toEqual([
+      {
+        source: "configured",
+        scopes: [{ id: "server", label: "Server", paths: ["packages/**"] }],
+      },
+      {
+        source: "configured",
+        scopes: [{ id: "client", label: "Client", paths: ["packages/**"] }],
+      },
+    ]);
   });
 
   test("uses cached discovered roots without scanning downward again", async () => {

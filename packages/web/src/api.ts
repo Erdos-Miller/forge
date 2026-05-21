@@ -4,11 +4,23 @@ import {
   findForgeRoot,
   loadTasks,
   rankReadyTasks,
+  readScopeConfig,
   type DiscoveredForgeRoot,
+  type ScopeConfigEntry,
   type Task,
   type TaskGraphAnalysis,
   type TaskAvailability,
 } from "../../core/src/index.ts";
+import { inferScopeLabel, OTHER_SCOPE } from "./scopes";
+
+export interface ScopeFilterPayload extends ScopeConfigEntry {
+  rootId?: string;
+}
+
+export interface ResolvedScopeConfigPayload {
+  source: "configured" | "inferred";
+  scopes: ScopeFilterPayload[];
+}
 
 export interface TaskGraphPayload {
   repoRoot: string;
@@ -17,6 +29,7 @@ export interface TaskGraphPayload {
   recommendedTaskIds: string[];
   availabilityByTaskId: Record<string, TaskAvailability>;
   blockersByTaskId: Record<string, string[]>;
+  scopeConfig: ResolvedScopeConfigPayload;
   diagnostics: {
     missingDependencies: Array<{ taskId: string; dependencyId: string }>;
     dependencyCycles: Array<{ taskIds: string[] }>;
@@ -68,8 +81,9 @@ export async function getTaskGraphPayload(
   const repoRoot = await findForgeRoot(startDir);
   const tasks = await loadTasks(repoRoot);
   const analysis = analyzeTasks(tasks);
+  const scopeConfig = await getResolvedScopeConfig(repoRoot, tasks);
 
-  return toTaskGraphPayload(repoRoot, tasks, analysis);
+  return toTaskGraphPayload(repoRoot, tasks, analysis, scopeConfig);
 }
 
 export async function getWorkspaceTaskGraphPayload(
@@ -133,6 +147,7 @@ export function toTaskGraphPayload(
   repoRoot: string,
   tasks: Task[],
   analysis: CompatibleTaskGraphAnalysis,
+  scopeConfig = getInferredScopeConfig(tasks),
 ): TaskGraphPayload {
   const availabilityByTaskId =
     analysis.availabilityByTaskId ?? deriveAvailabilityByTaskId(tasks, analysis);
@@ -143,6 +158,7 @@ export function toTaskGraphPayload(
     recommendedTaskIds: rankReadyTasks(tasks).map((task) => task.id),
     availabilityByTaskId: Object.fromEntries(availabilityByTaskId.entries()),
     blockersByTaskId: Object.fromEntries(analysis.blockersByTaskId.entries()),
+    scopeConfig,
     diagnostics: {
       missingDependencies: analysis.missingDependencies,
       dependencyCycles: analysis.dependencyCycles,
@@ -178,10 +194,16 @@ async function toWorkspaceRootPayload(
       () => loadTasks(root.path),
       rootContext,
     );
+    const scopeConfig = await measureWorkspaceLoadPhase(
+      timings,
+      "root.scope_config",
+      () => getResolvedScopeConfig(root.path, tasks),
+      rootContext,
+    );
     const graph = await measureWorkspaceLoadPhase(
       timings,
       "root.graph_payload",
-      () => toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks)),
+      () => toTaskGraphPayload(root.path, tasks, analyzeTasks(tasks), scopeConfig),
       { ...rootContext, taskCount: tasks.length },
     );
     workspaceTimings.push(...timings);
@@ -239,12 +261,55 @@ function emptyTaskGraphPayload(repoRoot: string): TaskGraphPayload {
     recommendedTaskIds: [],
     availabilityByTaskId: {},
     blockersByTaskId: {},
+    scopeConfig: { source: "inferred", scopes: [] },
     diagnostics: {
       missingDependencies: [],
       dependencyCycles: [],
       duplicateTaskIds: [],
     },
   };
+}
+
+async function getResolvedScopeConfig(
+  repoRoot: string,
+  tasks: Task[],
+): Promise<ResolvedScopeConfigPayload> {
+  const result = await readScopeConfig(repoRoot);
+  if (result.exists) {
+    return { source: "configured", scopes: result.config.scopes };
+  }
+  return getInferredScopeConfig(tasks);
+}
+
+function getInferredScopeConfig(tasks: Task[]): ResolvedScopeConfigPayload {
+  const pathsByLabel = new Map<string, Set<string>>();
+  for (const task of tasks) {
+    for (const scopePath of task.scope) {
+      const label = inferScopeLabel(scopePath);
+      pathsByLabel.set(label, pathsByLabel.get(label) ?? new Set());
+      pathsByLabel.get(label)?.add(scopePath);
+    }
+  }
+  return {
+    source: "inferred",
+    scopes: Array.from(pathsByLabel.entries())
+      .sort(([left], [right]) => sortInferredScopeLabels(left, right))
+      .map(([label, paths]) => ({
+        id: label,
+        label,
+        paths: Array.from(paths).sort((left, right) => left.localeCompare(right)),
+      })),
+  };
+}
+
+function sortInferredScopeLabels(left: string, right: string) {
+  if (left === OTHER_SCOPE) {
+    return 1;
+  }
+  if (right === OTHER_SCOPE) {
+    return -1;
+  }
+  return left.localeCompare(right);
 }
 
 function countAvailability(

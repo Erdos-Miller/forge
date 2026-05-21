@@ -1,4 +1,6 @@
 import type { Task } from "@forge/core";
+import type { ResolvedScopeConfigPayload } from "./api";
+import type { QueueTask } from "./workspace";
 
 export const OTHER_SCOPE = "Other";
 
@@ -12,8 +14,19 @@ export function getInferredScopeOptions(tasks: Task[]): string[] {
   return sortScopeLabels(Array.from(scopes));
 }
 
-export function taskMatchesScope(task: Task, scopeFilter: string) {
-  return scopeFilter === "all" || inferTaskScopeLabels(task).includes(scopeFilter);
+export function taskMatchesScope(
+  task: Task | QueueTask,
+  scopeFilter: string,
+  scopeConfig?: ResolvedScopeConfigPayload,
+) {
+  if (scopeFilter === "all") {
+    return true;
+  }
+  const configuredScope = scopeConfig?.scopes.find((scope) => scope.id === scopeFilter);
+  if (configuredScope) {
+    return taskMatchesConfiguredScope(task, configuredScope);
+  }
+  return inferTaskScopeLabels(task).includes(scopeFilter);
 }
 
 export function inferTaskScopeLabels(task: Pick<Task, "scope">): string[] {
@@ -82,4 +95,36 @@ function joinScopeParts(...parts: string[]) {
 
 function isFileLike(part: string) {
   return /^[^.].*\.[a-z0-9]+$/i.test(part);
+}
+
+function taskMatchesConfiguredScope(
+  task: Task | QueueTask,
+  configuredScope: ResolvedScopeConfigPayload["scopes"][number],
+) {
+  if (configuredScope.rootId && "workspaceRootId" in task) {
+    if (task.workspaceRootId !== configuredScope.rootId) {
+      return false;
+    }
+  }
+  return task.scope.some((taskScope) =>
+    configuredScope.paths.some((scopePath) => scopePathsOverlap(scopePath, taskScope)),
+  );
+}
+
+function scopePathsOverlap(left: string, right: string): boolean {
+  const leftPrefix = getScopePathPrefix(left);
+  const rightPrefix = getScopePathPrefix(right);
+  return isSameOrChildPath(leftPrefix, rightPrefix) || isSameOrChildPath(rightPrefix, leftPrefix);
+}
+
+function getScopePathPrefix(scopePath: string): string {
+  return scopePath
+    .replace(/\\/g, "/")
+    .replace(/\/?\*\*.*$/, "")
+    .replace(/\/?\*.*$/, "")
+    .replace(/\/+$/, "");
+}
+
+function isSameOrChildPath(parent: string, child: string): boolean {
+  return parent === child || Boolean(parent && child.startsWith(`${parent}/`));
 }

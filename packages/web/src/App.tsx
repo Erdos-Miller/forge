@@ -114,7 +114,14 @@ export function App({ initialData }: AppProps) {
   }, [currentData]);
 
   const scopeOptions = useMemo(() => {
-    return getInferredScopeOptions(currentData?.tasks ?? []);
+    if (currentData?.scopeConfig.source === "configured") {
+      return currentData.scopeConfig.scopes;
+    }
+    return getInferredScopeOptions(currentData?.tasks ?? []).map((scope) => ({
+      id: scope,
+      label: scope,
+      paths: [],
+    }));
   }, [currentData]);
 
   const recommendedTasks = useMemo(() => {
@@ -124,11 +131,13 @@ export function App({ initialData }: AppProps) {
     return currentData.recommendedTaskIds
       .map((taskId) => tasksById.get(taskId))
       .filter((task): task is Task => Boolean(task))
-      .filter((task) => taskMatchesScope(task, scopeFilter));
+      .filter((task) => taskMatchesScope(task, scopeFilter, currentData.scopeConfig));
   }, [currentData, scopeFilter, tasksById]);
 
   const scopedTasks = useMemo(() => {
-    return (currentData?.tasks ?? []).filter((task) => taskMatchesScope(task, scopeFilter));
+    return (currentData?.tasks ?? []).filter((task) =>
+      taskMatchesScope(task, scopeFilter, currentData?.scopeConfig),
+    );
   }, [currentData, scopeFilter]);
 
   const blockedOpenTasks = useMemo(() => {
@@ -280,8 +289,8 @@ export function App({ initialData }: AppProps) {
             <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)}>
               <option value="all">All</option>
               {scopeOptions.map((scope) => (
-                <option key={scope} value={scope}>
-                  {scope}
+                <option key={scope.id} value={scope.id}>
+                  {scope.label}
                 </option>
               ))}
             </select>
@@ -707,7 +716,9 @@ export function selectTaskAfterRefresh(
   showDone = false,
   urlRequestedTaskId: string | null = null,
 ): string | null {
-  const scopedTasks = payload.tasks.filter((task) => taskMatchesScope(task, scopeFilter));
+  const scopedTasks = payload.tasks.filter((task) =>
+    taskMatchesScope(task, scopeFilter, payload.scopeConfig),
+  );
   const effectiveShowDone = shouldShowDoneInQueue(scopedTasks, showDone);
   const recommendedRank = new Map(
     payload.recommendedTaskIds.map((taskId, index) => [taskId, index]),

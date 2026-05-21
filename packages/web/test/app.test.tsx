@@ -15,6 +15,7 @@ import {
   getVisibleSelectedTask,
   writeTaskSelectionToUrl,
 } from "../src/url-selection";
+import { getGraphForRepo } from "../src/workspace";
 
 const payload: TaskGraphPayload = {
   repoRoot: "/repo",
@@ -103,6 +104,14 @@ const payload: TaskGraphPayload = {
   blockersByTaskId: {
     "F-0003": [],
   },
+  scopeConfig: {
+    source: "inferred",
+    scopes: [
+      { id: "packages/cli", label: "packages/cli", paths: ["packages/cli/**"] },
+      { id: "packages/core", label: "packages/core", paths: ["packages/core/**"] },
+      { id: "packages/web", label: "packages/web", paths: ["packages/web/**"] },
+    ],
+  },
   diagnostics: {
     missingDependencies: [],
     dependencyCycles: [],
@@ -148,6 +157,7 @@ const emptyWorkspacePayload: WorkspaceTaskGraphPayload = {
   recommendedTaskIds: [],
   availabilityByTaskId: {},
   blockersByTaskId: {},
+  scopeConfig: { source: "inferred", scopes: [] },
   diagnostics: {
     missingDependencies: [],
     dependencyCycles: [],
@@ -167,6 +177,14 @@ function graphPayload(repoRoot: string, tasks: TaskGraphPayload["tasks"]): TaskG
     recommendedTaskIds: tasks.map((task) => task.id),
     availabilityByTaskId: Object.fromEntries(tasks.map((task) => [task.id, "ready"])),
     blockersByTaskId: Object.fromEntries(tasks.map((task) => [task.id, []])),
+    scopeConfig: {
+      source: "inferred",
+      scopes: Array.from(new Set(tasks.flatMap((task) => task.scope))).map((scope) => ({
+        id: scope.replace(/\/\*\*$/, ""),
+        label: scope.replace(/\/\*\*$/, ""),
+        paths: [scope],
+      })),
+    },
     diagnostics: {
       missingDependencies: [],
       dependencyCycles: [],
@@ -411,6 +429,38 @@ describe("App", () => {
     expect(html).not.toContain("components/Wells");
   });
 
+  test("renders configured scope labels while preserving raw task scope detail", () => {
+    const configuredPayload: TaskGraphPayload = {
+      ...payload,
+      scopeConfig: {
+        source: "configured",
+        scopes: [
+          { id: "ui", label: "UI", paths: ["packages/web/**"] },
+          { id: "backend", label: "Backend", paths: ["packages/core/**"] },
+        ],
+      },
+    };
+
+    const html = renderToStaticMarkup(<App initialData={configuredPayload} />);
+
+    expect(html).toContain('<option value="ui">UI</option>');
+    expect(html).toContain('<option value="backend">Backend</option>');
+    expect(html).toContain("packages/web/**");
+  });
+
+  test("uses configured scope matching when selecting after refresh", () => {
+    const configuredPayload: TaskGraphPayload = {
+      ...payload,
+      scopeConfig: {
+        source: "configured",
+        scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+      },
+    };
+
+    expect(selectTaskAfterRefresh("missing", configuredPayload, "ui")).toBe("F-0002");
+    expect(selectTaskAfterRefresh("missing", configuredPayload, "unknown")).toBeNull();
+  });
+
   test("renders an empty workspace without a repo switcher", () => {
     const html = renderToStaticMarkup(<App initialData={emptyWorkspacePayload} />);
 
@@ -443,6 +493,55 @@ describe("App", () => {
     expect(html).toContain("Web workspace task");
     expect(html).toContain('class="badge">api</span>');
     expect(html).toContain('class="badge">web</span>');
+  });
+
+  test("qualifies configured scopes in an all-roots aggregate queue", () => {
+    const configuredApiGraph: TaskGraphPayload = {
+      ...apiGraph,
+      scopeConfig: {
+        source: "configured",
+        scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+      },
+    };
+    const configuredWebGraph: TaskGraphPayload = {
+      ...webGraph,
+      scopeConfig: {
+        source: "configured",
+        scopes: [{ id: "ui", label: "UI", paths: ["packages/web/**"] }],
+      },
+    };
+    const configuredWorkspacePayload: WorkspaceTaskGraphPayload = {
+      ...configuredApiGraph,
+      workspace: {
+        startDir: "/workspace",
+        roots: [
+          workspaceRoot("api", configuredApiGraph),
+          workspaceRoot("web", configuredWebGraph),
+        ],
+      },
+    };
+    const aggregateGraph = getGraphForRepo(configuredWorkspacePayload, "all");
+
+    expect(aggregateGraph.scopeConfig.scopes).toEqual([
+      {
+        id: "api::ui",
+        label: "api / UI",
+        paths: ["packages/web/**"],
+        rootId: "api",
+      },
+      {
+        id: "web::ui",
+        label: "web / UI",
+        paths: ["packages/web/**"],
+        rootId: "web",
+      },
+    ]);
+    expect(selectTaskAfterRefresh("missing", aggregateGraph, "api::ui")).toBe(
+      "api::F-api",
+    );
+    expect(selectTaskAfterRefresh("api::F-api", aggregateGraph, "web::ui")).toBe(
+      "web::F-web",
+    );
   });
 
   test("renders stable header controls for long worktree and scope labels", () => {

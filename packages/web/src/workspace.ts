@@ -1,5 +1,11 @@
 import type { Task, TaskAvailability } from "@forge/core";
-import type { TaskGraphPayload, WorkspaceRootPayload, WorkspaceTaskGraphPayload } from "./api";
+import type {
+  ResolvedScopeConfigPayload,
+  ScopeFilterPayload,
+  TaskGraphPayload,
+  WorkspaceRootPayload,
+  WorkspaceTaskGraphPayload,
+} from "./api";
 
 export type AppData = TaskGraphPayload | WorkspaceTaskGraphPayload;
 export type QueueTask = Task & {
@@ -97,11 +103,32 @@ function buildAggregateGraph(data: AppData, roots: WorkspaceGraph[]): TaskGraphP
     recommendedTaskIds: getAggregateRecommendedTaskIds(tasks, availabilityByTaskId),
     availabilityByTaskId,
     blockersByTaskId,
+    scopeConfig: getAggregateScopeConfig(roots),
     diagnostics: {
       missingDependencies: roots.flatMap((root) => root.graph.diagnostics.missingDependencies),
       dependencyCycles: roots.flatMap((root) => root.graph.diagnostics.dependencyCycles),
       duplicateTaskIds: roots.flatMap((root) => root.graph.diagnostics.duplicateTaskIds),
     },
+  };
+}
+
+function getAggregateScopeConfig(roots: WorkspaceGraph[]): ResolvedScopeConfigPayload {
+  const scopes = roots.flatMap((root) =>
+    root.graph.scopeConfig.scopes.map((scope) => toAggregateScope(root, scope)),
+  );
+  const hasConfiguredScopes = roots.some((root) => root.graph.scopeConfig.source === "configured");
+  return {
+    source: hasConfiguredScopes ? "configured" : "inferred",
+    scopes,
+  };
+}
+
+function toAggregateScope(root: WorkspaceGraph, scope: ScopeFilterPayload): ScopeFilterPayload {
+  return {
+    ...scope,
+    id: scopedTaskId(root.id, scope.id),
+    label: `${root.displayName} / ${scope.label}`,
+    rootId: root.id,
   };
 }
 

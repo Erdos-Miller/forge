@@ -55,6 +55,42 @@ describe("workspace scope inference", () => {
     expect(taskMatchesScope(otherTask, "Other")).toBe(true);
     expect(taskMatchesScope(otherTask, "all")).toBe(true);
   });
+
+  test("matches tasks by configured scope paths", () => {
+    const webTask = task(["packages/web/src/components/Queue.tsx"]);
+    const readmeTask = task(["README.md"]);
+    const scopeConfig = {
+      source: "configured" as const,
+      scopes: [
+        { id: "ui", label: "UI", paths: ["packages/web/**"] },
+        { id: "docs", label: "Docs", paths: ["README.md"] },
+      ],
+    };
+
+    expect(taskMatchesScope(webTask, "ui", scopeConfig)).toBe(true);
+    expect(taskMatchesScope(webTask, "docs", scopeConfig)).toBe(false);
+    expect(taskMatchesScope(readmeTask, "docs", scopeConfig)).toBe(true);
+    expect(taskMatchesScope(readmeTask, "ui", scopeConfig)).toBe(false);
+  });
+
+  test("keeps all-worktree configured scopes scoped to their root", () => {
+    const webTask = {
+      ...task(["packages/web/**"]),
+      workspaceRootId: "web",
+    };
+    const apiTask = {
+      ...task(["packages/web/**"]),
+      workspaceRootId: "api",
+    };
+    const scopeConfig = {
+      source: "configured" as const,
+      scopes: [{ id: "web::ui", label: "web / UI", paths: ["packages/web/**"], rootId: "web" }],
+    };
+
+    expect(taskMatchesScope(webTask, "web::ui", scopeConfig)).toBe(true);
+    expect(taskMatchesScope(apiTask, "web::ui", scopeConfig)).toBe(false);
+    expect(taskMatchesScope(apiTask, "all", scopeConfig)).toBe(true);
+  });
 });
 
 function task(scope: string[]): Task {
