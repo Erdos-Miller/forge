@@ -13,6 +13,7 @@ import {
   getCycledOption,
   getWorkspaceShortcutSelection,
   shouldIgnoreQueueShortcutTarget,
+  shouldIgnoreWorkspaceShortcutTarget,
 } from "../src/shortcuts";
 import {
   getRepoIdFromSearch,
@@ -1104,6 +1105,14 @@ describe("App", () => {
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "DIV", isContentEditable: true } as any))
       .toBe(true);
     expect(shouldIgnoreQueueShortcutTarget({ tagName: "DIV" } as any)).toBe(false);
+  });
+
+  test("workspace shortcuts still work from focused selectors", () => {
+    expect(shouldIgnoreWorkspaceShortcutTarget({ tagName: "SELECT" } as any)).toBe(false);
+    expect(shouldIgnoreWorkspaceShortcutTarget({ tagName: "INPUT" } as any)).toBe(true);
+    expect(shouldIgnoreWorkspaceShortcutTarget({ tagName: "TEXTAREA" } as any)).toBe(true);
+    expect(shouldIgnoreWorkspaceShortcutTarget({ tagName: "BUTTON" } as any)).toBe(true);
+    expect(shouldIgnoreWorkspaceShortcutTarget({ tagName: "A" } as any)).toBe(true);
   });
 
   test("workspace shortcuts cycle Worktrees and Projects with wrapping", () => {

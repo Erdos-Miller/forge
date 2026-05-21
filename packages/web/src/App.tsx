@@ -12,6 +12,7 @@ import {
   getCyclableWorktreeIds,
   getWorkspaceShortcutSelection,
   shouldIgnoreQueueShortcutTarget,
+  shouldIgnoreWorkspaceShortcutTarget,
 } from "./shortcuts";
 import "./styles.css";
 import {
@@ -243,7 +244,7 @@ export function App({ initialData }: AppProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (shouldIgnoreQueueShortcutTarget(event.target)) {
+      if (shouldIgnoreWorkspaceShortcutTarget(event.target)) {
         return;
       }
 

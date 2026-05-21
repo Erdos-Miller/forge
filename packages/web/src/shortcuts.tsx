@@ -91,12 +91,26 @@ export function getCyclableProjectIds(scopeOptions: ScopeFilterPayload[]) {
 }
 
 export function shouldIgnoreQueueShortcutTarget(target: EventTarget | null) {
+  return shouldIgnoreShortcutTarget(target, { ignoreSelect: true });
+}
+
+export function shouldIgnoreWorkspaceShortcutTarget(target: EventTarget | null) {
+  return shouldIgnoreShortcutTarget(target, { ignoreSelect: false });
+}
+
+function shouldIgnoreShortcutTarget(
+  target: EventTarget | null,
+  options: { ignoreSelect: boolean },
+) {
   if (!target || !("tagName" in target)) {
     return false;
   }
 
   const tagName = String((target as { tagName?: unknown }).tagName).toLowerCase();
-  if (["input", "select", "textarea", "button", "a"].includes(tagName)) {
+  if (["input", "textarea", "button", "a"].includes(tagName)) {
+    return true;
+  }
+  if (options.ignoreSelect && tagName === "select") {
     return true;
   }
   if (
