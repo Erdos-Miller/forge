@@ -2,7 +2,7 @@
 id: F-0087
 title: "Add scope config doctor checks"
 kind: task
-status: open
+status: done
 priority: medium
 area: "cli"
 parent: "F-0000"
@@ -14,7 +14,11 @@ scope:
   - "packages/cli/**"
   - ".forge/**"
 created_at: 2026-05-21T11:54:53-05:00
-updated_at: 2026-05-21T11:54:53-05:00
+updated_at: 2026-05-21T18:33:43.474Z
+closed_at: 2026-05-21T18:33:43.474Z
+close_reason: "Added advisory scope config doctor diagnostics with focused, CLI harness, and quality checks passing."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add scope config doctor checks
 
@@ -70,6 +74,15 @@ Tracked in frontmatter: F-0086.
 ## Notes
 
 Repos without `.forge/scopes.yml` should not receive configuration-drift warnings.
+
+Added advisory `forge doctor --json` diagnostics for explicit `.forge/scopes.yml` drift. Repos without a scope config stay quiet. Configured repos now warn for empty configs, many unmatched active tasks, unused configured paths, and overlapping configured scopes. Diagnostics include machine-readable codes plus scope ids, task ids, source paths, configured paths, and repair hints where useful.
+
+Review trigger resolved: unmatched-task warnings currently require at least two active unmatched tasks to avoid noisy single-task drift warnings; this can be tuned later if needed.
+
+Verification:
+- `bun test packages/cli/test/scope-doctor.test.ts packages/core/test/readability-ratchet.test.ts` passed: 9 tests, 30 expects.
+- `bun run harness:cli` passed: 8 tests, 102 expects.
+- `bun run quality:check` passed: 241 tests, 1182 expects, and `packages/web` production build completed.
 
 ## History
 

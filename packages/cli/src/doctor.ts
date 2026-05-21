@@ -2,7 +2,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   parseTaskFile,
+  readScopeConfig,
   TaskParseError,
+  type ScopeConfigEntry,
   type Task,
   type TaskGraphAnalysis,
 } from "@forge/core";
@@ -21,6 +23,10 @@ export interface DoctorDiagnostic {
   repairHint?: string;
   reason?: string;
   classification?: string;
+  path?: string;
+  scopeId?: string;
+  scopeIds?: string[];
+  taskIds?: string[];
 }
 
 export async function inspectTaskStore(
@@ -392,6 +398,157 @@ export async function getWorktreeDoctorDiagnostics(
   }
 
   return diagnostics;
+}
+
+export async function getScopeConfigDoctorDiagnostics(
+  repoRoot: string,
+  tasks: Task[],
+): Promise<DoctorDiagnostic[]> {
+  const result = await readScopeConfig(repoRoot);
+  if (!result.exists) {
+    return [];
+  }
+
+  const activeTasks = tasks.filter((task) => task.status !== "done" && task.status !== "canceled");
+  const diagnostics: DoctorDiagnostic[] = [];
+  diagnostics.push(...getEmptyScopeConfigDiagnostics(result.sourcePath, result.config.scopes));
+  diagnostics.push(...getUnmatchedTaskDiagnostics(result.sourcePath, result.config.scopes, activeTasks));
+  diagnostics.push(...getUnusedScopePathDiagnostics(result.sourcePath, result.config.scopes, activeTasks));
+  diagnostics.push(...getOverlappingScopeDiagnostics(result.sourcePath, result.config.scopes));
+  return diagnostics;
+}
+
+function getEmptyScopeConfigDiagnostics(
+  sourcePath: string,
+  scopes: ScopeConfigEntry[],
+): DoctorDiagnostic[] {
+  if (scopes.length > 0) {
+    return [];
+  }
+  return [
+    {
+      code: "scope_config_empty",
+      severity: "warning",
+      message: "configured scope file has no scopes",
+      sourcePath,
+      repairHint: "Run forge scopes infer --json, then add useful scopes with forge scopes add.",
+    },
+  ];
+}
+
+function getUnmatchedTaskDiagnostics(
+  sourcePath: string,
+  scopes: ScopeConfigEntry[],
+  tasks: Task[],
+): DoctorDiagnostic[] {
+  if (scopes.length === 0) {
+    return [];
+  }
+  const unmatchedTaskIds = tasks
+    .filter((task) => !taskMatchesConfiguredScope(task, scopes))
+    .map((task) => task.id)
+    .sort();
+  if (unmatchedTaskIds.length < 2) {
+    return [];
+  }
+  return [
+    {
+      code: "scope_config_unmatched_tasks",
+      severity: "warning",
+      message: `${unmatchedTaskIds.length} active tasks do not match any configured scope`,
+      sourcePath,
+      taskIds: unmatchedTaskIds,
+      repairHint: "Run forge scopes infer --json and update .forge/scopes.yml for missing areas.",
+    },
+  ];
+}
+
+function getUnusedScopePathDiagnostics(
+  sourcePath: string,
+  scopes: ScopeConfigEntry[],
+  tasks: Task[],
+): DoctorDiagnostic[] {
+  const taskScopes = tasks.flatMap((task) => task.scope);
+  return scopes.flatMap((scope) =>
+    scope.paths
+      .filter((scopePath) => !taskScopes.some((taskScope) => scopePathsOverlap(scopePath, taskScope)))
+      .map((scopePath) => ({
+        code: "scope_config_unused_path",
+        severity: "warning" as const,
+        message: `configured scope ${scope.id} path ${scopePath} matches no active task scopes`,
+        sourcePath,
+        scopeId: scope.id,
+        path: scopePath,
+        repairHint: `Remove ${scopePath}, or update it with forge scopes update ${scope.id} --path <glob> --json.`,
+      })),
+  );
+}
+
+function getOverlappingScopeDiagnostics(
+  sourcePath: string,
+  scopes: ScopeConfigEntry[],
+): DoctorDiagnostic[] {
+  const diagnostics: DoctorDiagnostic[] = [];
+  for (let leftIndex = 0; leftIndex < scopes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < scopes.length; rightIndex += 1) {
+      const left = scopes[leftIndex];
+      const right = scopes[rightIndex];
+      const overlappingPath = findOverlappingScopePath(left, right);
+      if (!overlappingPath) {
+        continue;
+      }
+      diagnostics.push({
+        code: "scope_config_overlap",
+        severity: "warning",
+        message: `configured scopes ${left.id} and ${right.id} overlap at ${overlappingPath}`,
+        sourcePath,
+        scopeIds: [left.id, right.id],
+        path: overlappingPath,
+        repairHint: "Narrow one scope path so each task area maps to one configured scope.",
+      });
+    }
+  }
+  return diagnostics;
+}
+
+function taskMatchesConfiguredScope(task: Task, scopes: ScopeConfigEntry[]): boolean {
+  return task.scope.some((taskScope) =>
+    scopes.some((scope) =>
+      scope.paths.some((configuredPath) => scopePathsOverlap(configuredPath, taskScope)),
+    ),
+  );
+}
+
+function findOverlappingScopePath(
+  left: ScopeConfigEntry,
+  right: ScopeConfigEntry,
+): string | null {
+  for (const leftPath of left.paths) {
+    for (const rightPath of right.paths) {
+      if (scopePathsOverlap(leftPath, rightPath)) {
+        return `${leftPath} <> ${rightPath}`;
+      }
+    }
+  }
+  return null;
+}
+
+function scopePathsOverlap(left: string, right: string): boolean {
+  const leftPrefix = getScopePathPrefix(left);
+  const rightPrefix = getScopePathPrefix(right);
+  return isSameOrChildPath(leftPrefix, rightPrefix) || isSameOrChildPath(rightPrefix, leftPrefix);
+}
+
+function getScopePathPrefix(scopePath: string): string {
+  return scopePath
+    .replace(/\\/g, "/")
+    .replace(/\/?\*\*.*$/, "")
+    .replace(/\/?\*.*$/, "")
+    .replace(/\/+$/, "");
+}
+
+function isSameOrChildPath(parent: string, child: string): boolean {
+  return parent === child || Boolean(parent && child.startsWith(`${parent}/`));
 }
 
 async function getCloseoutWorktreeFindings(
