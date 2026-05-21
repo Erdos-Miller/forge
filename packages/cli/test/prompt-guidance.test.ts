@@ -80,6 +80,8 @@ describe("prompt command guidance", () => {
     expect(output).toContain("changes conventions, architecture, or public semantics");
     expect(output).toContain("durable repo documentation");
     expect(output).toContain("repo-local testing or harness guidance");
+    expect(output).toContain("bun run harness:web:layout");
+    expect(output).toContain("before changing layout CSS");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");
     expect(output).toContain("bun run harness:check");
@@ -155,6 +157,8 @@ describe("prompt command guidance", () => {
     expect(output).toContain("changes conventions, architecture, or public semantics");
     expect(output).toContain("durable repo documentation before closeout");
     expect(output).toContain("repo-local testing or harness guidance");
+    expect(output).toContain("bun run harness:web:layout");
+    expect(output).toContain("before changing layout CSS");
     expect(output).toContain("bun run harness:web");
     expect(output).toContain("bun run harness:cli");
     expect(output).toContain("bun run harness:check");

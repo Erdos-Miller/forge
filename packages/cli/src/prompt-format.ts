@@ -158,6 +158,8 @@ function formatPromptCommandGuidance(): string {
       "organization mechanism.",
     "- Use repo-local testing or harness guidance, when present, to decide " +
       "whether a failure needs a fixture, harness, doctor warning, or smoke test.",
+    "- For web header, navigation, responsive layout, or CSS changes, add or run " +
+      "`bun run harness:web:layout` before changing layout CSS.",
     "- For web UI, Vite server, or `/api/tasks` changes, run `bun run harness:web`.",
     "- For CLI workflow, command, prompt, or robot JSON changes, run `bun run harness:cli`.",
     "- For broad behavior, graph, task-store, or cross-surface changes, run " +

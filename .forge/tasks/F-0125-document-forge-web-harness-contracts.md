@@ -2,7 +2,7 @@
 id: F-0125
 title: "Document Forge web harness contracts"
 kind: task
-status: open
+status: done
 priority: high
 project: "forge"
 area: "docs"
@@ -17,8 +17,8 @@ scope:
   - "packages/cli/**"
   - ".forge/tasks/**"
 created_at: 2026-05-21T17:26:34-05:00
-updated_at: 2026-05-21T17:26:34-05:00
-closed_at: ""
+updated_at: 2026-05-21T22:54:41.463Z
+closed_at: 2026-05-21T22:54:41.463Z
 close_reason: ""
 blocked_reason: ""
 review_reason: ""
@@ -78,6 +78,18 @@ Tracked in frontmatter: F-0121, F-0123.
 ## Notes
 
 This task intentionally moves new harness guidance into normal repo docs, not `.forge` user state.
+
+- Added `docs/harness-contracts/web-layout.md` as normal repo documentation for Forge web layout contracts.
+- Linked the doc from README under Web Board.
+- Updated generated prompt guidance to call out `bun run harness:web:layout` before web header, navigation, responsive layout, or CSS changes.
+- The doc says layout work uses Playwright geometry, stable production telemetry, and rectangle assertions rather than screenshot snapshots or visual golden files.
+- No user-store or `.forge` guidance files were added beyond this task state update.
+Verification:
+- `bun test packages/cli/test/prompt-guidance.test.ts`
+- `bun run harness:cli`
+- `bun run harness:web`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `rg -n "harness:web:layout|Playwright geometry|screenshot snapshots|before changing layout CSS|docs/harness-contracts/web-layout" README.md docs packages/cli/src packages/cli/test`
 
 ## History
 

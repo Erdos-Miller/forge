@@ -158,6 +158,11 @@ bun run web
 
 Open the printed local URL, usually `http://127.0.0.1:5174/`.
 
+For header, navigation, responsive layout, or CSS changes, use the
+[Forge web layout harness](docs/harness-contracts/web-layout.md). Add or update
+Playwright geometry contracts before changing CSS when fixing layout
+regressions, then run `bun run harness:web:layout` and `bun run harness:web`.
+
 To serve another repo or worktree:
 
 ```sh
