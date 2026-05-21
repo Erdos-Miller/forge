@@ -10,6 +10,7 @@ export interface ForgeFixtureTask {
   priority?: TaskPriority;
   claimed_by?: string;
   depends_on?: string[];
+  project?: string;
   area?: string;
   scope?: string[];
   body?: string;
@@ -172,6 +173,7 @@ export function createForgeFixtureTaskFile(task: ForgeFixtureTask): string {
     "kind: task",
     `status: ${status}`,
     `priority: ${task.priority ?? "medium"}`,
+    ...(task.project ? [`project: ${JSON.stringify(task.project)}`] : []),
     'parent: ""',
     `depends_on:${formatList(task.depends_on ?? [])}`,
     `claimed_by: ${JSON.stringify(task.claimed_by ?? "")}`,

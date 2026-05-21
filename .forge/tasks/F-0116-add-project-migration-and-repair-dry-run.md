@@ -2,7 +2,7 @@
 id: F-0116
 title: "Add project migration and repair dry-run"
 kind: task
-status: open
+status: done
 priority: high
 area: "cli"
 parent: "F-0000"
@@ -15,7 +15,11 @@ scope:
   - "packages/core/**"
   - ".forge/**"
 created_at: 2026-05-21T15:37:53-05:00
-updated_at: 2026-05-21T15:37:53-05:00
+updated_at: 2026-05-21T21:36:44.648Z
+closed_at: 2026-05-21T21:36:44.648Z
+close_reason: "Implemented non-mutating Project migration dry-run and verified CLI harness."
+blocked_reason: ""
+review_reason: ""
 ---
 # Add project migration and repair dry-run
 
@@ -72,6 +76,22 @@ Tracked in frontmatter: F-0112, F-0113.
 ## Notes
 
 This is intentionally non-mutating.
+
+Implemented the non-mutating Project migration dry-run command:
+
+- Added `forge projects migrate --dry-run --json`.
+- Reports legacy `.forge/scopes.yml` to preferred `.forge/projects.yml` migration steps.
+- Reports task project backfill candidates as unambiguous, ambiguous, no-match, and already-set.
+- Reports stale Project paths and task `project` values that do not exist in configured Projects.
+- Kept the command read-only; tests assert legacy config is unchanged and preferred config is not created.
+
+Verification:
+
+- `bun test packages/cli/test/project-migration.test.ts packages/cli/test/projects.test.ts packages/cli/test/cli.test.ts`
+- `bun test packages/core/test/readability-ratchet.test.ts`
+- `bun run harness:cli`
+- `forge projects migrate --dry-run --json`
+- `forge doctor --json` reports only expected dirty-worktree warnings for F-0116 before commit.
 
 ## History
 

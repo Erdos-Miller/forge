@@ -118,6 +118,7 @@ export const COMMANDS = [
     name: "projects",
     usage:
       "forge projects --json | forge projects infer --json | " +
+      "forge projects migrate --dry-run --json | " +
       "forge projects add <id> --label <label> --path <glob> --json | " +
       "forge projects update <id> --path <glob> --json | " +
       "forge projects remove <id> --json",
@@ -127,6 +128,7 @@ export const COMMANDS = [
     examples: [
       "forge projects --json",
       "forge projects infer --json",
+      "forge projects migrate --dry-run --json",
       'forge projects add web --label "Web" --path "packages/web/**" --json',
       'forge projects update web --path "packages/web/test/**" --json',
       "forge projects remove web --json",

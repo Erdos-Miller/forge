@@ -404,7 +404,8 @@ export type ScopesArgs =
 
 export type ProjectsArgs =
   | ScopesArgs
-  | { ok: true; action: "remove"; id: string };
+  | { ok: true; action: "remove"; id: string }
+  | { ok: true; action: "migrate-dry-run" };
 
 export const SCOPES_USAGE =
   "usage: forge scopes --json | " +
@@ -415,6 +416,7 @@ export const SCOPES_USAGE =
 export const PROJECTS_USAGE =
   "usage: forge projects --json | " +
   "forge projects infer --json | " +
+  "forge projects migrate --dry-run --json | " +
   "forge projects add <id> --label <label> --path <glob> --json | " +
   "forge projects update <id> --path <glob> --json | " +
   "forge projects remove <id> --json";
@@ -437,6 +439,15 @@ function parseConfigArgs(
   }
   if (args.length === 2 && args[0] === "infer" && args[1] === "--json") {
     return { ok: true, action: "infer" };
+  }
+  if (
+    allowRemove &&
+    args.length === 3 &&
+    args[0] === "migrate" &&
+    args[1] === "--dry-run" &&
+    args[2] === "--json"
+  ) {
+    return { ok: true, action: "migrate-dry-run" };
   }
   if (allowRemove && args.length === 3 && args[0] === "remove" && args[2] === "--json") {
     return { ok: true, action: "remove", id: args[1] };

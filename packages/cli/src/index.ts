@@ -57,6 +57,7 @@ import {
   getWorktreeDoctorDiagnostics,
   inspectTaskStore,
 } from "./doctor";
+import { getProjectMigrationDryRun } from "./project-migration";
 import {
   createDemoForgeWorkspace,
   type DemoForgeWorkspace,
@@ -438,6 +439,11 @@ async function scopeConfigCommand(
           scopes: projects,
         }),
       );
+      return 0;
+    }
+
+    if (parsed.action === "migrate-dry-run") {
+      options.stdout(stringifyJson(await getProjectMigrationDryRun(repoRoot)));
       return 0;
     }
 
