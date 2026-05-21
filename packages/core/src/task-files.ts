@@ -46,6 +46,24 @@ export const SUPPORTED_TASK_MARKDOWN_SECTIONS = [
   "History",
 ] as const;
 
+export interface DiscoveredForgeRoot {
+  id: string;
+  displayName: string;
+  path: string;
+  taskCount: number;
+}
+
+const WORKSPACE_DISCOVERY_IGNORED_DIRS = new Set([
+  ".git",
+  ".next",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "out",
+  "target",
+]);
+
 export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
   let currentDir = path.resolve(startDir);
 
@@ -67,6 +85,77 @@ export async function findForgeRoot(startDir = process.cwd()): Promise<string> {
     }
     currentDir = parentDir;
   }
+}
+
+export async function discoverForgeRootsDownward(
+  startDir: string,
+): Promise<DiscoveredForgeRoot[]> {
+  const resolvedStartDir = path.resolve(startDir);
+  const roots: DiscoveredForgeRoot[] = [];
+  await walkForForgeRoots(resolvedStartDir, resolvedStartDir, roots);
+  return roots.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+async function walkForForgeRoots(
+  startDir: string,
+  currentDir: string,
+  roots: DiscoveredForgeRoot[],
+): Promise<void> {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  const hasForgeDir = entries.some((entry) => entry.isDirectory() && entry.name === ".forge");
+
+  if (hasForgeDir) {
+    roots.push(await toDiscoveredForgeRoot(startDir, currentDir));
+    return;
+  }
+
+  const childDirs = entries
+    .filter((entry) => entry.isDirectory() && !WORKSPACE_DISCOVERY_IGNORED_DIRS.has(entry.name))
+    .map((entry) => path.join(currentDir, entry.name))
+    .sort();
+
+  for (const childDir of childDirs) {
+    await walkForForgeRoots(startDir, childDir, roots);
+  }
+}
+
+async function toDiscoveredForgeRoot(
+  startDir: string,
+  repoRoot: string,
+): Promise<DiscoveredForgeRoot> {
+  const resolvedRoot = await fs.realpath(repoRoot);
+  const relativePath = normalizeRootId(path.relative(startDir, repoRoot));
+  return {
+    id: relativePath || ".",
+    displayName: relativePath ? path.basename(repoRoot) : path.basename(resolvedRoot),
+    path: resolvedRoot,
+    taskCount: await countTaskMarkdownFiles(path.join(repoRoot, ".forge", "tasks")),
+  };
+}
+
+async function countTaskMarkdownFiles(tasksDir: string): Promise<number> {
+  try {
+    const entries = await fs.readdir(tasksDir, { withFileTypes: true });
+    let count = 0;
+    for (const entry of entries) {
+      const entryPath = path.join(tasksDir, entry.name);
+      if (entry.isDirectory()) {
+        count += await countTaskMarkdownFiles(entryPath);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        count += 1;
+      }
+    }
+    return count;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return 0;
+    }
+    throw error;
+  }
+}
+
+function normalizeRootId(relativePath: string): string {
+  return relativePath.split(path.sep).filter(Boolean).join("/");
 }
 
 export async function loadTasks(repoRoot = process.cwd()): Promise<Task[]> {

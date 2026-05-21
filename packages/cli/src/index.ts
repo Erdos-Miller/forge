@@ -7,6 +7,7 @@ import {
   blockTaskFrom,
   claimTaskFrom,
   completeTaskFrom,
+  discoverForgeRootsDownward,
   createTaskFrom,
   findParsedTaskByIdFrom,
   findForgeRoot,
@@ -19,6 +20,7 @@ import {
   unblockTaskFrom,
   upsertTaskExecutionPlanFrom,
   type CreateTaskInput,
+  type DiscoveredForgeRoot,
   type Task,
   type TaskPriority,
   type TaskStatus,
@@ -143,6 +145,17 @@ export async function runCli(
     cliOptions.stderr(error instanceof Error ? error.message : String(error));
     return 1;
   }
+}
+
+export async function resolveWebStartRepoRoot(
+  startDir: string,
+): Promise<{ repoRoot: string; discoveredRoots: DiscoveredForgeRoot[] }> {
+  const discoveredRoots = await discoverForgeRootsDownward(startDir);
+  const firstRoot = discoveredRoots[0];
+  if (!firstRoot) {
+    throw new Error(`no Forge roots found below ${path.resolve(startDir)}`);
+  }
+  return { repoRoot: firstRoot.path, discoveredRoots };
 }
 
 async function commands(options: CliOptions, args: string[]): Promise<number> {
@@ -647,7 +660,7 @@ async function web(options: CliOptions, args: string[]): Promise<number> {
   let demoRepo: DemoForgeRepo | null = null;
   const repoRoot = webOptions.demo
     ? (demoRepo = await createDemoForgeRepo()).repoRoot
-    : await findForgeRoot(webOptions.startDir);
+    : (await resolveWebStartRepoRoot(webOptions.startDir)).repoRoot;
   const webPackageDir = path.resolve(import.meta.dir, "..", "..", "web");
   const actualPort = await findAvailablePort(webOptions.host, webOptions.port);
   const url = `http://${webOptions.host}:${actualPort}/`;
