@@ -97,6 +97,16 @@ export interface WorkspaceTaskGraphPayload extends TaskGraphPayload {
 export interface WorkspaceTaskGraphPayloadOptions {
   roots?: DiscoveredForgeRoot[];
   discoverRoots?: (startDir: string) => Promise<DiscoveredForgeRoot[]>;
+  rootPayloadCache?: WorkspaceRootPayloadCache;
+  dirtyRootPaths?: Iterable<string>;
+  forceReloadRootPayloads?: boolean;
+}
+
+export interface WorkspaceRootPayloadCache {
+  get(rootPath: string): WorkspaceRootPayload | undefined;
+  set(rootPath: string, payload: WorkspaceRootPayload): void;
+  delete(rootPath: string): void;
+  clear(): void;
 }
 
 export async function getTaskGraphPayload(
@@ -127,7 +137,7 @@ export async function getWorkspaceTaskGraphPayload(
   const rootPayloads = await measureWorkspaceLoadPhase(
     loadTimings,
     "workspace.roots_payload",
-    () => Promise.all(roots.map((root) => toWorkspaceRootPayload(root, loadTimings))),
+    () => loadWorkspaceRootPayloads(roots, loadTimings, options),
     { rootCount: roots.length },
   );
   const selectedRoot = rootPayloads.find((root) => root.status === "ok");
@@ -147,6 +157,40 @@ export async function getWorkspaceTaskGraphPayload(
       },
     }),
     { rootCount: rootPayloads.length },
+  );
+}
+
+async function loadWorkspaceRootPayloads(
+  roots: DiscoveredForgeRoot[],
+  loadTimings: WorkspaceLoadTiming[],
+  options: WorkspaceTaskGraphPayloadOptions,
+): Promise<WorkspaceRootPayload[]> {
+  const dirtyRootPaths = new Set(options.dirtyRootPaths ?? []);
+  return Promise.all(
+    roots.map(async (root) => {
+      const cachedPayload =
+        options.forceReloadRootPayloads || dirtyRootPaths.has(root.path)
+          ? undefined
+          : options.rootPayloadCache?.get(root.path);
+      if (cachedPayload) {
+        const timing = {
+          phase: "root.payload_cache",
+          durationMs: 0,
+          rootId: root.id,
+          rootPath: root.path,
+          taskCount: cachedPayload.summary?.totalTasks,
+        };
+        loadTimings.push(timing);
+        return {
+          ...cachedPayload,
+          timings: [...(cachedPayload.timings ?? []), timing],
+        };
+      }
+
+      const payload = await toWorkspaceRootPayload(root, loadTimings);
+      options.rootPayloadCache?.set(root.path, payload);
+      return payload;
+    }),
   );
 }
 

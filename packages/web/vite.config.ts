@@ -3,7 +3,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defineConfig, normalizePath, type ViteDevServer } from "vite";
 import { discoverForgeRootsDownward, type DiscoveredForgeRoot } from "../core/src/index.ts";
-import { getWorkspaceTaskGraphPayload, type WorkspaceLoadTiming } from "./src/api";
+import {
+  getWorkspaceTaskGraphPayload,
+  type WorkspaceLoadTiming,
+  type WorkspaceRootPayload,
+  type WorkspaceRootPayloadCache,
+} from "./src/api";
 
 export default defineConfig({
   plugins: [
@@ -14,8 +19,9 @@ export default defineConfig({
         const rootCache = createWorkspaceRootCache(
           parseWorkspaceRootsEnv(process.env.FORGE_WORKSPACE_ROOTS),
         );
+        const rootPayloadCache = createWorkspaceRootPayloadCache();
 
-        setupForgeWorkspaceWatcher(server, startDir, { rootCache })
+        setupForgeWorkspaceWatcher(server, startDir, { rootCache, rootPayloadCache })
           .then((setup) => {
             const total = setup.timings.find((timing) => timing.phase === "watcher.setup");
             const duration = total ? `${total.durationMs}ms` : "unknown duration";
@@ -35,6 +41,7 @@ export default defineConfig({
           try {
             const payload = await getWorkspaceTaskGraphPayload(startDir, {
               roots: rootCache.get() ?? undefined,
+              rootPayloadCache,
             });
             response.writeHead(200, { "content-type": "application/json" });
             response.end(JSON.stringify(payload));
@@ -54,6 +61,7 @@ export default defineConfig({
 });
 
 export interface WatchedTaskDir {
+  rootId: string;
   repoRoot: string;
   tasksDir: string;
   realTasksDir: string;
@@ -71,8 +79,15 @@ export interface WorkspaceRootCache {
   clear(): void;
 }
 
+export interface WorkspaceRefreshPlan {
+  reason: "task" | "roots";
+  rootId?: string;
+  rootPath?: string;
+}
+
 export interface ForgeWorkspaceWatcherOptions {
   rootCache?: WorkspaceRootCache;
+  rootPayloadCache?: WorkspaceRootPayloadCache;
   discoverRoots?: (startDir: string) => Promise<DiscoveredForgeRoot[]>;
 }
 
@@ -87,6 +102,22 @@ export function createWorkspaceRootCache(
     },
     clear: () => {
       cachedRoots = null;
+    },
+  };
+}
+
+export function createWorkspaceRootPayloadCache(): WorkspaceRootPayloadCache {
+  const payloads = new Map<string, WorkspaceRootPayload>();
+  return {
+    get: (rootPath) => payloads.get(rootPath),
+    set: (rootPath, payload) => {
+      payloads.set(rootPath, payload);
+    },
+    delete: (rootPath) => {
+      payloads.delete(rootPath);
+    },
+    clear: () => {
+      payloads.clear();
     },
   };
 }
@@ -134,7 +165,12 @@ export async function setupForgeWorkspaceWatcher(
         }
         const tasksDir = path.join(root.path, ".forge", "tasks");
         const realTasksDir = await fs.realpath(tasksDir).catch(() => tasksDir);
-        watchedTaskDirs.set(root.path, { repoRoot: root.path, tasksDir, realTasksDir });
+        watchedTaskDirs.set(root.path, {
+          rootId: root.id,
+          repoRoot: root.path,
+          tasksDir,
+          realTasksDir,
+        });
         server.watcher.add(normalizePath(realTasksDir));
       }
 
@@ -151,27 +187,38 @@ export async function setupForgeWorkspaceWatcher(
     const setupRoots = await syncWatchedRoots();
 
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let pendingRefreshPlan: WorkspaceRefreshPlan | undefined;
     const scheduleWorkspaceRefresh = (filePath: string) => {
-      const reason = getWorkspaceRefreshReason(
+      const refreshPlan = getWorkspaceRefreshPlan(
         workspaceRoot,
         Array.from(watchedTaskDirs.values()),
         filePath,
       );
-      if (!reason) {
+      if (!refreshPlan) {
         return;
       }
 
+      pendingRefreshPlan = mergeWorkspaceRefreshPlans(pendingRefreshPlan, refreshPlan);
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
       refreshTimer = setTimeout(async () => {
-        const roots = await syncWatchedRoots(reason === "roots");
+        const plan = pendingRefreshPlan ?? { reason: "roots" };
+        pendingRefreshPlan = undefined;
+        if (plan.reason === "roots") {
+          options.rootPayloadCache?.clear();
+        } else if (plan.rootPath) {
+          options.rootPayloadCache?.delete(plan.rootPath);
+        }
+        const roots = await syncWatchedRoots(plan.reason === "roots");
         server.ws.send({
           type: "custom",
           event: "forge:tasks-changed",
           data: {
-            reason,
+            reason: plan.reason,
             startDir,
+            rootId: plan.rootId,
+            rootPath: plan.rootPath,
             roots: roots.map((root) => root.id),
           },
         });
@@ -208,16 +255,30 @@ export function getWorkspaceRefreshReason(
   watchedTaskDirs: WatchedTaskDir[],
   filePath: string,
 ): "task" | "roots" | null {
-  if (
-    watchedTaskDirs.some(
-      (watched) =>
-        isTaskMarkdownFile(watched.tasksDir, filePath) ||
-        isTaskMarkdownFile(watched.realTasksDir, filePath),
-    )
-  ) {
-    return "task";
+  return getWorkspaceRefreshPlan(workspaceRoot, watchedTaskDirs, filePath)?.reason ?? null;
+}
+
+export function getWorkspaceRefreshPlan(
+  workspaceRoot: string,
+  watchedTaskDirs: WatchedTaskDir[],
+  filePath: string,
+): WorkspaceRefreshPlan | null {
+  const owningRoots = watchedTaskDirs.filter(
+    (watched) =>
+      isTaskMarkdownFile(watched.tasksDir, filePath) ||
+      isTaskMarkdownFile(watched.realTasksDir, filePath),
+  );
+  if (owningRoots.length === 1) {
+    return {
+      reason: "task",
+      rootId: owningRoots[0].rootId,
+      rootPath: owningRoots[0].repoRoot,
+    };
   }
-  return isForgeStructurePath(workspaceRoot, filePath) ? "roots" : null;
+  if (owningRoots.length > 1) {
+    return { reason: "roots" };
+  }
+  return isForgeStructurePath(workspaceRoot, filePath) ? { reason: "roots" } : null;
 }
 
 export function isTaskMarkdownFile(tasksDir: string, filePath: string) {
@@ -249,6 +310,22 @@ function isDiscoveredForgeRoot(value: unknown): value is DiscoveredForgeRoot {
     typeof candidate.path === "string" &&
     typeof candidate.taskCount === "number"
   );
+}
+
+function mergeWorkspaceRefreshPlans(
+  previous: WorkspaceRefreshPlan | undefined,
+  next: WorkspaceRefreshPlan,
+): WorkspaceRefreshPlan {
+  if (!previous) {
+    return next;
+  }
+  if (previous.reason === "roots" || next.reason === "roots") {
+    return { reason: "roots" };
+  }
+  if (previous.rootPath !== next.rootPath) {
+    return { reason: "roots" };
+  }
+  return previous;
 }
 
 function measureCachedWatcherRoots(

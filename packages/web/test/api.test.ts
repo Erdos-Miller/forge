@@ -13,6 +13,8 @@ import {
   getTaskGraphPayload,
   getWorkspaceTaskGraphPayload,
   toTaskGraphPayload,
+  type WorkspaceRootPayload,
+  type WorkspaceRootPayloadCache,
 } from "../src/api";
 
 const tempDirs: string[] = [];
@@ -432,6 +434,116 @@ describe("getWorkspaceTaskGraphPayload", () => {
     );
   });
 
+  test("reuses clean root payloads while reloading a dirty root", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-root-payload-cache-",
+      roots: [
+        { name: "api", tasks: [{ id: "F-1001", title: "API original task" }] },
+        { name: "web", tasks: [{ id: "F-2001", title: "Web original task" }] },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [apiRepo, webRepo] = workspace.roots;
+    const [apiPath, webPath] = await Promise.all([
+      fs.realpath(apiRepo.repoRoot),
+      fs.realpath(webRepo.repoRoot),
+    ]);
+    const roots = [
+      { id: "api", displayName: "api", path: apiPath, taskCount: 1 },
+      { id: "web", displayName: "web", path: webPath, taskCount: 1 },
+    ];
+    const rootPayloadCache = makeRootPayloadCache();
+
+    const firstPayload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot, {
+      roots,
+      rootPayloadCache,
+    });
+    const cachedWebPayload = rootPayloadCache.get(webPath);
+    await fs.writeFile(
+      path.join(apiRepo.tasksDir, "F-1001-api-original-task.md"),
+      taskFile({ id: "F-1001", title: "API changed task" }),
+    );
+
+    const secondPayload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot, {
+      roots,
+      rootPayloadCache,
+      dirtyRootPaths: [apiPath],
+    });
+
+    expect(firstPayload.workspace.roots.map((root) => root.graph?.tasks[0]?.title)).toEqual([
+      "API original task",
+      "Web original task",
+    ]);
+    expect(secondPayload.workspace.roots.map((root) => root.graph?.tasks[0]?.title)).toEqual([
+      "API changed task",
+      "Web original task",
+    ]);
+    expect(rootPayloadCache.get(webPath)).toBe(cachedWebPayload);
+    expect(secondPayload.workspace.diagnostics.loadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "root.load_tasks", rootId: "api" }),
+        expect.objectContaining({ phase: "root.payload_cache", rootId: "web" }),
+      ]),
+    );
+    expect(
+      secondPayload.workspace.diagnostics.loadTimings.some(
+        (timing) => timing.phase === "root.load_tasks" && timing.rootId === "web",
+      ),
+    ).toBe(false);
+  });
+
+  test("forces full root payload reload when requested", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-web-root-payload-full-reload-",
+      roots: [
+        { name: "api", tasks: [{ id: "F-1001", title: "API original task" }] },
+        { name: "web", tasks: [{ id: "F-2001", title: "Web original task" }] },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [apiRepo, webRepo] = workspace.roots;
+    const [apiPath, webPath] = await Promise.all([
+      fs.realpath(apiRepo.repoRoot),
+      fs.realpath(webRepo.repoRoot),
+    ]);
+    const roots = [
+      { id: "api", displayName: "api", path: apiPath, taskCount: 1 },
+      { id: "web", displayName: "web", path: webPath, taskCount: 1 },
+    ];
+    const rootPayloadCache = makeRootPayloadCache();
+
+    await getWorkspaceTaskGraphPayload(workspace.workspaceRoot, { roots, rootPayloadCache });
+    await fs.writeFile(
+      path.join(apiRepo.tasksDir, "F-1001-api-original-task.md"),
+      taskFile({ id: "F-1001", title: "API changed task" }),
+    );
+    await fs.writeFile(
+      path.join(webRepo.tasksDir, "F-2001-web-original-task.md"),
+      taskFile({ id: "F-2001", title: "Web changed task" }),
+    );
+
+    const payload = await getWorkspaceTaskGraphPayload(workspace.workspaceRoot, {
+      roots,
+      rootPayloadCache,
+      forceReloadRootPayloads: true,
+    });
+
+    expect(payload.workspace.roots.map((root) => root.graph?.tasks[0]?.title)).toEqual([
+      "API changed task",
+      "Web changed task",
+    ]);
+    const rootLoadTimings = payload.workspace.diagnostics.loadTimings.filter(
+      (timing) => timing.phase === "root.load_tasks",
+    );
+    expect(rootLoadTimings).toHaveLength(2);
+    expect(rootLoadTimings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rootId: "api" }),
+        expect.objectContaining({ rootId: "web" }),
+      ]),
+    );
+  });
+
   test("includes summaries for multiple discovered roots", async () => {
     const workspace = await createForgeFixtureWorkspace({
       prefix: "forge-web-many-workspace-",
@@ -515,6 +627,22 @@ describe("getWorkspaceTaskGraphPayload", () => {
     ]);
   });
 });
+
+function makeRootPayloadCache(): WorkspaceRootPayloadCache {
+  const payloads = new Map<string, WorkspaceRootPayload>();
+  return {
+    get: (rootPath) => payloads.get(rootPath),
+    set: (rootPath, payload) => {
+      payloads.set(rootPath, payload);
+    },
+    delete: (rootPath) => {
+      payloads.delete(rootPath);
+    },
+    clear: () => {
+      payloads.clear();
+    },
+  };
+}
 
 function task(overrides: Partial<Task> & { id: string; title: string }): Task {
   return {

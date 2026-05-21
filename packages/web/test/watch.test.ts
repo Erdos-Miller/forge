@@ -7,6 +7,8 @@ import {
 } from "../../core/test/fixture-repo";
 import {
   createWorkspaceRootCache,
+  createWorkspaceRootPayloadCache,
+  getWorkspaceRefreshPlan,
   getWorkspaceRefreshReason,
   isTaskMarkdownFile,
   parseWorkspaceRootsEnv,
@@ -18,6 +20,7 @@ const workspaceRoot = path.join("/tmp", "forge-workspace");
 const apiRoot = path.join(workspaceRoot, "api");
 const webRoot = path.join(workspaceRoot, "web");
 const watchedDirs: WatchedTaskDir[] = [apiRoot, webRoot].map((repoRoot) => ({
+  rootId: path.basename(repoRoot),
   repoRoot,
   tasksDir: path.join(repoRoot, ".forge", "tasks"),
   realTasksDir: path.join(repoRoot, ".forge", "tasks"),
@@ -57,6 +60,17 @@ function fakeServer() {
 describe("workspace task watcher helpers", () => {
   test("matches task markdown changes across multiple roots", () => {
     expect(
+      getWorkspaceRefreshPlan(
+        workspaceRoot,
+        watchedDirs,
+        path.join(apiRoot, ".forge", "tasks", "F-0001.md"),
+      ),
+    ).toEqual({
+      reason: "task",
+      rootId: "api",
+      rootPath: apiRoot,
+    });
+    expect(
       getWorkspaceRefreshReason(
         workspaceRoot,
         watchedDirs,
@@ -77,6 +91,22 @@ describe("workspace task watcher helpers", () => {
         path.join(webRoot, ".forge", "tasks", "notes.txt"),
       ),
     ).toBe("roots");
+  });
+
+  test("falls back to full refresh when task ownership is ambiguous", () => {
+    const tasksDir = path.join(apiRoot, ".forge", "tasks");
+    const ambiguousWatchedDirs: WatchedTaskDir[] = [
+      { rootId: "api", repoRoot: apiRoot, tasksDir, realTasksDir: tasksDir },
+      { rootId: "mirror", repoRoot: webRoot, tasksDir, realTasksDir: tasksDir },
+    ];
+
+    expect(
+      getWorkspaceRefreshPlan(
+        workspaceRoot,
+        ambiguousWatchedDirs,
+        path.join(tasksDir, "F-0001.md"),
+      ),
+    ).toEqual({ reason: "roots" });
   });
 
   test("detects root add and remove structure changes below the start directory", () => {
@@ -200,11 +230,19 @@ describe("workspace task watcher helpers", () => {
       taskCount: 1,
     }));
     const rootCache = createWorkspaceRootCache([apiRoot]);
+    const rootPayloadCache = createWorkspaceRootPayloadCache();
+    let clearCalls = 0;
+    const originalClear = rootPayloadCache.clear;
+    rootPayloadCache.clear = () => {
+      clearCalls += 1;
+      originalClear();
+    };
     const { handlers, sentEvents, server } = fakeServer();
     let discoverCalls = 0;
 
     const setup = await setupForgeWorkspaceWatcher(server, workspace.workspaceRoot, {
       rootCache,
+      rootPayloadCache,
       discoverRoots: async () => {
         discoverCalls += 1;
         return [apiRoot, webRoot];
@@ -215,11 +253,65 @@ describe("workspace task watcher helpers", () => {
     await delay(100);
 
     expect(discoverCalls).toBe(1);
+    expect(clearCalls).toBe(1);
     expect(rootCache.get()?.map((root) => root.id)).toEqual(["api", "web"]);
     expect(sentEvents).toEqual([
       expect.objectContaining({
         event: "forge:tasks-changed",
         data: expect.objectContaining({ reason: "roots", roots: ["api", "web"] }),
+      }),
+    ]);
+  });
+
+  test("invalidates only the affected root payload for task changes", async () => {
+    const workspace = await createForgeFixtureWorkspace({
+      prefix: "forge-watch-root-payload-refresh-",
+      roots: [
+        { name: "api", tasks: minimalForgeFixtureTasks() },
+        { name: "web", tasks: minimalForgeFixtureTasks() },
+      ],
+    });
+    fixtureWorkspaces.push(workspace);
+    const [apiRoot, webRoot] = workspace.roots.map((root) => ({
+      id: path.basename(root.repoRoot),
+      displayName: path.basename(root.repoRoot),
+      path: root.repoRoot,
+      taskCount: 1,
+    }));
+    const rootCache = createWorkspaceRootCache([apiRoot, webRoot]);
+    const rootPayloadCache = createWorkspaceRootPayloadCache();
+    const deletedRootPaths: string[] = [];
+    const originalDelete = rootPayloadCache.delete;
+    rootPayloadCache.delete = (rootPath) => {
+      deletedRootPaths.push(rootPath);
+      originalDelete(rootPath);
+    };
+    const { handlers, sentEvents, server } = fakeServer();
+    let discoverCalls = 0;
+
+    await setupForgeWorkspaceWatcher(server, workspace.workspaceRoot, {
+      rootCache,
+      rootPayloadCache,
+      discoverRoots: async () => {
+        discoverCalls += 1;
+        return [];
+      },
+    });
+
+    handlers.get("change")?.(path.join(apiRoot.path, ".forge", "tasks", "F-0001.md"));
+    await delay(100);
+
+    expect(discoverCalls).toBe(0);
+    expect(deletedRootPaths).toEqual([apiRoot.path]);
+    expect(sentEvents).toEqual([
+      expect.objectContaining({
+        event: "forge:tasks-changed",
+        data: expect.objectContaining({
+          reason: "task",
+          rootId: "api",
+          rootPath: apiRoot.path,
+          roots: ["api", "web"],
+        }),
       }),
     ]);
   });
